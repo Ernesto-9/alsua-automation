@@ -15,7 +15,7 @@ CONTRASENA = "eRN#$TO.#\"/2025"
 CRM_URL = "https://gmterpv8-41.gmtransport.co/GMTERPV8/"
 
 # Ruta al chromedriver y carpeta de perfil temporal
-CHROMEDRIVER_PATH = r"C:\\Users\\ernes\\OneDrive\\Documentos\\AgencIA\\Alsua\\chromedriver\\chromedriver-win64\\chromedriver.exe"
+CHROMEDRIVER_PATH = r"C:\Users\MONITOR3\Documents\ROBOTS\VACIO\chromedriver-win64\\chromedriver.exe"
 USER_DATA_DIR = os.path.join(os.getcwd(), "chrome_temp_profile")
 
 def launch_driver():

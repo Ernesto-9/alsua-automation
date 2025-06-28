@@ -1,0 +1,22 @@
+2025/06/28-16:36:56.471 2bb4 Reusing MANIFEST C:\Users\MONITOR3\Documents\ROBOTS\VACIO\alsua-automation\chrome_temp_profile\Default\Local Storage\leveldb/MANIFEST-000001
+2025/06/28-16:36:56.478 2bb4 Recovering log #10
+2025/06/28-16:36:56.478 2bb4 Level-0 table #13: started
+2025/06/28-16:36:56.553 2bb4 Level-0 table #13: 27146 bytes OK
+2025/06/28-16:36:56.680 2bb4 Delete type=0 #10
+2025/06/28-16:37:09.673 3010 Level-0 table #16: started
+2025/06/28-16:37:09.721 3010 Level-0 table #16: 27426 bytes OK
+2025/06/28-16:37:09.740 3010 Delete type=0 #14
+2025/06/28-16:37:09.742 2bb4 Compacting 4@0 + 1@1 files
+2025/06/28-16:37:09.779 2bb4 Generated table #17@0: 12 keys, 54778 bytes
+2025/06/28-16:37:09.780 2bb4 Compacted 4@0 + 1@1 files => 54778 bytes
+2025/06/28-16:37:09.820 2bb4 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/06/28-16:37:09.821 2bb4 Delete type=2 #7
+2025/06/28-16:37:09.822 2bb4 Delete type=2 #9
+2025/06/28-16:37:09.822 2bb4 Delete type=2 #11
+2025/06/28-16:37:09.822 2bb4 Delete type=2 #13
+2025/06/28-16:37:09.822 2bb4 Delete type=2 #16
+2025/06/28-16:37:56.701 2bb4 Level-0 table #19: started
+2025/06/28-16:37:56.728 2bb4 Level-0 table #19: 27434 bytes OK
+2025/06/28-16:37:56.747 2bb4 Delete type=0 #15
+2025/06/28-16:38:32.933 83c Level-0 table #21: started
+2025/06/28-16:38:33.135 83c Level-0 table #21: 27142 bytes OK

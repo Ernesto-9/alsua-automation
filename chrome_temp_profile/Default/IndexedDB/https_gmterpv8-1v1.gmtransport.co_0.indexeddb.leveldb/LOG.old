@@ -1,0 +1,13 @@
+2025/06/28-16:37:32.917 88c Reusing MANIFEST C:\Users\MONITOR3\Documents\ROBOTS\VACIO\alsua-automation\chrome_temp_profile\Default\IndexedDB\https_gmterpv8-1v1.gmtransport.co_0.indexeddb.leveldb/MANIFEST-000001
+2025/06/28-16:37:32.917 88c Recovering log #7
+2025/06/28-16:37:32.918 88c Reusing old log C:\Users\MONITOR3\Documents\ROBOTS\VACIO\alsua-automation\chrome_temp_profile\Default\IndexedDB\https_gmterpv8-1v1.gmtransport.co_0.indexeddb.leveldb/000007.log 
+2025/06/28-16:37:37.128 2e4c Level-0 table #11: started
+2025/06/28-16:37:37.189 2e4c Level-0 table #11: 1225 bytes OK
+2025/06/28-16:37:37.252 2e4c Delete type=0 #7
+2025/06/28-16:37:37.253 88c Manual compaction at level-0 from '\x00\x05\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00\x06\x00\x00\x00' @ 0 : 0; will stop at '\x00\x05\x00\x00\x05' @ 193 : 1
+2025/06/28-16:37:37.291 88c Compacting 1@0 + 1@1 files
+2025/06/28-16:37:37.324 88c Generated table #12@0: 29 keys, 740 bytes
+2025/06/28-16:37:37.324 88c Compacted 1@0 + 1@1 files => 740 bytes
+2025/06/28-16:37:37.370 88c compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/06/28-16:37:37.371 88c Delete type=2 #11
+2025/06/28-16:37:37.371 88c Manual compaction at level-0 from '\x00\x05\x00\x00\x05' @ 193 : 1 .. '\x00\x06\x00\x00\x00' @ 0 : 0; will stop at (end)
