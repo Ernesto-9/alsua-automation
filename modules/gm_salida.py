@@ -327,7 +327,7 @@ class GMSalidaAutomation:
             return False
     
     def autorizar_viaje(self):
-        """Hace clic en el botón 'Autorizar' y espera la recarga"""
+        """Hace clic en el botón 'Autorizar' y maneja la confirmación"""
         try:
             logger.info("🔓 Buscando botón 'Autorizar'...")
             
@@ -342,8 +342,25 @@ class GMSalidaAutomation:
             self.driver.execute_script("arguments[0].click();", autorizar_btn)
             logger.info("✅ Botón 'Autorizar' clickeado (JavaScript)")
             
-            # Esperar la recarga después de autorizar (1-2 segundos)
-            time.sleep(2)
+            # Manejar la alerta de confirmación de Chrome
+            try:
+                logger.info("🔍 Esperando alerta de confirmación...")
+                # Esperar a que aparezca la alerta
+                alert = self.wait.until(EC.alert_is_present())
+                
+                # Obtener texto de la alerta para log
+                alert_text = alert.text
+                logger.info(f"📋 Alerta detectada: '{alert_text}'")
+                
+                # Aceptar la alerta (click "OK" o "Aceptar")
+                alert.accept()
+                logger.info("✅ Alerta de confirmación aceptada")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ No se detectó alerta o error al manejarla: {e}")
+            
+            # Esperar la recarga después de autorizar (2-3 segundos)
+            time.sleep(3)
             
             # Verificar que apareció el botón "Facturar"
             try:
