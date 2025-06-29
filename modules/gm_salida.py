@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class GMSalidaAutomation:
     def __init__(self, driver, datos_viaje=None):
         self.driver = driver
-        self.wait = WebDriverWait(driver, 15)
+        self.wait = WebDriverWait(driver, 20)  # Aumenté timeout para computadoras más lentas
         self.datos_viaje = datos_viaje or {}
         
     def obtener_sucursal_por_determinante(self, clave_determinante):
@@ -57,64 +57,134 @@ class GMSalidaAutomation:
             logger.error(f"❌ Error al calcular fecha anterior: {e}")
             return fecha_str
     
+    def manejar_checkbox_robusto(self, checkbox_id, marcar=True):
+        """Maneja un checkbox de forma súper robusta contra errores stale element"""
+        logger.info(f"🎯 Procesando checkbox {checkbox_id}...")
+        
+        max_intentos = 5
+        for intento in range(max_intentos):
+            try:
+                # SIEMPRE buscar el elemento de nuevo para evitar stale element
+                checkbox = self.wait.until(EC.presence_of_element_located((By.ID, checkbox_id)))
+                
+                # Verificar si está visible y habilitado
+                if not checkbox.is_displayed():
+                    logger.warning(f"⚠️ Checkbox {checkbox_id} no visible en intento {intento + 1}")
+                    time.sleep(1)
+                    continue
+                
+                # Hacer scroll para asegurar visibilidad
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", checkbox)
+                time.sleep(0.5)
+                
+                # Verificar estado actual
+                esta_marcado = checkbox.is_selected()
+                
+                if marcar and not esta_marcado:
+                    # Necesita marcarse
+                    try:
+                        # Método 1: Clic normal
+                        checkbox.click()
+                        time.sleep(0.3)
+                        
+                        # Verificar si funcionó
+                        checkbox_verificacion = self.driver.find_element(By.ID, checkbox_id)
+                        if checkbox_verificacion.is_selected():
+                            logger.info(f"✅ Checkbox {checkbox_id} marcado exitosamente (método 1)")
+                            return True
+                        else:
+                            # Método 2: JavaScript click
+                            self.driver.execute_script("arguments[0].click();", checkbox)
+                            time.sleep(0.3)
+                            
+                            # Verificar otra vez
+                            checkbox_verificacion = self.driver.find_element(By.ID, checkbox_id)
+                            if checkbox_verificacion.is_selected():
+                                logger.info(f"✅ Checkbox {checkbox_id} marcado exitosamente (método 2)")
+                                return True
+                            else:
+                                # Método 3: Forzar con JavaScript
+                                script = f"""
+                                    var checkbox = document.getElementById('{checkbox_id}');
+                                    if (checkbox && !checkbox.checked) {{
+                                        checkbox.checked = true;
+                                        var event = new Event('change', {{ bubbles: true }});
+                                        checkbox.dispatchEvent(event);
+                                    }}
+                                """
+                                self.driver.execute_script(script)
+                                time.sleep(0.3)
+                                
+                                # Verificación final
+                                checkbox_verificacion = self.driver.find_element(By.ID, checkbox_id)
+                                if checkbox_verificacion.is_selected():
+                                    logger.info(f"✅ Checkbox {checkbox_id} marcado exitosamente (método 3)")
+                                    return True
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error en intento {intento + 1} para {checkbox_id}: {e}")
+                        time.sleep(1)
+                        continue
+                        
+                elif not marcar and esta_marcado:
+                    # Necesita desmarcarse
+                    try:
+                        checkbox.click()
+                        time.sleep(0.3)
+                        
+                        # Verificar
+                        checkbox_verificacion = self.driver.find_element(By.ID, checkbox_id)
+                        if not checkbox_verificacion.is_selected():
+                            logger.info(f"✅ Checkbox {checkbox_id} desmarcado exitosamente")
+                            return True
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error desmarcando {checkbox_id} en intento {intento + 1}: {e}")
+                        time.sleep(1)
+                        continue
+                else:
+                    # Ya está en el estado correcto
+                    estado = "marcado" if esta_marcado else "desmarcado"
+                    logger.info(f"✅ Checkbox {checkbox_id} ya estaba {estado}")
+                    return True
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Intento {intento + 1} falló para {checkbox_id}: {e}")
+                time.sleep(1)
+                
+        logger.error(f"❌ TODOS los intentos fallaron para {checkbox_id}")
+        return False
+    
     def configurar_filtros_busqueda(self):
-        """Configura los filtros de búsqueda (solo si es sesión nueva)"""
+        """Configura los filtros de búsqueda (versión robusta contra stale elements)"""
         try:
             # Abrir configuración de Búsqueda General
             busqueda_link = self.wait.until(EC.element_to_be_clickable((By.ID, "LINK_BUSQUEDAGENERAL")))
             busqueda_link.click()
-            time.sleep(1)
+            time.sleep(2)  # Más tiempo para que la página se estabilice
             logger.info("✅ Configuración de Búsqueda General abierta")
             
-            # Desmarcar checkboxes 1 y 2
-            for checkbox_id in ["_1_TABLE_BUSQUEDAGENERAL_1", "_2_TABLE_BUSQUEDAGENERAL_1"]:
-                try:
-                    checkbox = self.driver.find_element(By.ID, checkbox_id)
-                    if checkbox.is_selected():
-                        checkbox.click()
-                        logger.info(f"✅ Checkbox {checkbox_id} desmarcado")
-                except Exception as e:
-                    logger.warning(f"⚠️ No se pudo desmarcar {checkbox_id}: {e}")
+            # Esperar a que la interfaz esté completamente cargada
+            time.sleep(1)
             
-            # Marcar checkboxes 5, 7 y 8 con manejo especial
+            # Desmarcar checkboxes 1 y 2 con método robusto
+            logger.info("🔧 Desmarcando checkboxes 1 y 2...")
+            self.manejar_checkbox_robusto("_1_TABLE_BUSQUEDAGENERAL_1", marcar=False)
+            self.manejar_checkbox_robusto("_2_TABLE_BUSQUEDAGENERAL_1", marcar=False)
+            
+            # Marcar checkboxes 5, 7 y 8 con método robusto
+            logger.info("🔧 Marcando checkboxes 5, 7 y 8...")
             checkboxes_a_marcar = ["_5_TABLE_BUSQUEDAGENERAL_1", "_7_TABLE_BUSQUEDAGENERAL_1", "_8_TABLE_BUSQUEDAGENERAL_1"]
             
             for checkbox_id in checkboxes_a_marcar:
-                try:
-                    # Esperar a que el checkbox esté presente y sea clickeable
-                    checkbox = self.wait.until(EC.element_to_be_clickable((By.ID, checkbox_id)))
-                    
-                    # Hacer scroll al elemento para asegurarse de que esté visible
-                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", checkbox)
-                    time.sleep(0.3)
-                    
-                    # Verificar si ya está seleccionado
-                    if not checkbox.is_selected():
-                        # Intentar clic normal primero
-                        try:
-                            checkbox.click()
-                            time.sleep(0.2)
-                        except Exception:
-                            # Si falla, usar JavaScript click
-                            self.driver.execute_script("arguments[0].click();", checkbox)
-                            time.sleep(0.2)
-                        
-                        # Verificar que realmente se marcó
-                        if checkbox.is_selected():
-                            logger.info(f"✅ Checkbox {checkbox_id} marcado correctamente")
-                        else:
-                            logger.warning(f"⚠️ Checkbox {checkbox_id} no se pudo marcar")
-                    else:
-                        logger.info(f"✅ Checkbox {checkbox_id} ya estaba marcado")
-                        
-                except Exception as e:
-                    logger.error(f"❌ Error al marcar {checkbox_id}: {e}")
+                self.manejar_checkbox_robusto(checkbox_id, marcar=True)
+            
+            # Esperar un momento antes de hacer clic en Seleccionar
+            time.sleep(1)
             
             # Hacer clic en "Seleccionar" para aplicar la configuración de filtros
             try:
                 seleccionar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_SELECCIONARBUSQUEDAGENERAL")))
                 seleccionar_btn.click()
-                time.sleep(1)
+                time.sleep(2)  # Más tiempo para que se apliquen los cambios
                 logger.info("✅ Botón 'Seleccionar' clickeado - Filtros configurados")
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en 'Seleccionar': {e}")
@@ -183,7 +253,7 @@ class GMSalidaAutomation:
             try:
                 aplicar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_APLICAR")))
                 aplicar_btn.click()
-                time.sleep(2)  # Esperar a que se filtren los resultados
+                time.sleep(3)  # Más tiempo para que se filtren los resultados
                 logger.info("✅ Filtros aplicados")
                     
             except Exception as e:
@@ -234,7 +304,7 @@ class GMSalidaAutomation:
         try:
             autorizar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_AUTORIZAR")))
             autorizar_btn.click()
-            time.sleep(2)  # Esperar procesamiento
+            time.sleep(3)  # Más tiempo para procesamiento
             logger.info("✅ Viaje autorizado correctamente")
             return True
             
@@ -247,7 +317,7 @@ class GMSalidaAutomation:
         try:
             facturar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_FACTURAR")))
             facturar_btn.click()
-            time.sleep(2)  # Esperar procesamiento
+            time.sleep(3)  # Más tiempo para procesamiento
             logger.info("✅ Viaje facturado correctamente")
             return True
             
@@ -275,6 +345,7 @@ class GMSalidaAutomation:
             if configurar_filtros:
                 if not self.configurar_filtros_busqueda():
                     logger.warning("⚠️ No se pudieron configurar los filtros de búsqueda")
+                    # Continuar de todas formas
             
             # Ajustar fecha desde
             if not self.ajustar_fecha_desde(fecha_viaje):
