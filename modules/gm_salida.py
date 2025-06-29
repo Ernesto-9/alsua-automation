@@ -271,14 +271,13 @@ class GMSalidaAutomation:
         try:
             logger.info("🔍 Buscando viaje en la tabla...")
             
-            # Método más simple: buscar cualquier celda de la primera fila de datos
-            # Esto debería funcionar independientemente de la estructura exacta
+            # Selectores específicos basados en el HTML real
             viaje_selectors = [
-                "//table//tr[position()>1]//td[1]",  # Primera celda de la primera fila de datos
-                "//table//tr[contains(@class, '') and position()>1]",  # Primera fila que no sea header
-                "//tbody//tr[1]//td[1]",  # Primera celda del tbody
-                "//div[contains(@id, 'TABLE_PROVIAJES')]",  # Cualquier div de tabla de viajes
-                "//tr[contains(@onclick, '') or contains(@onmouseover, '')]//td[1]",  # Fila clickeable
+                "//td[contains(@onclick, 'OnSelectLigne')]",  # Cualquier celda con el onclick correcto
+                "//td[contains(@onclick, 'TABLE_PROVIAJES')]",  # Celda específica de la tabla de viajes
+                "//div[starts-with(@id, 'TABLE_PROVIAJES_0_')]",  # Div interno de la celda
+                "//td[@class and contains(@onclick, 'OnSelectLigne')][1]",  # Primera celda clickeable
+                "//table//tr[position()>1]//td[contains(@onclick, 'OnSelectLigne')]",  # Celda en fila de datos
             ]
             
             viaje_seleccionado = False
@@ -292,22 +291,25 @@ class GMSalidaAutomation:
                     self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", viaje_elemento)
                     time.sleep(0.5)
                     
-                    # Hacer clic
-                    viaje_elemento.click()
+                    # Hacer clic (usar JavaScript para mayor confiabilidad)
+                    self.driver.execute_script("arguments[0].click();", viaje_elemento)
                     logger.info(f"✅ Clic realizado en viaje con selector {i+1}")
                     
-                    # Esperar la recarga (1-2 segundos)
-                    time.sleep(2)
+                    # Esperar la recarga (2-3 segundos)
+                    time.sleep(3)
                     
-                    # Verificar que apareció el botón "Autorizar" (indica que la selección funcionó)
+                    # Verificar que el botón cambió de "DESAUTORIZAR" a "AUTORIZAR"
                     try:
                         autorizar_check = self.driver.find_element(By.ID, "BTN_AUTORIZAR")
-                        if autorizar_check.is_displayed():
-                            logger.info("✅ Viaje seleccionado correctamente - Botón 'Autorizar' visible")
+                        if autorizar_check.is_displayed() and "Autorizar" in autorizar_check.text:
+                            logger.info("✅ Viaje seleccionado correctamente - Botón cambió a 'Autorizar'")
                             viaje_seleccionado = True
                             break
+                        else:
+                            logger.warning(f"⚠️ Selector {i+1}: Botón no cambió a 'Autorizar', probando siguiente...")
+                            continue
                     except:
-                        logger.warning(f"⚠️ Selector {i+1} no mostró el botón 'Autorizar', probando siguiente...")
+                        logger.warning(f"⚠️ Selector {i+1}: No se encontró botón 'Autorizar', probando siguiente...")
                         continue
                         
                 except Exception as e:
