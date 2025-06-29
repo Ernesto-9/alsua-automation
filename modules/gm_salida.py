@@ -267,46 +267,90 @@ class GMSalidaAutomation:
             return False
     
     def seleccionar_viaje_de_tabla(self):
-        """Selecciona el viaje de la tabla de resultados"""
+        """Selecciona el viaje de la tabla de resultados y espera la recarga"""
         try:
-            # Buscar el primer viaje en la tabla
-            # El selector puede necesitar ajustes según la estructura real de la tabla
+            logger.info("🔍 Buscando viaje en la tabla...")
             
-            # Método 1: Buscar por patrón de ID de tabla
-            try:
-                viaje_elemento = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//div[starts-with(@id, 'TABLE_PROVIAJES_')]")))
-                viaje_elemento.click()
-                time.sleep(2)  # Esperar a que el sistema detecte la selección
-                logger.info("✅ Viaje seleccionado de la tabla")
-                return True
-            except:
-                pass
+            # Método más simple: buscar cualquier celda de la primera fila de datos
+            # Esto debería funcionar independientemente de la estructura exacta
+            viaje_selectors = [
+                "//table//tr[position()>1]//td[1]",  # Primera celda de la primera fila de datos
+                "//table//tr[contains(@class, '') and position()>1]",  # Primera fila que no sea header
+                "//tbody//tr[1]//td[1]",  # Primera celda del tbody
+                "//div[contains(@id, 'TABLE_PROVIAJES')]",  # Cualquier div de tabla de viajes
+                "//tr[contains(@onclick, '') or contains(@onmouseover, '')]//td[1]",  # Fila clickeable
+            ]
             
-            # Método 2: Buscar por estructura de tabla
-            try:
-                viaje_elemento = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//table//tr[position()>1]//td[1]")))
-                viaje_elemento.click()
-                time.sleep(2)
-                logger.info("✅ Viaje seleccionado de la tabla (método 2)")
-                return True
-            except:
-                pass
+            viaje_seleccionado = False
             
-            logger.error("❌ No se pudo seleccionar el viaje de la tabla")
-            return False
+            for i, selector in enumerate(viaje_selectors):
+                try:
+                    logger.info(f"🎯 Intentando selector {i+1}: {selector}")
+                    viaje_elemento = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                    
+                    # Hacer scroll al elemento
+                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", viaje_elemento)
+                    time.sleep(0.5)
+                    
+                    # Hacer clic
+                    viaje_elemento.click()
+                    logger.info(f"✅ Clic realizado en viaje con selector {i+1}")
+                    
+                    # Esperar la recarga (1-2 segundos)
+                    time.sleep(2)
+                    
+                    # Verificar que apareció el botón "Autorizar" (indica que la selección funcionó)
+                    try:
+                        autorizar_check = self.driver.find_element(By.ID, "BTN_AUTORIZAR")
+                        if autorizar_check.is_displayed():
+                            logger.info("✅ Viaje seleccionado correctamente - Botón 'Autorizar' visible")
+                            viaje_seleccionado = True
+                            break
+                    except:
+                        logger.warning(f"⚠️ Selector {i+1} no mostró el botón 'Autorizar', probando siguiente...")
+                        continue
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Selector {i+1} falló: {e}")
+                    continue
+            
+            if not viaje_seleccionado:
+                logger.error("❌ No se pudo seleccionar ningún viaje de la tabla")
+                return False
+                
+            return True
             
         except Exception as e:
             logger.error(f"❌ Error al seleccionar viaje de tabla: {e}")
             return False
     
     def autorizar_viaje(self):
-        """Hace clic en el botón 'Autorizar'"""
+        """Hace clic en el botón 'Autorizar' y espera la recarga"""
         try:
+            logger.info("🔓 Buscando botón 'Autorizar'...")
+            
+            # Esperar que el botón esté disponible y visible
             autorizar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_AUTORIZAR")))
+            
+            # Hacer scroll al botón
+            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", autorizar_btn)
+            time.sleep(0.5)
+            
+            # Hacer clic
             autorizar_btn.click()
-            time.sleep(3)  # Más tiempo para procesamiento
-            logger.info("✅ Viaje autorizado correctamente")
-            return True
+            logger.info("✅ Botón 'Autorizar' clickeado")
+            
+            # Esperar la recarga después de autorizar (1-2 segundos)
+            time.sleep(2)
+            
+            # Verificar que apareció el botón "Facturar"
+            try:
+                facturar_check = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_FACTURAR")))
+                logger.info("✅ Viaje autorizado correctamente - Botón 'Facturar' disponible")
+                return True
+            except:
+                logger.warning("⚠️ Botón 'Facturar' no apareció después de autorizar")
+                return False
             
         except Exception as e:
             logger.error(f"❌ Error al autorizar viaje: {e}")
@@ -315,9 +359,22 @@ class GMSalidaAutomation:
     def facturar_viaje(self):
         """Hace clic en el botón 'Facturar'"""
         try:
+            logger.info("💰 Buscando botón 'Facturar'...")
+            
+            # Esperar que el botón esté disponible y visible
             facturar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_FACTURAR")))
+            
+            # Hacer scroll al botón
+            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", facturar_btn)
+            time.sleep(0.5)
+            
+            # Hacer clic
             facturar_btn.click()
-            time.sleep(3)  # Más tiempo para procesamiento
+            logger.info("✅ Botón 'Facturar' clickeado")
+            
+            # Esperar un momento para que se complete la facturación
+            time.sleep(3)
+            
             logger.info("✅ Viaje facturado correctamente")
             return True
             
