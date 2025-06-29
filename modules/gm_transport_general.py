@@ -24,7 +24,7 @@ class GMTransportAutomation:
         # Datos por defecto (incluyendo placas para pruebas)
         datos_default = {
             'fecha': '21/06/2025',
-            'prefactura': '7651236',
+            'prefactura': '7651238',
             'cliente_codigo': '040512',
             'importe': '126.35',
             'clave_determinante': '2380',
