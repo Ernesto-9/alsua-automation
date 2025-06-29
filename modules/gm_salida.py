@@ -329,16 +329,16 @@ class GMSalidaAutomation:
         try:
             logger.info("🔓 Buscando botón 'Autorizar'...")
             
-            # Esperar que el botón esté disponible y visible
-            autorizar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_AUTORIZAR")))
+            # Esperar que el botón esté disponible
+            autorizar_btn = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_AUTORIZAR")))
             
             # Hacer scroll al botón
             self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", autorizar_btn)
             time.sleep(0.5)
             
-            # Hacer clic
-            autorizar_btn.click()
-            logger.info("✅ Botón 'Autorizar' clickeado")
+            # Usar JavaScript click para evitar problemas de elementos superpuestos
+            self.driver.execute_script("arguments[0].click();", autorizar_btn)
+            logger.info("✅ Botón 'Autorizar' clickeado (JavaScript)")
             
             # Esperar la recarga después de autorizar (1-2 segundos)
             time.sleep(2)
@@ -361,16 +361,16 @@ class GMSalidaAutomation:
         try:
             logger.info("💰 Buscando botón 'Facturar'...")
             
-            # Esperar que el botón esté disponible y visible
-            facturar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_FACTURAR")))
+            # Esperar que el botón esté disponible
+            facturar_btn = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_FACTURAR")))
             
             # Hacer scroll al botón
             self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", facturar_btn)
             time.sleep(0.5)
             
-            # Hacer clic
-            facturar_btn.click()
-            logger.info("✅ Botón 'Facturar' clickeado")
+            # Usar JavaScript click para consistencia
+            self.driver.execute_script("arguments[0].click();", facturar_btn)
+            logger.info("✅ Botón 'Facturar' clickeado (JavaScript)")
             
             # Esperar un momento para que se complete la facturación
             time.sleep(3)
