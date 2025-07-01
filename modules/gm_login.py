@@ -12,7 +12,7 @@ import os
 EMPRESA = "TSU9608131A7"
 USUARIO = "ERNESTOU"
 CONTRASENA = "eRN#$TO.#\"/2025"
-CRM_URL = "https://gmterpv8-41.gmtransport.co/GMTERPV8/"
+CRM_URL = "https://www.softwareparatransporte.com/GMTERPV8_WEB/ES/PAGE_CatUsuariosLoginAWP.awp"
 
 # Ruta al chromedriver y carpeta de perfil temporal
 CHROMEDRIVER_PATH = r"C:\Users\MONITOR3\Documents\ROBOTS\VACIO\chromedriver-win64\\chromedriver.exe"
