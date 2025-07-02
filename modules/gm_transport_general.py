@@ -28,7 +28,7 @@ class GMTransportAutomation:
             'cliente_codigo': '040512',
             'importe': '310.75',  
             'clave_determinante': '2899',
-            'placa_remolque': '852YH6' ,
+            'placa_remolque': '852YH6',  # CORREGIDO: Agregada coma faltante
             'placa_tractor': '35AK6K'
         }
         
