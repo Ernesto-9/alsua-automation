@@ -29,7 +29,7 @@ class GMTransportAutomation:
             'importe': '310.75',  
             'clave_determinante': '2899',
             'placa_remolque': '41UG1N',  
-            'placa_tractor': '826YG5'
+            'placa_tractor': '35AK6K'
         }
         
         archivo_prueba = "tests/ejemplo.xls"
