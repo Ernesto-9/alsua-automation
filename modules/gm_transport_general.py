@@ -23,13 +23,13 @@ class GMTransportAutomation:
         """Carga los datos del viaje desde el archivo XLS o usa datos por defecto"""
         # Datos por defecto (incluyendo placas para pruebas)
         datos_default = {
-            'fecha': '21/06/2025',
-            'prefactura': '7651236',
+            'fecha': '01/07/2025',
+            'prefactura': '7996845',  # CORREGIDO: Agregada coma faltante
             'cliente_codigo': '040512',
-            'importe': '126.35',
-            'clave_determinante': '2380',
+            'importe': '310.75',  # CORREGIDO: Agregada coma faltante
+            'clave_determinante': '2899',
             'placa_remolque': '41UG1N',  # Placa de remolque real
-            'placa_tractor': '73BB1F'    # Placa de tractor real
+            'placa_tractor': '826YG5'
         }
         
         archivo_prueba = "tests/ejemplo.xls"
