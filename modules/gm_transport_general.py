@@ -24,11 +24,11 @@ class GMTransportAutomation:
         # Datos por defecto (incluyendo placas para pruebas)
         datos_default = {
             'fecha': '01/07/2025',
-            'prefactura': '7996845',  # CORREGIDO: Agregada coma faltante
+            'prefactura': '7996845',  
             'cliente_codigo': '040512',
-            'importe': '310.75',  # CORREGIDO: Agregada coma faltante
+            'importe': '310.75',  
             'clave_determinante': '2899',
-            'placa_remolque': '41UG1N',  # Placa de remolque real
+            'placa_remolque': '41UG1N',  
             'placa_tractor': '826YG5'
         }
         
