@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class GMSalidaAutomation:
     def __init__(self, driver, datos_viaje=None):
         self.driver = driver
-        self.wait = WebDriverWait(driver, 20)  # Aumenté timeout para computadoras más lentas
+        self.wait = WebDriverWait(driver, 20)
         self.datos_viaje = datos_viaje or {}
         
     def obtener_sucursal_por_determinante(self, clave_determinante):
@@ -298,18 +298,18 @@ class GMSalidaAutomation:
                     # Esperar la recarga (2-3 segundos)
                     time.sleep(3)
                     
-                    # Verificar que el botón cambió de "DESAUTORIZAR" a "AUTORIZAR"
+                    # Verificar que aparecieron los links de Salida/Llegada
                     try:
-                        autorizar_check = self.driver.find_element(By.ID, "BTN_AUTORIZAR")
-                        if autorizar_check.is_displayed() and "Autorizar" in autorizar_check.text:
-                            logger.info("✅ Viaje seleccionado correctamente - Botón cambió a 'Autorizar'")
+                        salida_check = self.driver.find_element(By.LINK_TEXT, "Salida")
+                        if salida_check.is_displayed():
+                            logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
                             viaje_seleccionado = True
                             break
                         else:
-                            logger.warning(f"⚠️ Selector {i+1}: Botón no cambió a 'Autorizar', probando siguiente...")
+                            logger.warning(f"⚠️ Selector {i+1}: Link 'Salida' no visible, probando siguiente...")
                             continue
                     except:
-                        logger.warning(f"⚠️ Selector {i+1}: No se encontró botón 'Autorizar', probando siguiente...")
+                        logger.warning(f"⚠️ Selector {i+1}: No se encontró link 'Salida', probando siguiente...")
                         continue
                         
                 except Exception as e:
@@ -326,85 +326,78 @@ class GMSalidaAutomation:
             logger.error(f"❌ Error al seleccionar viaje de tabla: {e}")
             return False
     
-    def autorizar_viaje(self):
-        """Hace clic en el botón 'Autorizar' y maneja la confirmación"""
+    def procesar_salida_viaje(self):
+        """Proceso específico de salida del viaje"""
         try:
-            logger.info("🔓 Buscando botón 'Autorizar'...")
+            logger.info("🚛 Iniciando proceso de SALIDA del viaje")
             
-            # Esperar que el botón esté disponible
-            autorizar_btn = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_AUTORIZAR")))
-            
-            # Hacer scroll al botón
-            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", autorizar_btn)
-            time.sleep(0.5)
-            
-            # Usar JavaScript click para evitar problemas de elementos superpuestos
-            self.driver.execute_script("arguments[0].click();", autorizar_btn)
-            logger.info("✅ Botón 'Autorizar' clickeado (JavaScript)")
-            
-            # Manejar la alerta de confirmación de Chrome
-            try:
-                logger.info("🔍 Esperando alerta de confirmación...")
-                # Esperar a que aparezca la alerta
-                alert = self.wait.until(EC.alert_is_present())
-                
-                # Obtener texto de la alerta para log
-                alert_text = alert.text
-                logger.info(f"📋 Alerta detectada: '{alert_text}'")
-                
-                # Aceptar la alerta (click "OK" o "Aceptar")
-                alert.accept()
-                logger.info("✅ Alerta de confirmación aceptada")
-                
-            except Exception as e:
-                logger.warning(f"⚠️ No se detectó alerta o error al manejarla: {e}")
-            
-            # Esperar la recarga después de autorizar (2-3 segundos)
-            time.sleep(3)
-            
-            # Verificar que apareció el botón "Facturar"
-            try:
-                facturar_check = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_FACTURAR")))
-                logger.info("✅ Viaje autorizado correctamente - Botón 'Facturar' disponible")
-                return True
-            except:
-                logger.warning("⚠️ Botón 'Facturar' no apareció después de autorizar")
+            # Obtener fecha del viaje
+            fecha_viaje = self.datos_viaje.get('fecha', '')
+            if not fecha_viaje:
+                logger.error("❌ No se encontró fecha del viaje")
                 return False
             
-        except Exception as e:
-            logger.error(f"❌ Error al autorizar viaje: {e}")
-            return False
-    
-    def facturar_viaje(self):
-        """Hace clic en el botón 'Facturar'"""
-        try:
-            logger.info("💰 Buscando botón 'Facturar'...")
+            # Paso 1: Hacer clic en el link "Salida"
+            try:
+                salida_link = self.wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Salida")))
+                self.driver.execute_script("arguments[0].click();", salida_link)
+                time.sleep(1.5)
+                logger.info("✅ Link 'Salida' clickeado")
+            except Exception as e:
+                logger.error(f"❌ Error al hacer clic en 'Salida': {e}")
+                return False
             
-            # Esperar que el botón esté disponible
-            facturar_btn = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_FACTURAR")))
+            # Paso 2: Llenar fecha de salida (la misma fecha del viaje)
+            try:
+                fecha_input = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_SALIDA")))
+                fecha_input.clear()
+                fecha_input.send_keys(fecha_viaje)
+                logger.info(f"✅ Fecha de salida '{fecha_viaje}' insertada")
+            except Exception as e:
+                logger.error(f"❌ Error al insertar fecha de salida: {e}")
+                return False
             
-            # Hacer scroll al botón
-            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", facturar_btn)
-            time.sleep(0.5)
+            # Paso 3: Seleccionar status "EN RUTA" (valor 2)
+            try:
+                status_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATESTATUSVIAJE"))))
+                status_select.select_by_value("2")  # EN RUTA
+                time.sleep(0.5)
+                logger.info("✅ Status 'EN RUTA' seleccionado")
+            except Exception as e:
+                logger.error(f"❌ Error al seleccionar status EN RUTA: {e}")
+                return False
             
-            # Usar JavaScript click para consistencia
-            self.driver.execute_script("arguments[0].click();", facturar_btn)
-            logger.info("✅ Botón 'Facturar' clickeado (JavaScript)")
+            # Paso 4: Hacer clic en "Aceptar"
+            try:
+                aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTAR")))
+                self.driver.execute_script("arguments[0].click();", aceptar_btn)
+                time.sleep(1)
+                logger.info("✅ Botón 'Aceptar' clickeado")
+            except Exception as e:
+                logger.error(f"❌ Error al hacer clic en 'Aceptar': {e}")
+                return False
             
-            # Esperar un momento para que se complete la facturación
-            time.sleep(3)
+            # Paso 5: Responder "No" al envío de correo
+            try:
+                no_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_NO")))
+                self.driver.execute_script("arguments[0].click();", no_btn)
+                time.sleep(2)  # Esperar a que se cierre la ventana y regrese a la lista
+                logger.info("✅ Botón 'No' clickeado - Proceso de salida completado")
+            except Exception as e:
+                logger.error(f"❌ Error al hacer clic en 'No': {e}")
+                return False
             
-            logger.info("✅ Viaje facturado correctamente")
+            logger.info("✅ Proceso de SALIDA completado exitosamente")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error al facturar viaje: {e}")
+            logger.error(f"❌ Error en proceso de salida: {e}")
             return False
     
-    def procesar_autorizacion_facturacion(self, configurar_filtros=True):
-        """Proceso principal para autorizar y facturar el viaje"""
+    def procesar_salida_completo(self, configurar_filtros=True):
+        """Proceso principal para buscar el viaje y procesarle la salida"""
         try:
-            logger.info("🚀 Iniciando proceso de autorización y facturación del viaje")
+            logger.info("🚀 Iniciando proceso completo de salida del viaje")
             
             # Extraer datos necesarios
             fecha_viaje = self.datos_viaje.get('fecha', '')
@@ -412,7 +405,7 @@ class GMSalidaAutomation:
             clave_determinante = self.datos_viaje.get('clave_determinante', '')
             
             if not all([fecha_viaje, prefactura, clave_determinante]):
-                logger.error("❌ Faltan datos necesarios para procesar autorización y facturación")
+                logger.error("❌ Faltan datos necesarios para procesar salida")
                 return False
             
             logger.info(f"📋 Procesando: Prefactura={prefactura}, Fecha={fecha_viaje}, Determinante={clave_determinante}")
@@ -439,42 +432,25 @@ class GMSalidaAutomation:
             if not self.seleccionar_viaje_de_tabla():
                 return False
             
-            # NUEVO PROCESO SIMPLIFICADO: Solo Autorizar y Facturar
-            logger.info("📋 Proceso simplificado: Autorizar → Facturar")
-            
-            # Paso 1: Autorizar viaje
-            if not self.autorizar_viaje():
+            # Procesar salida del viaje
+            if not self.procesar_salida_viaje():
                 return False
             
-            # Paso 2: Facturar viaje
-            if not self.facturar_viaje():
-                return False
-            
-            logger.info("✅ Proceso de autorización y facturación completado exitosamente")
+            logger.info("✅ Proceso completo de salida completado exitosamente")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error general en procesar_autorizacion_facturacion: {e}")
+            logger.error(f"❌ Error general en procesar_salida_completo: {e}")
             return False
 
 # Función principal para ser llamada desde otros módulos
 def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
-    """Función principal para autorizar y facturar el viaje (renombrada para compatibilidad)"""
+    """Función principal para procesar la salida del viaje"""
     try:
         automation = GMSalidaAutomation(driver, datos_viaje)
-        return automation.procesar_autorizacion_facturacion(configurar_filtros)
+        return automation.procesar_salida_completo(configurar_filtros)
     except Exception as e:
         logger.error(f"❌ Error en procesar_salida_viaje: {e}")
-        return False
-
-# Función nueva con nombre más claro
-def procesar_autorizacion_facturacion(driver, datos_viaje=None, configurar_filtros=True):
-    """Función principal para autorizar y facturar el viaje"""
-    try:
-        automation = GMSalidaAutomation(driver, datos_viaje)
-        return automation.procesar_autorizacion_facturacion(configurar_filtros)
-    except Exception as e:
-        logger.error(f"❌ Error en procesar_autorizacion_facturacion: {e}")
         return False
 
 # Ejemplo de uso

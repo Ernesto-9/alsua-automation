@@ -7,6 +7,8 @@ import csv
 import os
 import logging
 from gm_facturacion1 import ir_a_facturacion
+from gm_salida import procesar_salida_viaje
+from gm_llegadayfactura2 import procesar_llegada_factura
 from parser import parse_xls
 
 # Configurar logging
@@ -29,7 +31,7 @@ class GMTransportAutomation:
             'cliente_codigo': '040512',
             'importe': '310.75',  
             'clave_determinante': '2899',
-            'placa_remolque': '852YH6',  # CORREGIDO: Agregada coma faltante
+            'placa_remolque': '852YH6',
             'placa_tractor': '94BB1F'
         }
         
@@ -302,23 +304,40 @@ class GMTransportAutomation:
             # Seleccionar base origen
             self.seleccionar_base_origen(base_origen)
             
-            # NUEVO: Seleccionar remolque
+            # Seleccionar remolque
             logger.info("🚛 Seleccionando remolque...")
             if not self.seleccionar_remolque():
                 logger.error("❌ Error al seleccionar remolque")
                 return False
             
-            # NUEVO: Seleccionar tractor y asignar operador automáticamente  
+            # Seleccionar tractor y asignar operador automáticamente  
             logger.info("🚗 Seleccionando tractor y asignando operador...")
             if not self.seleccionar_tractor_y_operador():
                 logger.error("❌ Error al seleccionar tractor y operador")
                 return False
             
-            # Proceder a facturación
-            logger.info("🎯 Procediendo a facturación...")
-            ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
+            # **NUEVO FLUJO**: Usar gm_facturacion1 para la parte inicial
+            logger.info("💰 Ejecutando facturación inicial...")
+            try:
+                ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
+                logger.info("✅ Facturación inicial completada")
+            except Exception as e:
+                logger.error(f"❌ Error en facturación inicial: {e}")
+                return False
             
-            logger.info("✅ Proceso completado exitosamente")
+            # **NUEVO FLUJO**: Procesar Salida
+            logger.info("🚛 Ejecutando proceso de SALIDA...")
+            if not procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True):
+                logger.error("❌ Error en proceso de salida")
+                return False
+            
+            # **NUEVO FLUJO**: Procesar Llegada y Facturación Final
+            logger.info("🛬 Ejecutando proceso de LLEGADA y FACTURACIÓN FINAL...")
+            if not procesar_llegada_factura(self.driver, self.datos_viaje):
+                logger.error("❌ Error en proceso de llegada y facturación")
+                return False
+            
+            logger.info("🎉 Proceso completo de automatización GM Transport exitoso")
             return True
             
         except Exception as e:
