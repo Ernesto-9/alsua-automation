@@ -6,10 +6,10 @@ import time
 import csv
 import os
 import logging
-from gm_facturacion1 import ir_a_facturacion
-from gm_salida import procesar_salida_viaje
-from gm_llegadayfactura2 import procesar_llegada_factura
-from parser import parse_xls
+from .gm_facturacion1 import ir_a_facturacion
+from .gm_salida import procesar_salida_viaje
+from .gm_llegadayfactura2 import procesar_llegada_factura
+from .parser import parse_xls
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
