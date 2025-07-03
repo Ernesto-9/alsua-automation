@@ -30,7 +30,7 @@ class GMTransportAutomation:
             'importe': '310.75',  
             'clave_determinante': '2899',
             'placa_remolque': '852YH6',  # CORREGIDO: Agregada coma faltante
-            'placa_tractor': '35AK6K'
+            'placa_tractor': '94BB1F'
         }
         
         archivo_prueba = "tests/ejemplo.xls"
