@@ -3,7 +3,6 @@
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from gm_transport_general import fill_viaje_form
 
 def navigate_to_create_viaje(driver):
     try:
@@ -30,10 +29,10 @@ def navigate_to_create_viaje(driver):
             EC.element_to_be_clickable((By.ID, "BTN_AGREGARVIAJES"))
         )
         viaje_btn.click()
-        print("🟢 Botón 'Viaje' clickeado")
-
-        # Llenar el formulario con datos reales
-        fill_viaje_form(driver)
+        print("🟢 Botón 'Viaje' clickeado - Listo para llenar formulario")
+        
+        return True
 
     except Exception as e:
         print(f"❌ Error al navegar al módulo de viajes: {e}")
+        return False
