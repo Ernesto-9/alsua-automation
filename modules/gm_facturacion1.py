@@ -3,9 +3,9 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import time
-from gm_salida import procesar_salida_viaje
 
 def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
+    """Función para ir a la pestaña de Conceptos Facturación y llenar el total"""
     wait = WebDriverWait(driver, 15)
 
     # Ir a pestaña Conceptos Facturación
@@ -16,7 +16,7 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         time.sleep(1.5)
     except Exception as e:
         print(f"❌ Error al abrir pestaña Conceptos Facturación: {e}")
-        return
+        return False
 
     # Insertar Total del viaje
     try:
@@ -30,7 +30,7 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         print(f"✅ Total del viaje '{total_factura_valor}' insertado")
     except Exception as e:
         print(f"❌ Error al insertar total de factura: {e}")
-        return
+        return False
 
     # Clic en botón Aceptar para documentar
     try:
@@ -40,7 +40,7 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         time.sleep(1)
     except Exception as e:
         print(f"❌ Error al hacer clic en 'Aceptar': {e}")
-        return
+        return False
 
     # Responder "No" a la caja de pregunta
     try:
@@ -50,21 +50,18 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         time.sleep(1)
     except Exception as e:
         print(f"❌ Error al hacer clic en 'No': {e}")
+        return False
 
     # Clic en botón Regresar
     try:
         regresar_btn = wait.until(EC.element_to_be_clickable((By.ID, "BTN_REGRESAR")))
         driver.execute_script("arguments[0].click();", regresar_btn)
         print("✅ Botón 'Regresar' clickeado")
+        time.sleep(2)  # Esperar a que regrese a la pantalla principal
         
-        # Llamar al proceso de salida
-        print("🚀 Iniciando proceso de salida del viaje...")
-        resultado_salida = procesar_salida_viaje(driver, datos_viaje)
+        print("✅ Facturación inicial completada exitosamente")
+        return True
         
-        if resultado_salida:
-            print("✅ Proceso de salida completado exitosamente")
-        else:
-            print("❌ Error en proceso de salida")
-            
     except Exception as e:
         print(f"❌ Error al hacer clic en 'Regresar': {e}")
+        return False
