@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class AlsuaMailAutomation:
     def __init__(self):
-        self.carpeta_descarga = "archivos_descargados"
+        self.carpeta_descarga = r"C:\Users\MONITOR3\Documents\ROBOTS\VACIO\alsua-automation\archivos_descargados"
         self.correos_procesados = set()  # Para evitar reprocesar
         self.driver = None
         self._crear_carpeta_descarga()
