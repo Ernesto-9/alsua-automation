@@ -35,6 +35,9 @@ def parse_xls(ruta_archivo, determinante_from_asunto=None):
 
         # Como no podemos leer celda F4 en .xls, dejamos prefactura vacía
         prefactura = ""
+        
+        # NUEVO: Agregar cliente_codigo por defecto
+        cliente_codigo = "040512"  # Código por defecto para Walmart
 
         return {
             "prefactura": prefactura,
@@ -43,7 +46,8 @@ def parse_xls(ruta_archivo, determinante_from_asunto=None):
             "placa_remolque": placa_remolque,
             "placa_tractor": placa_tractor,
             "clave_determinante": determinante,
-            "importe": importe
+            "importe": importe,
+            "cliente_codigo": cliente_codigo  # AGREGADO
         }
 
     except Exception as e:
