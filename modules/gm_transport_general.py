@@ -262,10 +262,9 @@ class GMTransportAutomation:
         try:
             logger.info("🚀 Iniciando llenado de formulario de viaje")
             
-            # NUEVO: Navegar al módulo de creación de viajes primero
-            from .navigate_to_create_viaje import navigate_to_create_viaje
-            logger.info("🧭 Navegando al módulo de creación de viajes...")
-            navigate_to_create_viaje(self.driver)
+            # TODO: Navegar al módulo de creación de viajes manualmente por ahora
+            logger.info("⚠️ IMPORTANTE: Debes navegar manualmente a TRÁFICO → VIAJES → Agregar viaje antes de que continúe")
+            input("🟢 Presiona ENTER cuando estés en la pantalla de creación de viajes...")  
             
             # Extraer datos
             fecha_valor = self.datos_viaje['fecha']
