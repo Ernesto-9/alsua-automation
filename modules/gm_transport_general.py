@@ -6,10 +6,10 @@ import time
 import csv
 import os
 import logging
-from .gm_facturacion1 import ir_a_facturacion
-from .gm_salida import procesar_salida_viaje
-from .gm_llegadayfactura2 import procesar_llegada_factura
-from .parser import parse_xls
+from gm_facturacion1 import ir_a_facturacion
+from gm_salida import procesar_salida_viaje
+from gm_llegadayfactura2 import procesar_llegada_factura
+from parser import parse_xls
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -260,6 +260,11 @@ class GMTransportAutomation:
         """Función principal para llenar el formulario de viaje"""
         try:
             logger.info("🚀 Iniciando llenado de formulario de viaje")
+            
+            # NUEVO: Navegar al módulo de creación de viajes primero
+            from .navigate_to_create_viaje import navigate_to_create_viaje
+            logger.info("🧭 Navegando al módulo de creación de viajes...")
+            navigate_to_create_viaje(self.driver)
             
             # Extraer datos
             fecha_valor = self.datos_viaje['fecha']
