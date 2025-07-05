@@ -366,6 +366,15 @@ class GMTransportAutomation:
             for fecha_id in fechas_ids:
                 self.llenar_fecha(fecha_id, fecha_valor)
             
+            # NUEVO: Después de llenar fechas, hacer clic en el campo de ruta para continuar
+            try:
+                campo_ruta = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FOLIORUTA")))
+                campo_ruta.click()
+                time.sleep(0.3)
+                logger.info("✅ Enfoque movido al campo de ruta")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo hacer clic en campo de ruta: {e}")
+            
             # Obtener y configurar ruta GM
             ruta_gm, base_origen = self.obtener_ruta_y_base(clave_determinante)
             
