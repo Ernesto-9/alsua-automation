@@ -58,7 +58,45 @@ class GMTransportAutomation:
             
         return datos_default
     
-    def obtener_ruta_y_base(self, determinante):
+    def registrar_error_viaje(self, tipo_error, detalle=""):
+        """Registra errores específicos del viaje para revisión manual"""
+        prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
+        placa_tractor = self.datos_viaje.get('placa_tractor', 'DESCONOCIDA')
+        placa_remolque = self.datos_viaje.get('placa_remolque', 'DESCONOCIDA')
+        determinante = self.datos_viaje.get('clave_determinante', 'DESCONOCIDO')
+        
+        # Log específico para operadores
+        logger.error("=" * 80)
+        logger.error("🚨 VIAJE REQUIERE ATENCIÓN MANUAL")
+        logger.error(f"📋 PREFACTURA: {prefactura}")
+        logger.error(f"🚛 PLACA TRACTOR: {placa_tractor}")
+        logger.error(f"🚚 PLACA REMOLQUE: {placa_remolque}")
+        logger.error(f"🎯 DETERMINANTE: {determinante}")
+        logger.error(f"❌ ERROR: {tipo_error}")
+        if detalle:
+            logger.error(f"📝 DETALLE: {detalle}")
+        logger.error("🔧 ACCIÓN REQUERIDA: Revisar y completar manualmente en GM Transport")
+        logger.error("=" * 80)
+        
+        # TODO: Aquí se integrará MySQL y notificaciones web
+        # Por ahora, guardar en archivo temporal
+        try:
+            error_file = "errores_viajes.log"
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(error_file, 'a', encoding='utf-8') as f:
+                f.write(f"{timestamp}|{prefactura}|{placa_tractor}|{placa_remolque}|{determinante}|{tipo_error}|{detalle}\n")
+        except Exception as e:
+            logger.warning(f"⚠️ No se pudo guardar error en archivo: {e}")
+            
+        return {
+            'timestamp': datetime.now().isoformat(),
+            'prefactura': prefactura,
+            'placa_tractor': placa_tractor,
+            'placa_remolque': placa_remolque,
+            'determinante': determinante,
+            'tipo_error': tipo_error,
+            'detalle': detalle
+        }
         """Obtiene la ruta GM y base origen desde el CSV"""
         csv_path = 'modules/clave_ruta_base.csv'
         
@@ -164,6 +202,7 @@ class GMTransportAutomation:
         """
         Busca y selecciona una placa (remolque o tractor)
         tipo_placa: 'remolque' o 'tractor'
+        Retorna: (éxito: bool, error_mensaje: str)
         """
         try:
             logger.info(f"🔍 Buscando {tipo_placa}: {placa_valor}")
@@ -198,29 +237,55 @@ class GMTransportAutomation:
             # Hacer clic en "Aplicar"
             btn_aplicar = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//span[@class='btnvalignmiddle' and contains(text(), 'Aplicar')]/..")))
             btn_aplicar.click()
-            time.sleep(2)  # Esperar que cargue la búsqueda
+            time.sleep(3)  # Esperar que cargue la búsqueda
             logger.info(f"✅ Búsqueda aplicada para {tipo_placa}")
             
-            # Hacer clic en "Seleccionar"
-            btn_seleccionar = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_SELECCIONAR")))
-            btn_seleccionar.click()
-            time.sleep(1)
-            logger.info(f"✅ {tipo_placa.capitalize()} {placa_valor} seleccionado")
-            
-            return True
+            # Verificar si se encontraron resultados
+            try:
+                # Buscar si aparece el botón "Seleccionar" (significa que hay resultados)
+                btn_seleccionar = self.driver.find_element(By.ID, "BTN_SELECCIONAR")
+                if not btn_seleccionar.is_enabled():
+                    error_msg = f"PLACA_{tipo_placa.upper()}_NO_ENCONTRADA"
+                    logger.error(f"❌ {tipo_placa.capitalize()} {placa_valor} no encontrado en GM Transport")
+                    # Cerrar ventana de búsqueda
+                    try:
+                        cerrar_btn = self.driver.find_element(By.XPATH, "//span[contains(text(), 'Cerrar')]/..")
+                        cerrar_btn.click()
+                    except:
+                        pass
+                    return False, error_msg
+                
+                # Hacer clic en "Seleccionar"
+                btn_seleccionar.click()
+                time.sleep(1)
+                logger.info(f"✅ {tipo_placa.capitalize()} {placa_valor} seleccionado")
+                return True, ""
+                
+            except Exception as e:
+                error_msg = f"PLACA_{tipo_placa.upper()}_NO_ENCONTRADA"
+                logger.error(f"❌ {tipo_placa.capitalize()} {placa_valor} no encontrado: {e}")
+                # Cerrar ventana de búsqueda
+                try:
+                    cerrar_btn = self.driver.find_element(By.XPATH, "//span[contains(text(), 'Cerrar')]/..")
+                    cerrar_btn.click()
+                except:
+                    pass
+                return False, error_msg
             
         except Exception as e:
+            error_msg = f"ERROR_BUSQUEDA_{tipo_placa.upper()}"
             logger.error(f"❌ Error al buscar {tipo_placa} {placa_valor}: {e}")
-            return False
+            return False, error_msg
     
     def seleccionar_remolque(self):
         """Selecciona el remolque usando la placa"""
         placa_remolque = self.datos_viaje.get('placa_remolque')
         if not placa_remolque:
             logger.error("❌ No se encontró placa_remolque en los datos")
-            return False
+            return False, "DATOS_INCOMPLETOS_PLACA_REMOLQUE"
             
-        return self.buscar_y_seleccionar_placa('remolque', placa_remolque)
+        exito, error = self.buscar_y_seleccionar_placa('remolque', placa_remolque)
+        return exito, error
     
     def seleccionar_tractor_y_operador(self):
         """Selecciona el tractor, lo que automáticamente asigna el operador"""
@@ -311,15 +376,18 @@ class GMTransportAutomation:
             # Seleccionar base origen
             self.seleccionar_base_origen(base_origen)
             
-            # Seleccionar remolque
+            # Seleccionar remolque con manejo de errores
             logger.info("🚛 Seleccionando remolque...")
-            if not self.seleccionar_remolque():
-                logger.error("❌ Error al seleccionar remolque")
+            exito_remolque, error_remolque = self.seleccionar_remolque()
+            if not exito_remolque:
+                self.registrar_error_viaje(error_remolque, f"No se pudo seleccionar remolque {self.datos_viaje.get('placa_remolque')}")
+                logger.error("❌ Error al seleccionar remolque - Viaje marcado para revisión manual")
                 return False
             
             # Seleccionar tractor y asignar operador automáticamente  
             logger.info("🚗 Seleccionando tractor y asignando operador...")
             if not self.seleccionar_tractor_y_operador():
+                self.registrar_error_viaje("OPERADOR_NO_ASIGNADO", f"Tractor {self.datos_viaje.get('placa_tractor')} sin operador automático")
                 logger.warning("⚠️ No se pudo asignar operador automáticamente")
                 logger.info("📝 Continuando sin operador - se requerirá asignación manual")
                 # No retornar False, continuar con el proceso
