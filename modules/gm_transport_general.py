@@ -140,8 +140,17 @@ class GMTransportAutomation:
             nuevo_valor = f"{fecha_valor} {hora}"
             campo.send_keys(nuevo_valor)
             time.sleep(0.2)
-            campo.send_keys(Keys.ENTER)
-            time.sleep(0.2)
+            
+            # NUEVO: Hacer clic fuera del campo para salir completamente
+            try:
+                # Hacer clic en una zona neutra (el label de "Ruta" por ejemplo)
+                zona_neutra = self.driver.find_element(By.XPATH, "//td[contains(text(), 'Ruta')]")
+                zona_neutra.click()
+                time.sleep(0.3)
+            except:
+                # Si no encuentra esa zona, hacer clic en el body
+                self.driver.execute_script("document.body.click();")
+                time.sleep(0.3)
             
             logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input}")
             return True
