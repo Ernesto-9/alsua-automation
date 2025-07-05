@@ -27,16 +27,41 @@ logger = logging.getLogger(__name__)
 
 class AlsuaMailAutomation:
     def __init__(self):
-        self.carpeta_descarga = "archivos_descargados"
+        # Usar ruta absoluta para evitar problemas de permisos
+        self.carpeta_descarga = os.path.abspath("archivos_descargados")
         self.correos_procesados = set()  # Para evitar reprocesar
         self.driver = None
         self._crear_carpeta_descarga()
         
     def _crear_carpeta_descarga(self):
         """Crear carpeta de descarga si no existe"""
-        if not os.path.exists(self.carpeta_descarga):
-            os.makedirs(self.carpeta_descarga)
-            logger.info(f"📁 Carpeta creada: {self.carpeta_descarga}")
+        try:
+            if not os.path.exists(self.carpeta_descarga):
+                os.makedirs(self.carpeta_descarga)
+                logger.info(f"📁 Carpeta creada: {self.carpeta_descarga}")
+            else:
+                logger.info(f"📁 Carpeta existe: {self.carpeta_descarga}")
+                
+            # Verificar permisos de escritura
+            test_file = os.path.join(self.carpeta_descarga, "test_permisos.tmp")
+            try:
+                with open(test_file, 'w') as f:
+                    f.write("test")
+                os.remove(test_file)
+                logger.info("✅ Permisos de escritura verificados")
+            except Exception as e:
+                logger.error(f"❌ Error de permisos en carpeta: {e}")
+                # Usar carpeta alternativa
+                self.carpeta_descarga = os.path.join(os.path.expanduser("~"), "Downloads", "alsua_archivos")
+                os.makedirs(self.carpeta_descarga, exist_ok=True)
+                logger.info(f"📁 Usando carpeta alternativa: {self.carpeta_descarga}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error al crear carpeta: {e}")
+            # Fallback a carpeta del usuario
+            self.carpeta_descarga = os.path.join(os.path.expanduser("~"), "Downloads", "alsua_archivos")
+            os.makedirs(self.carpeta_descarga, exist_ok=True)
+            logger.info(f"📁 Carpeta fallback: {self.carpeta_descarga}")
     
     def extraer_prefactura_del_asunto(self, asunto):
         """Extrae el número de prefactura del asunto del correo"""
@@ -143,9 +168,21 @@ class AlsuaMailAutomation:
                 nombre_unico = f"{timestamp}_{nombre}"
                 ruta_local = os.path.join(self.carpeta_descarga, nombre_unico)
                 
-                # Descargar archivo
-                archivo.SaveAsFile(ruta_local)
-                logger.info(f"📥 Archivo descargado: {ruta_local}")
+                # Descargar archivo con manejo robusto de errores
+                try:
+                    archivo.SaveAsFile(ruta_local)
+                    logger.info(f"📥 Archivo descargado: {ruta_local}")
+                except Exception as e:
+                    logger.error(f"❌ Error al descargar archivo {nombre}: {e}")
+                    # Intentar con carpeta alternativa
+                    try:
+                        ruta_alternativa = os.path.join(os.path.expanduser("~"), "Downloads", nombre_unico)
+                        archivo.SaveAsFile(ruta_alternativa)
+                        ruta_local = ruta_alternativa
+                        logger.info(f"📥 Archivo descargado en ruta alternativa: {ruta_local}")
+                    except Exception as e2:
+                        logger.error(f"❌ Error también en ruta alternativa: {e2}")
+                        continue  # Saltar este archivo y continuar con el siguiente
                 
                 # Parsear archivo
                 resultado = parse_xls(ruta_local, determinante_from_asunto=clave_determinante)
