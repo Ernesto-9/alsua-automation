@@ -117,53 +117,39 @@ class GMTransportAutomation:
         return None, None
     
     def llenar_fecha(self, id_input, fecha_valor):
-        """Llena un campo de fecha de forma robusta - solo cambia la fecha, preserva la hora"""
+        """Llena un campo de fecha de forma robusta"""
         try:
             campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
-            
-            # Hacer scroll al elemento para asegurar visibilidad
-            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", campo)
+            campo.click()
             time.sleep(0.3)
+            campo.click()
+            time.sleep(0.2)
             
-            # Obtener valor actual para preservar la hora
+            # Limpiar campo
+            campo.send_keys(Keys.HOME)
+            for _ in range(10):
+                campo.send_keys(Keys.DELETE)
+                
+            # Obtener hora actual si existe
             valor_actual = campo.get_attribute("value")
-            valor_a_insertar = fecha_valor  # Solo fecha por defecto
-            
             if valor_actual and " " in valor_actual:
-                # Si hay hora, preservarla
-                partes = valor_actual.split(" ")
-                if len(partes) >= 2:
-                    hora_existente = partes[1]
-                    valor_a_insertar = f"{fecha_valor} {hora_existente}"
-                    logger.info(f"🕒 Preservando hora existente: {hora_existente} en {id_input}")
+                hora = valor_actual.split(" ")[1]
             else:
-                logger.info(f"📅 Campo {id_input} sin hora, insertando solo fecha")
-            
-            # Usar JavaScript directo para evitar activar calendarios
-            self.driver.execute_script("""
-                var campo = arguments[0];
-                var valor = arguments[1];
+                hora = "14:00"
                 
-                // Establecer el valor directamente
-                campo.value = valor;
-                
-                // Disparar eventos necesarios para que GM Transport detecte el cambio
-                var eventos = ['input', 'change', 'blur'];
-                eventos.forEach(function(tipo) {
-                    var evento = new Event(tipo, { bubbles: true });
-                    campo.dispatchEvent(evento);
-                });
-            """, campo, valor_a_insertar)
+            # Insertar nueva fecha
+            nuevo_valor = f"{fecha_valor} {hora}"
+            campo.send_keys(nuevo_valor)
+            time.sleep(0.2)
+            campo.send_keys(Keys.ENTER)
+            time.sleep(0.2)
             
-            time.sleep(0.3)
-            
-            logger.info(f"✅ Fecha actualizada a '{valor_a_insertar}' en {id_input}")
+            logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input}")
             return True
             
         except Exception as e:
             logger.error(f"❌ Error al llenar fecha en {id_input}: {e}")
-            logger.warning(f"⚠️ Continuando sin llenar {id_input}")
-            return True
+            return False
     
     def llenar_campo_texto(self, id_input, valor, descripcion=""):
         """Llena un campo de texto de forma robusta"""
