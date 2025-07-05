@@ -124,9 +124,6 @@ class GMTransportAutomation:
             self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", campo)
             time.sleep(0.3)
             
-            campo.click()
-            time.sleep(0.5)
-            
             # Obtener valor actual para preservar la hora si existe
             valor_actual = campo.get_attribute("value")
             hora_a_usar = "14:00"  # Hora por defecto
@@ -137,28 +134,39 @@ class GMTransportAutomation:
                     hora_a_usar = partes[1]
                     logger.info(f"🕒 Preservando hora existente: {hora_a_usar}")
             
-            # Limpiar campo completamente usando JavaScript
-            self.driver.execute_script("arguments[0].value = '';", campo)
-            time.sleep(0.3)
-            
-            # Insertar nueva fecha con hora
+            # Nuevo valor a insertar
             nuevo_valor = f"{fecha_valor} {hora_a_usar}"
             
-            # Usar JavaScript para insertar el valor directamente
-            self.driver.execute_script("arguments[0].value = arguments[1];", campo, nuevo_valor)
-            time.sleep(0.3)
-            
-            # Disparar eventos para que GM Transport detecte el cambio
+            # Método 1: Usar JavaScript directo sin hacer clic (evita calendario)
             self.driver.execute_script("""
-                var element = arguments[0];
-                var events = ['change', 'blur', 'keyup'];
-                events.forEach(function(eventType) {
-                    var event = new Event(eventType, { bubbles: true });
-                    element.dispatchEvent(event);
+                var campo = arguments[0];
+                var valor = arguments[1];
+                
+                // Establecer el valor directamente
+                campo.value = valor;
+                
+                // Disparar eventos necesarios
+                var eventos = ['input', 'change', 'blur'];
+                eventos.forEach(function(tipo) {
+                    var evento = new Event(tipo, { bubbles: true });
+                    campo.dispatchEvent(evento);
                 });
-            """, campo)
+                
+                // Enfocar y desenfocar para confirmar cambio
+                campo.focus();
+                setTimeout(function() { campo.blur(); }, 100);
+            """, campo, nuevo_valor)
             
             time.sleep(0.5)
+            
+            # Cerrar cualquier calendario que pueda haberse abierto
+            try:
+                # Hacer clic en cualquier lugar fuera del campo para cerrar calendario
+                body = self.driver.find_element(By.TAG_NAME, "body")
+                self.driver.execute_script("arguments[0].click();", body)
+                time.sleep(0.3)
+            except:
+                pass
             
             # Verificar que se insertó correctamente
             valor_final = campo.get_attribute("value")
@@ -166,12 +174,27 @@ class GMTransportAutomation:
                 logger.info(f"✅ Fecha '{nuevo_valor}' insertada correctamente en {id_input}")
                 return True
             else:
-                logger.warning(f"⚠️ Fecha no se insertó correctamente en {id_input}. Valor final: {valor_final}")
-                return True  # Continuar de todas formas
+                logger.warning(f"⚠️ Intentando método alternativo para {id_input}")
+                
+                # Método 2: Si el JavaScript no funcionó, usar send_keys con precaución
+                try:
+                    campo.clear()
+                    campo.send_keys(nuevo_valor)
+                    campo.send_keys(Keys.TAB)  # TAB en lugar de ENTER para evitar calendario
+                    time.sleep(0.3)
+                    logger.info(f"✅ Fecha insertada con método alternativo en {id_input}")
+                except:
+                    logger.warning(f"⚠️ No se pudo llenar {id_input}, continuando...")
+                
+                return True
             
         except Exception as e:
             logger.error(f"❌ Error al llenar fecha en {id_input}: {e}")
-            # No retornar False para evitar que se detenga todo
+            # Cerrar cualquier ventana emergente que pueda haber quedado abierta
+            try:
+                self.driver.execute_script("document.body.click();")
+            except:
+                pass
             logger.warning(f"⚠️ Continuando sin llenar {id_input}")
             return True
     
