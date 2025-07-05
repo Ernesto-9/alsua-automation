@@ -97,19 +97,32 @@ class GMTransportAutomation:
             'tipo_error': tipo_error,
             'detalle': detalle
         }
+    
+    def obtener_ruta_y_base(self, determinante):
         """Obtiene la ruta GM y base origen desde el CSV"""
         csv_path = 'modules/clave_ruta_base.csv'
+        
+        logger.info(f"🔍 Buscando ruta para determinante: {determinante}")
+        logger.info(f"📁 Archivo CSV: {csv_path}")
         
         try:
             if not os.path.exists(csv_path):
                 logger.error(f"❌ No existe el archivo: {csv_path}")
+                logger.error(f"📂 Directorio actual: {os.getcwd()}")
+                logger.error(f"📂 Archivos en modules/: {os.listdir('modules/') if os.path.exists('modules/') else 'modules/ no existe'}")
                 return None, None
                 
             with open(csv_path, newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
-                for row in reader:
-                    if row['determinante'] == determinante:
+                logger.info(f"📋 Columnas en CSV: {reader.fieldnames}")
+                
+                for i, row in enumerate(reader):
+                    logger.info(f"📄 Fila {i}: {row}")
+                    if row['determinante'] == str(determinante):
+                        logger.info(f"✅ ENCONTRADO: determinante {determinante} -> ruta {row['ruta_gm']}, base {row['base_origen']}")
                         return row['ruta_gm'], row['base_origen']
+                        
+                logger.warning(f"⚠️ No se encontró determinante {determinante} en el CSV")
                         
         except Exception as e:
             logger.error(f"❌ Error al leer CSV: {e}")
@@ -140,18 +153,7 @@ class GMTransportAutomation:
             # Insertar nueva fecha
             nuevo_valor = f"{fecha_valor} {hora}"
             campo.send_keys(nuevo_valor)
-            time.sleep(0.2)
-            
-            # NUEVO: Hacer clic fuera del campo para salir completamente
-            try:
-                # Hacer clic en una zona neutra (el label de "Ruta" por ejemplo)
-                zona_neutra = self.driver.find_element(By.XPATH, "//td[contains(text(), 'Ruta')]")
-                zona_neutra.click()
-                time.sleep(0.3)
-            except:
-                # Si no encuentra esa zona, hacer clic en el body
-                self.driver.execute_script("document.body.click();")
-                time.sleep(0.3)
+            time.sleep(0.3)
             
             logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input}")
             return True
@@ -311,7 +313,8 @@ class GMTransportAutomation:
             logger.info("✅ Modal de asignación operador/camión abierto")
             
             # Buscar y seleccionar tractor
-            if not self.buscar_y_seleccionar_placa('tractor', placa_tractor):
+            exito, error = self.buscar_y_seleccionar_placa('tractor', placa_tractor)
+            if not exito:
                 return False
             
             # Llenar fechas dentro del modal
@@ -341,7 +344,7 @@ class GMTransportAutomation:
             logger.info("🧭 Navegando al módulo de creación de viajes...")
             if not navigate_to_create_viaje(self.driver):
                 logger.error("❌ Error al navegar al módulo de viajes")
-                return False  
+                return False
             
             # Extraer datos
             fecha_valor = self.datos_viaje['fecha']
