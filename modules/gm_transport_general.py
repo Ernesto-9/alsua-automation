@@ -320,31 +320,49 @@ class GMTransportAutomation:
             # Seleccionar tractor y asignar operador automáticamente  
             logger.info("🚗 Seleccionando tractor y asignando operador...")
             if not self.seleccionar_tractor_y_operador():
-                logger.error("❌ Error al seleccionar tractor y operador")
-                return False
+                logger.warning("⚠️ No se pudo asignar operador automáticamente")
+                logger.info("📝 Continuando sin operador - se requerirá asignación manual")
+                # No retornar False, continuar con el proceso
             
             # **NUEVO FLUJO**: Usar gm_facturacion1 para la parte inicial
             logger.info("💰 Ejecutando facturación inicial...")
             try:
-                ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
-                logger.info("✅ Facturación inicial completada")
+                resultado_facturacion = ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
+                if resultado_facturacion:
+                    logger.info("✅ Facturación inicial completada")
+                else:
+                    logger.warning("⚠️ Problema en facturación inicial - continuando...")
             except Exception as e:
-                logger.error(f"❌ Error en facturación inicial: {e}")
-                return False
+                logger.warning(f"⚠️ Error en facturación inicial: {e} - continuando...")
             
             # **NUEVO FLUJO**: Procesar Salida
             logger.info("🚛 Ejecutando proceso de SALIDA...")
-            if not procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True):
-                logger.error("❌ Error en proceso de salida")
+            try:
+                resultado_salida = procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True)
+                if not resultado_salida:
+                    logger.error("❌ Error en proceso de salida - Este viaje necesita revisión manual")
+                    logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error en salida")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ Error crítico en salida: {e}")
+                logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error crítico en salida")
                 return False
             
             # **NUEVO FLUJO**: Procesar Llegada y Facturación Final
             logger.info("🛬 Ejecutando proceso de LLEGADA y FACTURACIÓN FINAL...")
-            if not procesar_llegada_factura(self.driver, self.datos_viaje):
-                logger.error("❌ Error en proceso de llegada y facturación")
+            try:
+                resultado_llegada = procesar_llegada_factura(self.driver, self.datos_viaje)
+                if not resultado_llegada:
+                    logger.error("❌ Error en proceso de llegada y facturación - Este viaje necesita revisión manual")
+                    logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error en llegada/facturación")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ Error crítico en llegada: {e}")
+                logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error crítico en llegada")
                 return False
             
             logger.info("🎉 Proceso completo de automatización GM Transport exitoso")
+            logger.info(f"✅ VIAJE COMPLETADO: Prefactura {prefactura_valor} - Placa Tractor: {self.datos_viaje.get('placa_tractor')} - Placa Remolque: {self.datos_viaje.get('placa_remolque')}")
             return True
             
         except Exception as e:

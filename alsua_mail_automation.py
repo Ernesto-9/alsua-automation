@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class AlsuaMailAutomation:
     def __init__(self):
-        self.carpeta_descarga = r"C:\Users\MONITOR3\Documents\ROBOTS\VACIO\alsua-automation\archivos_descargados"
+        self.carpeta_descarga = "archivos_descargados"
         self.correos_procesados = set()  # Para evitar reprocesar
         self.driver = None
         self._crear_carpeta_descarga()
@@ -169,7 +169,7 @@ class AlsuaMailAutomation:
                 
                 # Ejecutar automatización GM
                 if self.ejecutar_automatizacion_gm(resultado):
-                    # Marcar correo como procesado
+                    # Marcar correo como procesado solo si fue exitoso
                     self.correos_procesados.add(correo_id)
                     
                     # Marcar correo como leído para evitar reprocesamiento
@@ -181,7 +181,11 @@ class AlsuaMailAutomation:
                     
                     return True
                 else:
-                    logger.error("❌ Error en automatización GM")
+                    logger.warning("⚠️ Viaje falló - necesita revisión manual")
+                    logger.warning(f"📋 Archivo conservado para revisión: {ruta_local}")
+                    # NO eliminamos el archivo para que puedan revisarlo
+                    # NO marcamos el correo como procesado para evitar reprocesar
+                    # Pero SÍ continuamos con el siguiente correo
                     return False
                     
         except Exception as e:
