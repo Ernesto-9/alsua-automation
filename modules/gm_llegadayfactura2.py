@@ -60,7 +60,38 @@ class ProcesadorLlegadaFactura:
             logger.error(f"❌ Error al hacer clic en 'Llegada': {e}")
             return False
     
-    def _procesar_llegada(self):
+    def llenar_fecha_llegada(self, id_input, fecha_valor):
+        """Llena un campo de fecha de forma robusta (igual que en gm_transport_general)"""
+        try:
+            campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
+            campo.click()
+            time.sleep(0.3)
+            campo.click()
+            time.sleep(0.2)
+            
+            # Limpiar campo
+            campo.send_keys(Keys.HOME)
+            for _ in range(10):
+                campo.send_keys(Keys.DELETE)
+                
+            # Obtener hora actual si existe
+            valor_actual = campo.get_attribute("value")
+            if valor_actual and " " in valor_actual:
+                hora = valor_actual.split(" ")[1]
+            else:
+                hora = "14:00"
+                
+            # Insertar nueva fecha
+            nuevo_valor = f"{fecha_valor} {hora}"
+            campo.send_keys(nuevo_valor)
+            time.sleep(0.3)
+            
+            logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error al llenar fecha en {id_input}: {e}")
+            return False
         """Llenar fecha de llegada y seleccionar status TERMINADO"""
         try:
             logger.info("📅 Procesando datos de llegada...")
