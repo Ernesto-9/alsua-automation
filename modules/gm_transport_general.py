@@ -134,6 +134,17 @@ class GMTransportAutomation:
         try:
             logger.info(f"🎯 Intentando llenar {id_input} con fecha {fecha_valor}")
             
+            # NUEVO: Verificar si el elemento existe antes de intentar hacer clic
+            try:
+                elemento_existe = self.driver.find_element(By.ID, id_input)
+                logger.info(f"✅ Elemento {id_input} encontrado: {elemento_existe.tag_name}")
+                logger.info(f"📋 Visible: {elemento_existe.is_displayed()}")
+                logger.info(f"📋 Habilitado: {elemento_existe.is_enabled()}")
+                logger.info(f"📋 Clase: {elemento_existe.get_attribute('class')}")
+            except Exception as e:
+                logger.error(f"❌ Elemento {id_input} NO ENCONTRADO: {e}")
+                return False
+            
             campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
             
             # Verificar valor actual
@@ -141,12 +152,15 @@ class GMTransportAutomation:
             logger.info(f"📋 Valor actual en {id_input}: '{valor_actual}'")
             
             # SIEMPRE llenar, incluso si ya tiene la fecha correcta
+            logger.info(f"🖱️ Haciendo primer clic en {id_input}")
             campo.click()
             time.sleep(0.3)
+            logger.info(f"🖱️ Haciendo segundo clic en {id_input}")
             campo.click()
             time.sleep(0.2)
             
             # Limpiar campo
+            logger.info(f"🧹 Limpiando campo {id_input}")
             campo.send_keys(Keys.HOME)
             for _ in range(10):
                 campo.send_keys(Keys.DELETE)
@@ -159,6 +173,7 @@ class GMTransportAutomation:
                 
             # Insertar nueva fecha
             nuevo_valor = f"{fecha_valor} {hora}"
+            logger.info(f"⌨️ Escribiendo en {id_input}: '{nuevo_valor}'")
             campo.send_keys(nuevo_valor)
             time.sleep(0.3)
             
@@ -169,6 +184,7 @@ class GMTransportAutomation:
             
         except Exception as e:
             logger.error(f"❌ Error al llenar fecha en {id_input}: {e}")
+            logger.error(f"🔍 Detalles del error: {type(e).__name__}")
             return False
     
     def llenar_campo_texto(self, id_input, valor, descripcion=""):
