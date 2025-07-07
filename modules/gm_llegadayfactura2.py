@@ -71,9 +71,31 @@ class ProcesadorLlegadaFactura:
             # Llenar fecha de llegada
             try:
                 fecha_input = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_LLEGADA")))
-                fecha_input.clear()
-                fecha_input.send_keys(fecha_llegada)
-                logger.info(f"✅ Fecha de llegada '{fecha_llegada}' insertada")
+                
+                # Hacer doble clic como en la función que funciona
+                fecha_input.click()
+                time.sleep(0.3)
+                fecha_input.click()
+                time.sleep(0.2)
+                
+                # Limpiar campo
+                fecha_input.send_keys(Keys.HOME)
+                for _ in range(10):
+                    fecha_input.send_keys(Keys.DELETE)
+                
+                # Obtener hora actual si existe
+                valor_actual = fecha_input.get_attribute("value")
+                if valor_actual and " " in valor_actual:
+                    hora = valor_actual.split(" ")[1]
+                else:
+                    hora = "14:00"
+                
+                # Insertar nueva fecha con hora
+                nuevo_valor = f"{fecha_llegada} {hora}"
+                fecha_input.send_keys(nuevo_valor)
+                time.sleep(0.3)
+                
+                logger.info(f"✅ Fecha de llegada '{nuevo_valor}' insertada")
             except Exception as e:
                 logger.error(f"❌ Error al insertar fecha de llegada: {e}")
                 return False
