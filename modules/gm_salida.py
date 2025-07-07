@@ -269,59 +269,45 @@ class GMSalidaAutomation:
     def seleccionar_viaje_de_tabla(self):
         """Selecciona el viaje de la tabla de resultados y espera la recarga"""
         try:
-            logger.info("🔍 Buscando viaje en la tabla...")
+            logger.info("🔍 Buscando viajes en la tabla...")
             
-            # Selectores específicos basados en el HTML real
-            viaje_selectors = [
-                "//td[contains(@onclick, 'OnSelectLigne')]",  # Cualquier celda con el onclick correcto
-                "//td[contains(@onclick, 'TABLE_PROVIAJES')]",  # Celda específica de la tabla de viajes
-                "//div[starts-with(@id, 'TABLE_PROVIAJES_0_')]",  # Div interno de la celda
-                "//td[@class and contains(@onclick, 'OnSelectLigne')][1]",  # Primera celda clickeable
-                "//table//tr[position()>1]//td[contains(@onclick, 'OnSelectLigne')]",  # Celda en fila de datos
-            ]
+            # TODO: TEMPORAL PARA PRUEBAS - BORRAR DESPUÉS
+            logger.info("⏸️ MODO PRUEBAS: Selecciona manualmente el viaje que quieres procesar")
+            input("🟢 Presiona ENTER después de seleccionar el viaje que quieres...")
+            logger.info("✅ Continuando automatización...")
             
-            viaje_seleccionado = False
-            
-            for i, selector in enumerate(viaje_selectors):
+            # Verificar que hay un viaje seleccionado
+            try:
+                # Verificar si está disponible "Salida" o "Llegada"
+                salida_disponible = False
+                llegada_disponible = False
+                
                 try:
-                    logger.info(f"🎯 Intentando selector {i+1}: {selector}")
-                    viaje_elemento = self.wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
+                    salida_check = self.driver.find_element(By.LINK_TEXT, "Salida")
+                    if salida_check.is_displayed():
+                        salida_disponible = True
+                        logger.info("✅ Viaje seleccionado - Link 'Salida' disponible")
+                except:
+                    pass
+                
+                try:
+                    llegada_check = self.driver.find_element(By.LINK_TEXT, "Llegada")
+                    if llegada_check.is_displayed():
+                        llegada_disponible = True
+                        logger.info("✅ Viaje seleccionado - Link 'Llegada' disponible")
+                except:
+                    pass
+                
+                if salida_disponible or llegada_disponible:
+                    return True
+                else:
+                    logger.error("❌ No se detectaron links 'Salida' o 'Llegada' - ¿Seleccionaste un viaje?")
+                    return False
                     
-                    # Hacer scroll al elemento
-                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", viaje_elemento)
-                    time.sleep(0.5)
-                    
-                    # Hacer clic (usar JavaScript para mayor confiabilidad)
-                    self.driver.execute_script("arguments[0].click();", viaje_elemento)
-                    logger.info(f"✅ Clic realizado en viaje con selector {i+1}")
-                    
-                    # Esperar la recarga (2-3 segundos)
-                    time.sleep(3)
-                    
-                    # Verificar que aparecieron los links de Salida/Llegada
-                    try:
-                        salida_check = self.driver.find_element(By.LINK_TEXT, "Salida")
-                        if salida_check.is_displayed():
-                            logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
-                            viaje_seleccionado = True
-                            break
-                        else:
-                            logger.warning(f"⚠️ Selector {i+1}: Link 'Salida' no visible, probando siguiente...")
-                            continue
-                    except:
-                        logger.warning(f"⚠️ Selector {i+1}: No se encontró link 'Salida', probando siguiente...")
-                        continue
-                        
-                except Exception as e:
-                    logger.warning(f"⚠️ Selector {i+1} falló: {e}")
-                    continue
-            
-            if not viaje_seleccionado:
-                logger.error("❌ No se pudo seleccionar ningún viaje de la tabla")
+            except Exception as e:
+                logger.error(f"❌ Error al verificar viaje seleccionado: {e}")
                 return False
                 
-            return True
-            
         except Exception as e:
             logger.error(f"❌ Error al seleccionar viaje de tabla: {e}")
             return False
