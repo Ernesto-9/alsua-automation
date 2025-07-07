@@ -385,79 +385,69 @@ class GMTransportAutomation:
             self.llenar_campo_texto("EDT_NOVIAJECLIENTE", prefactura_valor, "Prefactura")
             self.llenar_campo_texto("EDT_NUMEROCLIENTE", cliente_codigo, "Cliente")
             
-            # Llenar fechas - tratar la última fecha de forma especial
-            fechas_ids = [
+            # Llenar fechas - método simplificado
+            fechas_con_hora = [
                 "EDT_FECHA",         # Fecha 1 - Embarque
                 "EDT_FECHAESTATUS",  # Fecha 2 - Estatus
                 "EDT_FECHACARGA",    # Fecha 3 - Carga
             ]
             
-            logger.info(f"📅 Llenando primeras 3 fechas con: {fecha_valor}")
+            # Llenar primeras 3 fechas que SÍ llevan hora
+            logger.info(f"📅 Llenando fechas 1-3 con hora...")
+            for i, fecha_id in enumerate(fechas_con_hora, 1):
+                logger.info(f"📅 Fecha {i}/3: {fecha_id}")
+                self.llenar_fecha(fecha_id, fecha_valor)
             
-            for i, fecha_id in enumerate(fechas_ids, 1):
-                logger.info(f"📅 Procesando fecha {i}/4: {fecha_id}")
-                try:
-                    if self.llenar_fecha(fecha_id, fecha_valor):
-                        logger.info(f"✅ Fecha {i}/4 completada: {fecha_id}")
-                    else:
-                        logger.warning(f"⚠️ Fecha {i}/4 falló: {fecha_id}")
-                except Exception as e:
-                    logger.error(f"❌ Error en fecha {i}/4 ({fecha_id}): {e}")
-            
-            # NUEVO: Llenar la cuarta fecha (EDT_FECHAENTREGA) con método especial
-            logger.info("📅 Procesando fecha 4/4: EDT_FECHAENTREGA (método especial)")
+            # Llenar cuarta fecha que NO lleva hora
+            logger.info("📅 Llenando fecha 4/4: EDT_FECHAENTREGA SIN hora")
             try:
-                campo_entrega = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FECHAENTREGA")))
-                logger.info("✅ Campo EDT_FECHAENTREGA encontrado")
-                
-                # Usar JavaScript directo para evitar problemas con hasDatepicker
-                nuevo_valor_entrega = f"{fecha_valor} 14:00"
                 self.driver.execute_script("""
                     var campo = document.getElementById('EDT_FECHAENTREGA');
-                    campo.value = arguments[0];
-                    
-                    // Disparar eventos para que GM Transport detecte el cambio
-                    var eventos = ['input', 'change', 'blur'];
-                    eventos.forEach(function(tipo) {
-                        var evento = new Event(tipo, { bubbles: true });
-                        campo.dispatchEvent(evento);
-                    });
-                """, nuevo_valor_entrega)
-                
-                time.sleep(0.5)
-                
-                # Verificar que se insertó
-                valor_final = campo_entrega.get_attribute("value")
-                logger.info(f"✅ Fecha 4/4 completada: EDT_FECHAENTREGA = '{valor_final}'")
-                
+                    if (campo) {
+                        campo.value = arguments[0];
+                        campo.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                """, fecha_valor)  # Solo fecha, sin hora
+                logger.info(f"✅ Fecha 4 completada: {fecha_valor} (sin hora)")
             except Exception as e:
-                logger.error(f"❌ Error en fecha 4/4 (EDT_FECHAENTREGA): {e}")
+                logger.error(f"❌ Error en fecha 4: {e}")
             
-            logger.info("📅 Proceso de llenado de fechas completado")
+            # Pausa antes de continuar
+            time.sleep(1)
             
             # NUEVO: Después de llenar fechas, hacer clic en el campo de ruta para continuar
+            logger.info("🎯 Moviendo foco al campo de ruta...")
             try:
                 campo_ruta = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FOLIORUTA")))
                 campo_ruta.click()
-                time.sleep(0.3)
+                time.sleep(0.5)
                 logger.info("✅ Enfoque movido al campo de ruta")
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo hacer clic en campo de ruta: {e}")
             
             # Obtener y configurar ruta GM
+            logger.info("🗺️ Obteniendo ruta GM...")
             ruta_gm, base_origen = self.obtener_ruta_y_base(clave_determinante)
             
             if ruta_gm:
+                logger.info(f"✅ Ruta encontrada: {ruta_gm}")
                 self.llenar_campo_texto("EDT_FOLIORUTA", ruta_gm, "Ruta GM")
-                # Disparar evento change
+                
+                # Disparar evento change con pausa
+                time.sleep(0.5)
                 script = """
                     var input = document.getElementById('EDT_FOLIORUTA');
-                    var event = new Event('change', { bubbles: true });
-                    input.dispatchEvent(event);
+                    if (input) {
+                        var event = new Event('change', { bubbles: true });
+                        input.dispatchEvent(event);
+                    }
                 """
                 self.driver.execute_script(script)
+                time.sleep(1)  # Pausa para que GM procese
+                logger.info("✅ Evento change disparado para ruta")
             else:
                 logger.error(f"❌ No se encontró ruta para determinante {clave_determinante}")
+                return False
             
             # Seleccionar base origen
             self.seleccionar_base_origen(base_origen)
