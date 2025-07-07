@@ -132,7 +132,15 @@ class GMTransportAutomation:
     def llenar_fecha(self, id_input, fecha_valor):
         """Llena un campo de fecha de forma robusta"""
         try:
+            logger.info(f"🎯 Intentando llenar {id_input} con fecha {fecha_valor}")
+            
             campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
+            
+            # Verificar valor actual
+            valor_actual = campo.get_attribute("value")
+            logger.info(f"📋 Valor actual en {id_input}: '{valor_actual}'")
+            
+            # SIEMPRE llenar, incluso si ya tiene la fecha correcta
             campo.click()
             time.sleep(0.3)
             campo.click()
@@ -144,7 +152,6 @@ class GMTransportAutomation:
                 campo.send_keys(Keys.DELETE)
                 
             # Obtener hora actual si existe
-            valor_actual = campo.get_attribute("value")
             if valor_actual and " " in valor_actual:
                 hora = valor_actual.split(" ")[1]
             else:
@@ -155,7 +162,9 @@ class GMTransportAutomation:
             campo.send_keys(nuevo_valor)
             time.sleep(0.3)
             
-            logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input}")
+            # Verificar que se insertó
+            valor_final = campo.get_attribute("value")
+            logger.info(f"✅ Fecha insertada en {id_input}: '{valor_final}'")
             return True
             
         except Exception as e:
