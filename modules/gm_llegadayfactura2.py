@@ -1,5 +1,6 @@
 import logging
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
@@ -14,7 +15,7 @@ class ProcesadorLlegadaFactura:
     def __init__(self, driver, datos_viaje):
         self.driver = driver
         self.datos_viaje = datos_viaje
-        self.wait = WebDriverWait(driver, 20)  # Aumenté timeout para mayor estabilidad
+        self.wait = WebDriverWait(driver, 20)
         
     def procesar_llegada_y_factura(self):
         """Proceso principal de llegada y facturación"""
@@ -60,106 +61,110 @@ class ProcesadorLlegadaFactura:
             logger.error(f"❌ Error al hacer clic en 'Llegada': {e}")
             return False
     
-    def llenar_fecha_llegada(self, id_input, fecha_valor):
-        """Llena un campo de fecha de forma robusta sin activar calendarios"""
+    def _llenar_fecha_llegada_robusto(self, id_input, fecha_valor):
+        """Método ROBUSTO para llenar fecha de llegada - usa el método que SÍ funciona"""
         try:
+            logger.info(f"🎯 Llenando fecha en {id_input} con valor: {fecha_valor}")
+            
+            # Método que funciona en gm_transport_general.py
             campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
             
-            # Método directo con JavaScript para evitar eventos onfocus/onblur
-            logger.info(f"🕒 Llenando fecha {fecha_valor} en {id_input} usando JavaScript")
-            
-            # Obtener valor actual para preservar hora si existe
+            # Verificar valor actual
             valor_actual = campo.get_attribute("value")
+            logger.info(f"📋 Valor actual en {id_input}: '{valor_actual}'")
+            
+            # DOBLE CLIC como en el método que funciona
+            logger.info(f"🖱️ Haciendo primer clic en {id_input}")
+            campo.click()
+            time.sleep(0.3)
+            logger.info(f"🖱️ Haciendo segundo clic en {id_input}")
+            campo.click()
+            time.sleep(0.2)
+            
+            # Limpiar campo completamente
+            logger.info(f"🧹 Limpiando campo {id_input}")
+            campo.send_keys(Keys.HOME)
+            for _ in range(15):  # Más borrado para asegurar limpieza
+                campo.send_keys(Keys.DELETE)
+                
+            # Obtener hora actual si existe, sino usar hora por defecto
             if valor_actual and " " in valor_actual:
                 hora = valor_actual.split(" ")[1]
-                nuevo_valor = f"{fecha_valor} {hora}"
+                logger.info(f"🕒 Hora encontrada: {hora}")
             else:
-                nuevo_valor = fecha_valor  # Solo fecha si no hay hora
-            
-            # Usar JavaScript directo para evitar activar el datepicker
-            self.driver.execute_script("""
-                var campo = document.getElementById(arguments[1]);
-                campo.value = arguments[0];
+                hora = "14:00"
+                logger.info(f"🕒 Usando hora por defecto: {hora}")
                 
-                // Disparar eventos manuales para que GM Transport detecte el cambio
-                var eventos = ['input', 'change'];
-                eventos.forEach(function(tipo) {
-                    var evento = new Event(tipo, { bubbles: true });
-                    campo.dispatchEvent(evento);
-                });
-            """, nuevo_valor, id_input)
-            
+            # Insertar nueva fecha con hora
+            nuevo_valor = f"{fecha_valor} {hora}"
+            logger.info(f"⌨️ Escribiendo en {id_input}: '{nuevo_valor}'")
+            campo.send_keys(nuevo_valor)
             time.sleep(0.5)
             
-            # Hacer clic fuera para desenfocar el campo
-            try:
-                # Hacer clic en el label de status o cualquier elemento cercano
-                status_label = self.driver.find_element(By.XPATH, "//select[@id='COMBO_CATESTATUSVIAJE']")
-                status_label.click()
-                time.sleep(0.3)
-            except:
-                # Fallback: clic en body
-                self.driver.execute_script("document.body.click();")
-                time.sleep(0.3)
+            # Verificar que se insertó correctamente
+            valor_final = campo.get_attribute("value")
+            logger.info(f"✅ Fecha final en {id_input}: '{valor_final}'")
             
-            logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input} usando JavaScript")
+            # Hacer ENTER para confirmar
+            campo.send_keys(Keys.ENTER)
+            time.sleep(0.3)
+            
             return True
             
         except Exception as e:
             logger.error(f"❌ Error al llenar fecha en {id_input}: {e}")
             return False
+    
+    def _procesar_llegada(self):
         """Llenar fecha de llegada y seleccionar status TERMINADO"""
         try:
             logger.info("📅 Procesando datos de llegada...")
             
             # Obtener fecha actual para la llegada (siempre fecha actual según descripción)
             fecha_llegada = datetime.now().strftime("%d/%m/%Y")
+            logger.info(f"📅 Fecha de llegada a usar: {fecha_llegada}")
             
-            # Llenar fecha de llegada
-            try:
-                fecha_input = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_LLEGADA")))
-                
-                # Hacer doble clic como en la función que funciona
-                fecha_input.click()
-                time.sleep(0.3)
-                fecha_input.click()
-                time.sleep(0.2)
-                
-                # Limpiar campo
-                fecha_input.send_keys(Keys.HOME)
-                for _ in range(10):
-                    fecha_input.send_keys(Keys.DELETE)
-                
-                # Obtener hora actual si existe
-                valor_actual = fecha_input.get_attribute("value")
-                if valor_actual and " " in valor_actual:
-                    hora = valor_actual.split(" ")[1]
-                else:
-                    hora = "14:00"
-                
-                # Insertar nueva fecha con hora
-                nuevo_valor = f"{fecha_llegada} {hora}"
-                fecha_input.send_keys(nuevo_valor)
-                time.sleep(0.3)
-                
-                logger.info(f"✅ Fecha de llegada '{nuevo_valor}' insertada")
-            except Exception as e:
-                logger.error(f"❌ Error al insertar fecha de llegada: {e}")
+            # Llenar fecha de llegada usando método robusto
+            if not self._llenar_fecha_llegada_robusto("EDT_LLEGADA", fecha_llegada):
+                logger.error("❌ Error al insertar fecha de llegada")
                 return False
+            
+            # Esperar un momento para que GM procese la fecha
+            time.sleep(1)
             
             # Seleccionar status "TERMINADO" (valor 3)
             try:
+                logger.info("🎯 Seleccionando status TERMINADO...")
                 status_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATESTATUSVIAJE"))))
+                
+                # Verificar opciones disponibles
+                opciones = status_select.options
+                logger.info(f"📋 Opciones de status disponibles:")
+                for opcion in opciones:
+                    logger.info(f"   - Valor: {opcion.get_attribute('value')}, Texto: {opcion.text}")
+                
+                # Seleccionar TERMINADO
                 status_select.select_by_value("3")  # TERMINADO
                 time.sleep(0.5)
-                logger.info("✅ Status 'TERMINADO' seleccionado")
+                
+                # Verificar selección
+                seleccionado = status_select.first_selected_option
+                logger.info(f"✅ Status seleccionado: {seleccionado.text} (valor: {seleccionado.get_attribute('value')})")
+                
             except Exception as e:
                 logger.error(f"❌ Error al seleccionar status TERMINADO: {e}")
                 return False
             
             # Hacer clic en "Aceptar"
             try:
+                logger.info("✅ Haciendo clic en Aceptar...")
                 aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTAR")))
+                
+                # Hacer scroll para asegurar visibilidad
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", aceptar_btn)
+                time.sleep(0.5)
+                
+                # Usar JavaScript click para mayor confiabilidad
                 self.driver.execute_script("arguments[0].click();", aceptar_btn)
                 time.sleep(1)
                 logger.info("✅ Botón 'Aceptar' clickeado")
@@ -169,6 +174,7 @@ class ProcesadorLlegadaFactura:
             
             # Hacer clic en "No" para el envío de correo
             try:
+                logger.info("📧 Respondiendo No al envío de correo...")
                 no_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_NO")))
                 self.driver.execute_script("arguments[0].click();", no_btn)
                 time.sleep(2)  # Esperar a que se cierre la ventana y regrese a la lista
