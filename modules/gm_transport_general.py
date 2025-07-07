@@ -384,15 +384,14 @@ class GMTransportAutomation:
             self.llenar_campo_texto("EDT_NOVIAJECLIENTE", prefactura_valor, "Prefactura")
             self.llenar_campo_texto("EDT_NUMEROCLIENTE", cliente_codigo, "Cliente")
             
-            # Llenar fechas
+            # Llenar fechas - tratar la última fecha de forma especial
             fechas_ids = [
                 "EDT_FECHA",         # Fecha 1 - Embarque
                 "EDT_FECHAESTATUS",  # Fecha 2 - Estatus
                 "EDT_FECHACARGA",    # Fecha 3 - Carga
-                "EDT_FECHAENTREGA"   # Fecha 4 - Entrega
             ]
             
-            logger.info(f"📅 Llenando {len(fechas_ids)} campos de fecha con: {fecha_valor}")
+            logger.info(f"📅 Llenando primeras 3 fechas con: {fecha_valor}")
             
             for i, fecha_id in enumerate(fechas_ids, 1):
                 logger.info(f"📅 Procesando fecha {i}/4: {fecha_id}")
@@ -403,6 +402,35 @@ class GMTransportAutomation:
                         logger.warning(f"⚠️ Fecha {i}/4 falló: {fecha_id}")
                 except Exception as e:
                     logger.error(f"❌ Error en fecha {i}/4 ({fecha_id}): {e}")
+            
+            # NUEVO: Llenar la cuarta fecha (EDT_FECHAENTREGA) con método especial
+            logger.info("📅 Procesando fecha 4/4: EDT_FECHAENTREGA (método especial)")
+            try:
+                campo_entrega = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FECHAENTREGA")))
+                logger.info("✅ Campo EDT_FECHAENTREGA encontrado")
+                
+                # Usar JavaScript directo para evitar problemas con hasDatepicker
+                nuevo_valor_entrega = f"{fecha_valor} 14:00"
+                self.driver.execute_script("""
+                    var campo = document.getElementById('EDT_FECHAENTREGA');
+                    campo.value = arguments[0];
+                    
+                    // Disparar eventos para que GM Transport detecte el cambio
+                    var eventos = ['input', 'change', 'blur'];
+                    eventos.forEach(function(tipo) {
+                        var evento = new Event(tipo, { bubbles: true });
+                        campo.dispatchEvent(evento);
+                    });
+                """, nuevo_valor_entrega)
+                
+                time.sleep(0.5)
+                
+                # Verificar que se insertó
+                valor_final = campo_entrega.get_attribute("value")
+                logger.info(f"✅ Fecha 4/4 completada: EDT_FECHAENTREGA = '{valor_final}'")
+                
+            except Exception as e:
+                logger.error(f"❌ Error en fecha 4/4 (EDT_FECHAENTREGA): {e}")
             
             logger.info("📅 Proceso de llenado de fechas completado")
             
