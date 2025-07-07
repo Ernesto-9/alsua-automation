@@ -368,8 +368,19 @@ class GMTransportAutomation:
                 "EDT_FECHAENTREGA"   # Fecha 4 - Entrega
             ]
             
-            for fecha_id in fechas_ids:
-                self.llenar_fecha(fecha_id, fecha_valor)
+            logger.info(f"📅 Llenando {len(fechas_ids)} campos de fecha con: {fecha_valor}")
+            
+            for i, fecha_id in enumerate(fechas_ids, 1):
+                logger.info(f"📅 Procesando fecha {i}/4: {fecha_id}")
+                try:
+                    if self.llenar_fecha(fecha_id, fecha_valor):
+                        logger.info(f"✅ Fecha {i}/4 completada: {fecha_id}")
+                    else:
+                        logger.warning(f"⚠️ Fecha {i}/4 falló: {fecha_id}")
+                except Exception as e:
+                    logger.error(f"❌ Error en fecha {i}/4 ({fecha_id}): {e}")
+            
+            logger.info("📅 Proceso de llenado de fechas completado")
             
             # NUEVO: Después de llenar fechas, hacer clic en el campo de ruta para continuar
             try:
