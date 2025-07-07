@@ -429,8 +429,8 @@ class GMTransportAutomation:
             logger.info("🗺️ Obteniendo ruta GM...")
             ruta_gm, base_origen = self.obtener_ruta_y_base(clave_determinante)
             
-            if ruta_gm:
-                logger.info(f"✅ Ruta encontrada: {ruta_gm}")
+            if ruta_gm and base_origen:
+                logger.info(f"✅ Ruta encontrada: {ruta_gm}, Base: {base_origen}")
                 self.llenar_campo_texto("EDT_FOLIORUTA", ruta_gm, "Ruta GM")
                 
                 # Disparar evento change con pausa
@@ -445,12 +445,19 @@ class GMTransportAutomation:
                 self.driver.execute_script(script)
                 time.sleep(1)  # Pausa para que GM procese
                 logger.info("✅ Evento change disparado para ruta")
+                
+                # Seleccionar base origen
+                self.seleccionar_base_origen(base_origen)
             else:
-                logger.error(f"❌ No se encontró ruta para determinante {clave_determinante}")
-                return False
-            
-            # Seleccionar base origen
-            self.seleccionar_base_origen(base_origen)
+                # NUEVO: Registrar error y continuar
+                error_msg = f"DETERMINANTE_NO_ENCONTRADO"
+                detalle = f"Determinante {clave_determinante} no existe en clave_ruta_base.csv"
+                self.registrar_error_viaje(error_msg, detalle)
+                
+                logger.warning("⚠️ Determinante no encontrado - continuando sin ruta y base")
+                logger.warning("📝 Se requerirá configuración manual de ruta y base en GM Transport")
+                
+                # Continuar sin poner ruta ni base - GM Transport lo requerirá manualmente
             
             # Seleccionar remolque con manejo de errores
             logger.info("🚛 Seleccionando remolque...")
