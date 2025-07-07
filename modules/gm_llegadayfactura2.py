@@ -61,32 +61,48 @@ class ProcesadorLlegadaFactura:
             return False
     
     def llenar_fecha_llegada(self, id_input, fecha_valor):
-        """Llena un campo de fecha de forma robusta (igual que en gm_transport_general)"""
+        """Llena un campo de fecha de forma robusta sin activar calendarios"""
         try:
             campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
-            campo.click()
-            time.sleep(0.3)
-            campo.click()
-            time.sleep(0.2)
             
-            # Limpiar campo
-            campo.send_keys(Keys.HOME)
-            for _ in range(10):
-                campo.send_keys(Keys.DELETE)
-                
-            # Obtener hora actual si existe
+            # Método directo con JavaScript para evitar eventos onfocus/onblur
+            logger.info(f"🕒 Llenando fecha {fecha_valor} en {id_input} usando JavaScript")
+            
+            # Obtener valor actual para preservar hora si existe
             valor_actual = campo.get_attribute("value")
             if valor_actual and " " in valor_actual:
                 hora = valor_actual.split(" ")[1]
+                nuevo_valor = f"{fecha_valor} {hora}"
             else:
-                hora = "14:00"
-                
-            # Insertar nueva fecha
-            nuevo_valor = f"{fecha_valor} {hora}"
-            campo.send_keys(nuevo_valor)
-            time.sleep(0.3)
+                nuevo_valor = fecha_valor  # Solo fecha si no hay hora
             
-            logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input}")
+            # Usar JavaScript directo para evitar activar el datepicker
+            self.driver.execute_script("""
+                var campo = document.getElementById(arguments[1]);
+                campo.value = arguments[0];
+                
+                // Disparar eventos manuales para que GM Transport detecte el cambio
+                var eventos = ['input', 'change'];
+                eventos.forEach(function(tipo) {
+                    var evento = new Event(tipo, { bubbles: true });
+                    campo.dispatchEvent(evento);
+                });
+            """, nuevo_valor, id_input)
+            
+            time.sleep(0.5)
+            
+            # Hacer clic fuera para desenfocar el campo
+            try:
+                # Hacer clic en el label de status o cualquier elemento cercano
+                status_label = self.driver.find_element(By.XPATH, "//select[@id='COMBO_CATESTATUSVIAJE']")
+                status_label.click()
+                time.sleep(0.3)
+            except:
+                # Fallback: clic en body
+                self.driver.execute_script("document.body.click();")
+                time.sleep(0.3)
+            
+            logger.info(f"✅ Fecha '{nuevo_valor}' insertada en {id_input} usando JavaScript")
             return True
             
         except Exception as e:
