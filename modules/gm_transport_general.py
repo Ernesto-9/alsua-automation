@@ -78,8 +78,7 @@ class GMTransportAutomation:
         logger.error("🔧 ACCIÓN REQUERIDA: Revisar y completar manualmente en GM Transport")
         logger.error("=" * 80)
         
-        # TODO: Aquí se integrará MySQL y notificaciones web
-        # Por ahora, guardar en archivo temporal
+        # Guardar en archivo temporal
         try:
             error_file = "errores_viajes.log"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -134,7 +133,7 @@ class GMTransportAutomation:
         try:
             logger.info(f"🎯 Intentando llenar {id_input} con fecha {fecha_valor}")
             
-            # NUEVO: Verificar si el elemento existe antes de intentar hacer clic
+            # Verificar si el elemento existe antes de intentar hacer clic
             try:
                 elemento_existe = self.driver.find_element(By.ID, id_input)
                 logger.info(f"✅ Elemento {id_input} encontrado: {elemento_existe.tag_name}")
@@ -247,7 +246,6 @@ class GMTransportAutomation:
             if tipo_placa == 'remolque':
                 btn_buscar = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_BUSCARCODIGOUNIDADCARGA1")))
             else:  # tractor
-                # Para tractor, usar el ID específico del botón
                 btn_buscar = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_BUSCARCODIGOUNIDADCAMION")))
             
             btn_buscar.click()
@@ -324,11 +322,11 @@ class GMTransportAutomation:
         return exito, error
     
     def seleccionar_tractor_y_operador(self):
-        """Selecciona el tractor, lo que automáticamente asigna el operador"""
+        """Selecciona el tractor y VERIFICA que tenga operador asignado"""
         placa_tractor = self.datos_viaje.get('placa_tractor')
         if not placa_tractor:
             logger.error("❌ No se encontró placa_tractor en los datos")
-            return False
+            return False, "DATOS_INCOMPLETOS_PLACA_TRACTOR"
             
         try:
             # Abrir modal de asignación de operador/camión
@@ -340,24 +338,140 @@ class GMTransportAutomation:
             # Buscar y seleccionar tractor
             exito, error = self.buscar_y_seleccionar_placa('tractor', placa_tractor)
             if not exito:
-                return False
+                return False, error
             
             # Llenar fechas dentro del modal
             fecha_valor = self.datos_viaje['fecha']
             self.llenar_fecha("EDT_FECHACARGATRAYECTO", fecha_valor)
             self.llenar_fecha("EDT_FECHAESTIMADACARGA", fecha_valor)
             
-            # Aceptar para cerrar modal
-            aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTARTRAYECTO")))
-            self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", aceptar_btn)
-            time.sleep(0.3)
-            self.driver.execute_script("arguments[0].click();", aceptar_btn)
-            logger.info("✅ Tractor seleccionado y operador asignado automáticamente")
-            return True
+            # CRÍTICO: Dar tiempo suficiente para que GM asigne operador automáticamente
+            logger.info("⏳ Esperando que GM asigne operador automáticamente...")
+            time.sleep(5)  # Tiempo generoso para que GM procese la asignación
             
+            # Verificar si se asignó operador automáticamente
+            operador_asignado = False
+            
+            try:
+                # Método 1: Buscar campo de operador por varios IDs posibles
+                posibles_ids_operador = [
+                    "EDT_OPERADOR", 
+                    "EDT_CHOFER", 
+                    "EDT_CONDUCTOR",
+                    "EDT_OPERADOR1",
+                    "COMBO_OPERADOR",
+                    "EDT_NOMBREOPERADOR",
+                    "EDT_CODIGOOPERADOR"
+                ]
+                
+                logger.info("🔍 Buscando campos de operador...")
+                for id_operador in posibles_ids_operador:
+                    try:
+                        operador_campo = self.driver.find_element(By.ID, id_operador)
+                        valor_operador = operador_campo.get_attribute("value")
+                        
+                        logger.info(f"📋 Campo {id_operador}: '{valor_operador}'")
+                        
+                        if valor_operador and valor_operador.strip() and valor_operador != "0" and len(valor_operador.strip()) > 2:
+                            logger.info(f"✅ Operador encontrado en {id_operador}: {valor_operador}")
+                            operador_asignado = True
+                            break
+                            
+                    except:
+                        continue
+                
+                # Método 2: Buscar por texto que indique operador asignado
+                if not operador_asignado:
+                    logger.info("🔍 Buscando operador por texto en la página...")
+                    try:
+                        elementos_operador = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Operador') or contains(text(), 'OPERADOR') or contains(text(), 'Chofer') or contains(text(), 'CHOFER')]")
+                        for elem in elementos_operador:
+                            try:
+                                texto_parent = elem.find_element(By.XPATH, "..").text
+                                logger.info(f"📋 Texto operador encontrado: {texto_parent}")
+                                
+                                # Buscar si hay un nombre después de "Operador:" o similar
+                                if ":" in texto_parent:
+                                    nombre_operador = texto_parent.split(":")[-1].strip()
+                                    if len(nombre_operador) > 3 and not nombre_operador.isdigit():
+                                        logger.info(f"✅ Operador detectado por texto: {nombre_operador}")
+                                        operador_asignado = True
+                                        break
+                            except:
+                                continue
+                    except:
+                        pass
+                
+                # Método 3: Verificar elementos visibles con nombres
+                if not operador_asignado:
+                    logger.info("🔍 Buscando nombres de operador visibles...")
+                    try:
+                        # Buscar todos los inputs con valores que podrían ser nombres
+                        todos_inputs = self.driver.find_elements(By.XPATH, "//input[@type='text']")
+                        for input_elem in todos_inputs:
+                            try:
+                                valor = input_elem.get_attribute("value")
+                                if valor and len(valor) > 5 and " " in valor and not valor.isdigit():
+                                    # Puede ser un nombre (tiene espacios, más de 5 chars, no es número)
+                                    logger.info(f"✅ Posible operador encontrado: {valor}")
+                                    operador_asignado = True
+                                    break
+                            except:
+                                continue
+                    except:
+                        pass
+                        
+            except Exception as e:
+                logger.warning(f"⚠️ Error verificando operador: {e}")
+                
+            # DECISIÓN CRÍTICA basada en si tiene operador
+            if not operador_asignado:
+                logger.error("❌ PLACA SIN OPERADOR ASIGNADO")
+                logger.error(f"🚛 Placa: {placa_tractor} no tiene operador disponible")
+                logger.error("🚨 Cerrando modal y registrando error")
+                
+                # Cerrar el modal sin aceptar
+                try:
+                    # Buscar botón Cancelar/Cerrar
+                    posibles_botones_cerrar = ["BTN_CANCELAR", "BTN_CERRAR", "BTN_CANCELARTRAYECTO"]
+                    for btn_id in posibles_botones_cerrar:
+                        try:
+                            cancelar_btn = self.driver.find_element(By.ID, btn_id)
+                            self.driver.execute_script("arguments[0].click();", cancelar_btn)
+                            time.sleep(1)
+                            logger.info(f"✅ Modal cerrado con {btn_id}")
+                            break
+                        except:
+                            continue
+                    else:
+                        # Si no hay botón cancelar, intentar Escape
+                        self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                        time.sleep(1)
+                        logger.info("✅ Modal cerrado con Escape")
+                except Exception as e:
+                    logger.warning(f"⚠️ Error cerrando modal: {e}")
+                
+                return False, "PLACA_SIN_OPERADOR_ASIGNADO"
+            
+            # Si llegamos aquí, SÍ tiene operador asignado
+            logger.info("✅ Operador asignado correctamente")
+            
+            # Aceptar para cerrar modal
+            try:
+                aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTARTRAYECTO")))
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", aceptar_btn)
+                time.sleep(0.3)
+                self.driver.execute_script("arguments[0].click();", aceptar_btn)
+                logger.info("✅ Tractor y operador asignados exitosamente")
+                return True, ""
+                
+            except Exception as e:
+                logger.error(f"❌ Error al aceptar modal: {e}")
+                return False, "ERROR_ACEPTAR_MODAL"
+                
         except Exception as e:
-            logger.error(f"❌ Error al seleccionar tractor y operador: {e}")
-            return False
+            logger.error(f"❌ Error al seleccionar tractor: {e}")
+            return False, "ERROR_SELECCION_TRACTOR"
     
     def fill_viaje_form(self):
         """Función principal para llenar el formulario de viaje"""
@@ -414,7 +528,7 @@ class GMTransportAutomation:
             # Pausa antes de continuar
             time.sleep(1)
             
-            # NUEVO: Después de llenar fechas, hacer clic en el campo de ruta para continuar
+            # Hacer clic en el campo de ruta para continuar
             logger.info("🎯 Moviendo foco al campo de ruta...")
             try:
                 campo_ruta = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FOLIORUTA")))
@@ -448,15 +562,12 @@ class GMTransportAutomation:
                 # Seleccionar base origen
                 self.seleccionar_base_origen(base_origen)
             else:
-                # NUEVO: Registrar error y continuar
                 error_msg = f"DETERMINANTE_NO_ENCONTRADO"
                 detalle = f"Determinante {clave_determinante} no existe en clave_ruta_base.csv"
                 self.registrar_error_viaje(error_msg, detalle)
                 
                 logger.warning("⚠️ Determinante no encontrado - continuando sin ruta y base")
                 logger.warning("📝 Se requerirá configuración manual de ruta y base en GM Transport")
-                
-                # Continuar sin poner ruta ni base - GM Transport lo requerirá manualmente
             
             # Seleccionar remolque con manejo de errores
             logger.info("🚛 Seleccionando remolque...")
@@ -466,15 +577,23 @@ class GMTransportAutomation:
                 logger.error("❌ Error al seleccionar remolque - Viaje marcado para revisión manual")
                 return False
             
-            # Seleccionar tractor y asignar operador automáticamente  
-            logger.info("🚗 Seleccionando tractor y asignando operador...")
-            if not self.seleccionar_tractor_y_operador():
-                self.registrar_error_viaje("OPERADOR_NO_ASIGNADO", f"Tractor {self.datos_viaje.get('placa_tractor')} sin operador automático")
-                logger.warning("⚠️ No se pudo asignar operador automáticamente")
-                logger.info("📝 Continuando sin operador - se requerirá asignación manual")
-                # No retornar False, continuar con el proceso
+            # Seleccionar tractor y verificar operador automáticamente  
+            logger.info("🚗 Seleccionando tractor y verificando operador...")
+            exito_tractor, error_tractor = self.seleccionar_tractor_y_operador()
             
-            # **NUEVO FLUJO**: Usar gm_facturacion1 para la parte inicial
+            if not exito_tractor:
+                if error_tractor == "PLACA_SIN_OPERADOR_ASIGNADO":
+                    # Error específico: placa sin operador
+                    self.registrar_error_viaje("PLACA_SIN_OPERADOR", f"Tractor {self.datos_viaje.get('placa_tractor')} no tiene operador asignado")
+                    logger.error("❌ VIAJE CANCELADO: Placa sin operador - Requiere asignación manual")
+                    return False
+                else:
+                    # Otros errores de tractor
+                    self.registrar_error_viaje(error_tractor, f"Error con tractor {self.datos_viaje.get('placa_tractor')}")
+                    logger.error("❌ VIAJE CANCELADO: Error en selección de tractor")
+                    return False
+            
+            # **FLUJO**: Usar gm_facturacion1 para la parte inicial
             logger.info("💰 Ejecutando facturación inicial...")
             try:
                 resultado_facturacion = ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
@@ -485,7 +604,7 @@ class GMTransportAutomation:
             except Exception as e:
                 logger.warning(f"⚠️ Error en facturación inicial: {e} - continuando...")
             
-            # **NUEVO FLUJO**: Procesar Salida
+            # **FLUJO**: Procesar Salida
             logger.info("🚛 Ejecutando proceso de SALIDA...")
             try:
                 resultado_salida = procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True)
@@ -498,7 +617,7 @@ class GMTransportAutomation:
                 logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error crítico en salida")
                 return False
             
-            # **NUEVO FLUJO**: Procesar Llegada y Facturación Final
+            # **FLUJO**: Procesar Llegada y Facturación Final
             logger.info("🛬 Ejecutando proceso de LLEGADA y FACTURACIÓN FINAL...")
             try:
                 resultado_llegada = procesar_llegada_factura(self.driver, self.datos_viaje)
