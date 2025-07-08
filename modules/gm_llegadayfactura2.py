@@ -134,9 +134,11 @@ class ProcesadorLlegadaFactura:
             logger.info("⏳ Esperando que GM procese la fecha...")
             time.sleep(2)
             
-            # Seleccionar status "TERMINADO" (valor 3)
+            # Seleccionar status "TERMINADO" (valor 3) - CON PROTECCIÓN ANTI-STALE
             try:
                 logger.info("🎯 Seleccionando status TERMINADO...")
+                
+                # BUSCAR EL ELEMENTO DE NUEVO para evitar stale element
                 status_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATESTATUSVIAJE"))))
                 
                 # Verificar opciones disponibles
@@ -145,17 +147,43 @@ class ProcesadorLlegadaFactura:
                 for opcion in opciones:
                     logger.info(f"   - Valor: {opcion.get_attribute('value')}, Texto: {opcion.text}")
                 
+                # PROTECCIÓN ANTI-STALE: Volver a buscar el select después de leer opciones
+                logger.info("🔄 Reobteniendo elemento select para evitar stale element...")
+                status_select = Select(self.driver.find_element(By.ID, "COMBO_CATESTATUSVIAJE"))
+                
                 # Seleccionar TERMINADO
                 status_select.select_by_value("3")  # TERMINADO
                 time.sleep(1)
                 
-                # Verificar selección
-                seleccionado = status_select.first_selected_option
+                # VERIFICAR SELECCIÓN con elemento fresco
+                logger.info("✅ Verificando selección...")
+                status_select_verificacion = Select(self.driver.find_element(By.ID, "COMBO_CATESTATUSVIAJE"))
+                seleccionado = status_select_verificacion.first_selected_option
                 logger.info(f"✅ Status seleccionado: {seleccionado.text} (valor: {seleccionado.get_attribute('value')})")
                 
             except Exception as e:
                 logger.error(f"❌ Error al seleccionar status TERMINADO: {e}")
-                return False
+                
+                # RETRY: Intentar una vez más con elemento completamente fresco
+                try:
+                    logger.info("🔄 RETRY: Intentando seleccionar status TERMINADO de nuevo...")
+                    time.sleep(2)  # Esperar un poco más
+                    
+                    # Buscar elemento completamente fresco
+                    combo_element = self.driver.find_element(By.ID, "COMBO_CATESTATUSVIAJE")
+                    status_select_retry = Select(combo_element)
+                    
+                    # Seleccionar TERMINADO
+                    status_select_retry.select_by_value("3")
+                    time.sleep(1)
+                    
+                    # Verificar
+                    seleccionado_retry = status_select_retry.first_selected_option
+                    logger.info(f"✅ RETRY exitoso - Status: {seleccionado_retry.text}")
+                    
+                except Exception as retry_error:
+                    logger.error(f"❌ RETRY también falló: {retry_error}")
+                    return False
             
             # NUEVO: IR DIRECTAMENTE AL BOTÓN ACEPTAR sin esperar
             logger.info("🎯 Status cambiado - yendo DIRECTAMENTE al botón Aceptar...")
