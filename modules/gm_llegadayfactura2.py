@@ -118,6 +118,7 @@ class ProcesadorLlegadaFactura:
     def _procesar_llegada(self):
         """Versión con debug intensivo para encontrar el problema del botón Aceptar"""
         try:
+            logger.info("🚨🚨🚨 EJECUTANDO ARCHIVO CORRECTO CON DEBUG 🚨🚨🚨")
             logger.info("📅 Procesando datos de llegada CON DEBUG...")
             
             # Obtener fecha actual para la llegada
