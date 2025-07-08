@@ -2,7 +2,7 @@
 """
 Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
-VERSIÓN FINAL CON PROTECCIÓN ANTI-DUPLICADOS Y MANEJO INTELIGENTE DE ERRORES
+VERSIÓN FINAL CON PROTECCIÓN ANTI-DUPLICADOS Y MANEJO DE OPERADOR OCUPADO
 """
 
 import os
@@ -263,13 +263,11 @@ class AlsuaMailAutomation:
             
             logger.error(f"📝 Viaje registrado en: {archivo_revision}")
             
-            # TODO: Aquí se puede integrar notificación por email, Teams, etc.
-            
         except Exception as e:
             logger.error(f"❌ Error registrando viaje para revisión: {e}")
     
     # ==========================================
-    # FUNCIONES ORIGINALES MEJORADAS
+    # FUNCIONES PRINCIPALES
     # ==========================================
     
     def extraer_prefactura_del_asunto(self, asunto):
@@ -444,8 +442,29 @@ class AlsuaMailAutomation:
                 # ===== EJECUTAR AUTOMATIZACIÓN GM =====
                 resultado_gm = self.ejecutar_automatizacion_gm(resultado)
                 
-                if resultado_gm:
-                    # ✅ ÉXITO COMPLETO
+                if resultado_gm == "OPERADOR_OCUPADO":
+                    # 🚨 OPERADOR OCUPADO - MARCAR CORREO COMO LEÍDO PARA EVITAR CICLO
+                    logger.warning("🚨 OPERADOR OCUPADO: Error registrado en MySQL")
+                    logger.info("📧 MARCANDO correo como leído para evitar reprocesamiento en bucle")
+                    
+                    # MARCAR como procesado para evitar ciclo infinito
+                    self.marcar_correo_procesado(mensaje, "ERROR_OPERADOR_OCUPADO")
+                    mensaje.UnRead = False  # Marcar como leído
+                    
+                    # Limpiar archivo Excel
+                    os.remove(ruta_local)
+                    logger.info(f"🗑️ Archivo limpiado: {ruta_local}")
+                    
+                    return "OPERADOR_OCUPADO"
+                    
+                elif resultado_gm:
+                    # ✅ ÉXITO COMPLETO - REGISTRAR EN MYSQL
+                    try:
+                        from modules.mysql_simple import registrar_viaje_exitoso
+                        registrar_viaje_exitoso(resultado['prefactura'], resultado['fecha'])
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error registrando viaje exitoso en MySQL: {e}")
+                    
                     self.marcar_correo_procesado(mensaje, "COMPLETADO")
                     self.marcar_viaje_creado(resultado, "COMPLETADO")
                     mensaje.UnRead = False
@@ -453,7 +472,14 @@ class AlsuaMailAutomation:
                     logger.info(f"🗑️ Archivo limpiado: {ruta_local}")
                     return True
                 else:
-                    # ❌ FALLO EN GM - CASO CRÍTICO
+                    # ❌ FALLO EN GM - REGISTRAR EN MYSQL
+                    try:
+                        from modules.mysql_simple import registrar_viaje_fallido
+                        motivo_fallo = "Error general en automatización GM Transport"
+                        registrar_viaje_fallido(resultado['prefactura'], resultado['fecha'], motivo_fallo)
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error registrando viaje fallido en MySQL: {e}")
+                    
                     logger.error("❌ VIAJE VACIO VÁLIDO FALLÓ EN GM TRANSPORT")
                     logger.error("🚨 REQUIERE REVISIÓN MANUAL URGENTE")
                     
@@ -487,7 +513,7 @@ class AlsuaMailAutomation:
         return False
     
     def ejecutar_automatizacion_gm(self, datos_viaje):
-        """Ejecuta la automatización completa de GM Transport - CON RECOVERY DE DRIVER"""
+        """Ejecuta la automatización completa de GM Transport - CON MANEJO DE OPERADOR OCUPADO"""
         try:
             logger.info("🤖 Iniciando automatización GM Transport...")
             
@@ -530,7 +556,14 @@ class AlsuaMailAutomation:
                 # Ejecutar proceso completo
                 resultado = automation.fill_viaje_form()
                 
-                if resultado:
+                if resultado == "OPERADOR_OCUPADO":
+                    # El navegador ya fue cerrado en gm_salida.py
+                    logger.warning("🚨 Operador ocupado detectado")
+                    logger.info("📝 Error ya registrado en MySQL")
+                    self.driver = None  # Marcar driver como inválido
+                    return "OPERADOR_OCUPADO"
+                    
+                elif resultado:
                     logger.info("🎉 Automatización GM completada exitosamente")
                     return True
                 else:
@@ -554,7 +587,7 @@ class AlsuaMailAutomation:
             return False
     
     def revisar_correos_nuevos(self):
-        """Revisa correos nuevos en Outlook - VERSIÓN MEJORADA"""
+        """Revisa correos nuevos en Outlook - CON MANEJO DE OPERADOR OCUPADO"""
         try:
             # Limpiar archivos antiguos automáticamente
             self.limpiar_archivos_antiguos()
@@ -572,6 +605,7 @@ class AlsuaMailAutomation:
             correos_procesados = 0
             correos_totales = mensajes.Count
             correos_saltados = 0
+            operadores_ocupados = 0  # NUEVO CONTADOR
             
             logger.info(f"📊 Correos no leídos encontrados: {correos_totales}")
             logger.info(f"📊 Correos ya procesados en memoria: {len(self.correos_procesados)}")
@@ -584,13 +618,18 @@ class AlsuaMailAutomation:
                     if "PreFacturacionTransportes@walmart.com" not in remitente:
                         continue
                     
-                    if self.procesar_correo_individual(mensaje):
+                    resultado_procesamiento = self.procesar_correo_individual(mensaje)
+                    
+                    if resultado_procesamiento == "OPERADOR_OCUPADO":
+                        operadores_ocupados += 1
+                        logger.warning(f"🚨 Viaje #{operadores_ocupados} con operador ocupado - registrado en MySQL")
+                    elif resultado_procesamiento:
                         correos_procesados += 1
                     else:
                         correos_saltados += 1
                         
                     # Limitar procesamiento para evitar sobrecarga
-                    if correos_procesados >= 3:  # Reducido a 3 para evitar sobrecarga
+                    if correos_procesados >= 3:
                         logger.info("⚠️ Límite de procesamiento alcanzado, esperando siguiente ciclo")
                         break
                         
@@ -603,7 +642,12 @@ class AlsuaMailAutomation:
             logger.info(f"   📧 Total correos revisados: {correos_totales}")
             logger.info(f"   ✅ Correos procesados: {correos_procesados}")
             logger.info(f"   ⏭️ Correos saltados: {correos_saltados}")
+            logger.info(f"   🚨 Operadores ocupados: {operadores_ocupados}")
             logger.info(f"   💾 Total en tracking: correos={len(self.correos_procesados)}, viajes={len(self.viajes_creados)}")
+            
+            if operadores_ocupados > 0:
+                logger.info("📝 Los errores de operador ocupado fueron registrados en MySQL")
+                logger.info("🔧 Estos viajes requieren revisión manual")
             
             return True
             
@@ -615,11 +659,13 @@ class AlsuaMailAutomation:
         """Ejecuta el sistema en bucle continuo"""
         logger.info("🚀 Iniciando sistema de automatización Alsua Transport v2.0")
         logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS ACTIVADA")
+        logger.info("🚨 MANEJO DE OPERADOR OCUPADO CON MYSQL")  # NUEVO
         logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
         logger.info("🤖 Automatización GM completa habilitada")
-        logger.info("🚨 Sistema de revisión manual para viajes válidos que fallan")
+        logger.info("💾 Viajes registrados en base de datos MySQL")  # NUEVO
+        logger.info("🔧 Errores marcados para revisión manual")  # NUEVO
         logger.info("=" * 70)
         
         try:
@@ -649,6 +695,14 @@ class AlsuaMailAutomation:
                     logger.info("✅ Driver cerrado correctamente")
                 except:
                     pass
+            
+            # CERRAR CONEXIÓN MYSQL AL FINALIZAR
+            try:
+                from modules.mysql_simple import cerrar_conexion
+                cerrar_conexion()
+                logger.info("✅ Conexión MySQL cerrada")
+            except Exception as e:
+                logger.warning(f"⚠️ Error cerrando MySQL: {e}")
                     
             logger.info("👋 Sistema de automatización finalizado")
     
@@ -692,7 +746,8 @@ def main():
     ║              ALSUA TRANSPORT - SISTEMA COMPLETO v2.0        ║
     ║                  Mail Reader + GM Automation                ║
     ║                  🛡️ PROTECCIÓN ANTI-DUPLICADOS               ║
-    ║                  🚨 TRACKING MANUAL PARA FALLOS             ║
+    ║                  🚨 MANEJO DE OPERADOR OCUPADO              ║
+    ║                  💾 REGISTRO MYSQL                          ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
