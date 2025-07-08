@@ -2,7 +2,7 @@
 """
 Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
-VERSIÓN CON PROTECCIÓN ANTI-DUPLICADOS
+VERSIÓN FINAL CON PROTECCIÓN ANTI-DUPLICADOS Y MANEJO INTELIGENTE DE ERRORES
 """
 
 import os
@@ -74,7 +74,7 @@ class AlsuaMailAutomation:
             logger.info(f"📁 Carpeta fallback: {self.carpeta_descarga}")
     
     # ==========================================
-    # NUEVAS FUNCIONES ANTI-DUPLICADOS
+    # FUNCIONES ANTI-DUPLICADOS
     # ==========================================
     
     def cargar_correos_procesados(self):
@@ -232,6 +232,42 @@ class AlsuaMailAutomation:
         except Exception as e:
             logger.warning(f"⚠️ Error limpiando archivos: {e}")
     
+    def registrar_viaje_para_revision_manual(self, datos_viaje, tipo_error):
+        """Registra un viaje válido que falló para revisión manual urgente"""
+        try:
+            # Archivo especial para viajes que NECESITAN revisión manual
+            archivo_revision = "viajes_requieren_revision.log"
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            
+            prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
+            placa_tractor = datos_viaje.get('placa_tractor', 'DESCONOCIDA')
+            placa_remolque = datos_viaje.get('placa_remolque', 'DESCONOCIDA')
+            determinante = datos_viaje.get('clave_determinante', 'DESCONOCIDO')
+            importe = datos_viaje.get('importe', '0')
+            
+            # Log crítico para operadores
+            logger.error("🚨" * 20)
+            logger.error("🚨 VIAJE VACIO VÁLIDO REQUIERE REVISIÓN MANUAL")
+            logger.error(f"🚨 PREFACTURA: {prefactura}")
+            logger.error(f"🚨 PLACA TRACTOR: {placa_tractor}")
+            logger.error(f"🚨 PLACA REMOLQUE: {placa_remolque}")
+            logger.error(f"🚨 DETERMINANTE: {determinante}")
+            logger.error(f"🚨 IMPORTE: ${importe}")
+            logger.error(f"🚨 ERROR: {tipo_error}")
+            logger.error("🚨 ACCIÓN: Procesar manualmente en GM Transport")
+            logger.error("🚨" * 20)
+            
+            # Guardar en archivo especial
+            with open(archivo_revision, 'a', encoding='utf-8') as f:
+                f.write(f"{timestamp}|URGENTE|{prefactura}|{placa_tractor}|{placa_remolque}|{determinante}|{importe}|{tipo_error}\n")
+            
+            logger.error(f"📝 Viaje registrado en: {archivo_revision}")
+            
+            # TODO: Aquí se puede integrar notificación por email, Teams, etc.
+            
+        except Exception as e:
+            logger.error(f"❌ Error registrando viaje para revisión: {e}")
+    
     # ==========================================
     # FUNCIONES ORIGINALES MEJORADAS
     # ==========================================
@@ -289,50 +325,59 @@ class AlsuaMailAutomation:
             return datetime.now().strftime("%d/%m/%Y")
     
     def procesar_correo_individual(self, mensaje):
-        """Procesa un correo individual - VERSIÓN MEJORADA ANTI-DUPLICADOS"""
+        """Procesa un correo individual - MANEJO INTELIGENTE DE ERRORES"""
         try:
-            # ===== NUEVA VERIFICACIÓN ANTI-DUPLICADOS =====
+            # ===== VERIFICACIÓN ANTI-DUPLICADOS =====
             if self.ya_fue_procesado_correo(mensaje):
                 logger.info("⏭️ Saltando correo ya procesado")
+                mensaje.UnRead = False
                 return False
             
             asunto = mensaje.Subject or ""
             remitente = mensaje.SenderEmailAddress or ""
             fecha_recibido = mensaje.ReceivedTime
             
-            # Filtros básicos
+            # ===== FILTROS BÁSICOS (marcar como leído si no pasan) =====
             if not remitente or "PreFacturacionTransportes@walmart.com" not in remitente:
                 return False
                 
             if "cancelado" in asunto.lower() or "no-reply" in remitente.lower():
+                # Estos no son viajes válidos - marcar como leído
+                mensaje.UnRead = False
                 return False
                 
             if not "prefactura" in asunto.lower():
+                # No es un correo de prefactura - marcar como leído
+                mensaje.UnRead = False
                 return False
             
             adjuntos = mensaje.Attachments
             if adjuntos.Count == 0:
+                # No tiene archivos - marcar como leído
+                mensaje.UnRead = False
                 return False
             
             logger.info(f"📩 Procesando correo NUEVO: {asunto}")
             
-            # Extraer datos del asunto
+            # ===== EXTRAER DATOS CRÍTICOS =====
             prefactura = self.extraer_prefactura_del_asunto(asunto)
             clave_determinante = self.extraer_clave_determinante(asunto)
             
             if not prefactura:
                 logger.warning(f"⚠️ No se pudo extraer prefactura del asunto: {asunto}")
-                # Marcar como procesado con error para evitar reintento
+                # ERROR TÉCNICO - marcar como leído para evitar bucle
                 self.marcar_correo_procesado(mensaje, "ERROR_SIN_PREFACTURA")
+                mensaje.UnRead = False
                 return False
                 
             if not clave_determinante:
                 logger.warning(f"⚠️ No se pudo extraer clave determinante del asunto: {asunto}")
-                # Marcar como procesado con error para evitar reintento
+                # ERROR TÉCNICO - marcar como leído para evitar bucle
                 self.marcar_correo_procesado(mensaje, "ERROR_SIN_DETERMINANTE")
+                mensaje.UnRead = False
                 return False
             
-            # Procesar archivos adjuntos
+            # ===== PROCESAR ARCHIVOS ADJUNTOS =====
             for i in range(1, adjuntos.Count + 1):
                 archivo = adjuntos.Item(i)
                 nombre = archivo.FileName
@@ -340,52 +385,54 @@ class AlsuaMailAutomation:
                 if not nombre.endswith(".xls"):
                     continue
                 
-                # Generar nombre único para evitar conflictos
+                # Generar nombre único
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 nombre_unico = f"{timestamp}_{nombre}"
                 ruta_local = os.path.join(self.carpeta_descarga, nombre_unico)
                 
-                # Descargar archivo con manejo robusto de errores
+                # ===== DESCARGAR ARCHIVO =====
                 try:
                     archivo.SaveAsFile(ruta_local)
                     logger.info(f"📥 Archivo descargado: {ruta_local}")
                 except Exception as e:
                     logger.error(f"❌ Error al descargar archivo {nombre}: {e}")
-                    # Intentar con carpeta alternativa
-                    try:
-                        ruta_alternativa = os.path.join(os.path.expanduser("~"), "Downloads", nombre_unico)
-                        archivo.SaveAsFile(ruta_alternativa)
-                        ruta_local = ruta_alternativa
-                        logger.info(f"📥 Archivo descargado en ruta alternativa: {ruta_local}")
-                    except Exception as e2:
-                        logger.error(f"❌ Error también en ruta alternativa: {e2}")
-                        # Marcar correo como procesado con error
-                        self.marcar_correo_procesado(mensaje, "ERROR_DESCARGA_ARCHIVO")
-                        continue
+                    # ERROR TÉCNICO - marcar como leído
+                    self.marcar_correo_procesado(mensaje, "ERROR_DESCARGA_ARCHIVO")
+                    mensaje.UnRead = False
+                    continue
                 
-                # Parsear archivo
+                # ===== PARSEAR ARCHIVO =====
                 resultado = parse_xls(ruta_local, determinante_from_asunto=clave_determinante)
                 
                 if "error" in resultado:
                     logger.warning(f"⚠️ Archivo no válido: {resultado['error']}")
-                    os.remove(ruta_local)  # Limpiar archivo inválido
-                    # Marcar correo como procesado con error
-                    self.marcar_correo_procesado(mensaje, f"ERROR_PARSE: {resultado['error']}")
-                    continue
+                    os.remove(ruta_local)
+                    
+                    # Verificar si es porque NO ES TIPO VACIO
+                    if "no es tipo VACIO" in resultado['error']:
+                        logger.info("📄 Correo válido pero viaje no es tipo VACIO - marcando como leído")
+                        self.marcar_correo_procesado(mensaje, "VIAJE_NO_VACIO")
+                        mensaje.UnRead = False
+                        return False
+                    else:
+                        # ERROR TÉCNICO (archivo corrupto, etc) - marcar como leído
+                        self.marcar_correo_procesado(mensaje, f"ERROR_PARSE: {resultado['error']}")
+                        mensaje.UnRead = False
+                        continue
                 
-                # Completar datos faltantes
+                # ===== COMPLETAR DATOS =====
                 resultado["prefactura"] = prefactura
                 resultado["fecha"] = self.convertir_fecha_formato(resultado.get("fecha"))
                 
-                # ===== NUEVA VERIFICACIÓN ANTI-DUPLICADOS DE VIAJE =====
+                # ===== VERIFICAR DUPLICADOS =====
                 if self.ya_fue_creado_viaje(resultado):
                     logger.info("⏭️ Saltando viaje ya creado en GM Transport")
-                    # Marcar correo como procesado pero indicar que el viaje ya existe
                     self.marcar_correo_procesado(mensaje, "VIAJE_YA_EXISTE")
-                    mensaje.UnRead = False  # Marcar como leído
-                    os.remove(ruta_local)  # Limpiar archivo
+                    mensaje.UnRead = False
+                    os.remove(ruta_local)
                     return False
                 
+                # ===== VIAJE VACIO VÁLIDO DETECTADO =====
                 logger.info("✅ Viaje VACIO válido encontrado:")
                 logger.info(f"   📋 Prefactura: {resultado['prefactura']}")
                 logger.info(f"   📅 Fecha: {resultado['fecha']}")
@@ -394,32 +441,45 @@ class AlsuaMailAutomation:
                 logger.info(f"   🎯 Determinante: {resultado['clave_determinante']}")
                 logger.info(f"   💰 Importe: ${resultado['importe']}")
                 
-                # Ejecutar automatización GM
-                if self.ejecutar_automatizacion_gm(resultado):
-                    # ===== MARCAR COMO PROCESADO Y CREADO =====
+                # ===== EJECUTAR AUTOMATIZACIÓN GM =====
+                resultado_gm = self.ejecutar_automatizacion_gm(resultado)
+                
+                if resultado_gm:
+                    # ✅ ÉXITO COMPLETO
                     self.marcar_correo_procesado(mensaje, "COMPLETADO")
                     self.marcar_viaje_creado(resultado, "COMPLETADO")
-                    
-                    # Marcar correo como leído para evitar reprocesamiento
                     mensaje.UnRead = False
-                    
-                    # Limpiar archivo procesado
                     os.remove(ruta_local)
                     logger.info(f"🗑️ Archivo limpiado: {ruta_local}")
-                    
                     return True
                 else:
-                    logger.warning("⚠️ Viaje falló - marcando para evitar reintento")
-                    # Marcar correo como procesado con error para evitar bucle infinito
-                    self.marcar_correo_procesado(mensaje, "ERROR_GM_AUTOMATION")
-                    logger.warning(f"📋 Archivo conservado para revisión: {ruta_local}")
+                    # ❌ FALLO EN GM - CASO CRÍTICO
+                    logger.error("❌ VIAJE VACIO VÁLIDO FALLÓ EN GM TRANSPORT")
+                    logger.error("🚨 REQUIERE REVISIÓN MANUAL URGENTE")
+                    
+                    # REGISTRAR PARA REVISIÓN MANUAL
+                    self.registrar_viaje_para_revision_manual(resultado, "ERROR_GM_AUTOMATION")
+                    
+                    # Conservar archivo para revisión
+                    logger.error(f"📋 Archivo conservado para revisión: {ruta_local}")
+                    
+                    # Marcar como leído para evitar bucle infinito
+                    self.marcar_correo_procesado(mensaje, "ERROR_GM_NECESITA_REVISION")
+                    mensaje.UnRead = False
+                    
                     return False
                     
+        except KeyboardInterrupt:
+            # El usuario detuvo manualmente - no marcar como leído
+            logger.info("⚠️ Interrupción manual - no marcando correo como leído")
+            raise
+            
         except Exception as e:
-            logger.error(f"❌ Error al procesar correo: {e}")
-            # Marcar como procesado con error para evitar bucle infinito
+            logger.error(f"❌ Error inesperado al procesar correo: {e}")
+            # ERROR TÉCNICO INESPERADO - marcar como leído para evitar bucle
             try:
-                self.marcar_correo_procesado(mensaje, "ERROR_PROCESAMIENTO")
+                self.marcar_correo_procesado(mensaje, "ERROR_PROCESAMIENTO_INESPERADO")
+                mensaje.UnRead = False
             except:
                 pass
             return False
@@ -427,37 +487,70 @@ class AlsuaMailAutomation:
         return False
     
     def ejecutar_automatizacion_gm(self, datos_viaje):
-        """Ejecuta la automatización completa de GM Transport"""
+        """Ejecuta la automatización completa de GM Transport - CON RECOVERY DE DRIVER"""
         try:
             logger.info("🤖 Iniciando automatización GM Transport...")
             
-            # Inicializar driver si no existe
-            if not self.driver:
-                logger.info("🔐 Realizando login en GM Transport...")
-                self.driver = login_to_gm()
-                
-                if not self.driver:
-                    logger.error("❌ Error en login GM")
-                    return False
+            # Verificar si el driver sigue activo
+            driver_valido = False
+            if self.driver:
+                try:
+                    # Intentar una operación simple para verificar que el driver funciona
+                    self.driver.current_url
+                    driver_valido = True
+                    logger.info("✅ Driver existente válido")
+                except Exception as e:
+                    logger.warning(f"⚠️ Driver existente inválido: {e}")
+                    try:
+                        self.driver.quit()
+                    except:
+                        pass
+                    self.driver = None
+            
+            # Inicializar driver si no existe o falló
+            if not driver_valido:
+                logger.info("🔐 Realizando nuevo login en GM Transport...")
+                try:
+                    self.driver = login_to_gm()
                     
-                logger.info("✅ Login exitoso en GM Transport")
+                    if not self.driver:
+                        logger.error("❌ Error en login GM")
+                        return False
+                        
+                    logger.info("✅ Login exitoso en GM Transport")
+                except Exception as e:
+                    logger.error(f"❌ Error crítico en login: {e}")
+                    return False
             
             # Crear instancia de automatización con los datos del correo
-            automation = GMTransportAutomation(self.driver)
-            automation.datos_viaje = datos_viaje
-            
-            # Ejecutar proceso completo
-            resultado = automation.fill_viaje_form()
-            
-            if resultado:
-                logger.info("🎉 Automatización GM completada exitosamente")
-                return True
-            else:
-                logger.error("❌ Error en automatización GM")
+            try:
+                automation = GMTransportAutomation(self.driver)
+                automation.datos_viaje = datos_viaje
+                
+                # Ejecutar proceso completo
+                resultado = automation.fill_viaje_form()
+                
+                if resultado:
+                    logger.info("🎉 Automatización GM completada exitosamente")
+                    return True
+                else:
+                    logger.error("❌ Error en automatización GM")
+                    return False
+                    
+            except Exception as e:
+                logger.error(f"❌ Error durante automatización: {e}")
+                # Si hay error, intentar cerrar driver corrupto
+                try:
+                    if self.driver:
+                        self.driver.quit()
+                        self.driver = None
+                        logger.info("🗑️ Driver corrupto cerrado")
+                except:
+                    pass
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error en automatización GM: {e}")
+            logger.error(f"❌ Error general en automatización GM: {e}")
             return False
     
     def revisar_correos_nuevos(self):
@@ -526,6 +619,7 @@ class AlsuaMailAutomation:
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
         logger.info("🤖 Automatización GM completa habilitada")
+        logger.info("🚨 Sistema de revisión manual para viajes válidos que fallan")
         logger.info("=" * 70)
         
         try:
@@ -598,6 +692,7 @@ def main():
     ║              ALSUA TRANSPORT - SISTEMA COMPLETO v2.0        ║
     ║                  Mail Reader + GM Automation                ║
     ║                  🛡️ PROTECCIÓN ANTI-DUPLICADOS               ║
+    ║                  🚨 TRACKING MANUAL PARA FALLOS             ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
