@@ -116,11 +116,11 @@ class ProcesadorLlegadaFactura:
             return False
     
     def _procesar_llegada(self):
-        """Llenar fecha de llegada y seleccionar status TERMINADO"""
+        """Versión con debug intensivo para encontrar el problema del botón Aceptar"""
         try:
-            logger.info("📅 Procesando datos de llegada...")
+            logger.info("📅 Procesando datos de llegada CON DEBUG...")
             
-            # Obtener fecha actual para la llegada (siempre fecha actual según descripción)
+            # Obtener fecha actual para la llegada
             fecha_llegada = datetime.now().strftime("%d/%m/%Y")
             logger.info(f"📅 Fecha de llegada a usar: {fecha_llegada}")
             
@@ -130,7 +130,8 @@ class ProcesadorLlegadaFactura:
                 return False
             
             # Esperar un momento para que GM procese la fecha
-            time.sleep(1)
+            logger.info("⏳ Esperando que GM procese la fecha...")
+            time.sleep(2)  # Aumenté el tiempo de espera
             
             # Seleccionar status "TERMINADO" (valor 3)
             try:
@@ -145,7 +146,7 @@ class ProcesadorLlegadaFactura:
                 
                 # Seleccionar TERMINADO
                 status_select.select_by_value("3")  # TERMINADO
-                time.sleep(0.5)
+                time.sleep(1)  # Más tiempo después de seleccionar
                 
                 # Verificar selección
                 seleccionado = status_select.first_selected_option
@@ -155,38 +156,160 @@ class ProcesadorLlegadaFactura:
                 logger.error(f"❌ Error al seleccionar status TERMINADO: {e}")
                 return False
             
-            # Hacer clic en "Aceptar"
+            # NUEVO: Esperar más tiempo después de cambiar el status
+            logger.info("⏳ Esperando que GM procese el cambio de status...")
+            time.sleep(3)  # Tiempo adicional para que GM procese todo
+            
+            # DEBUGGING INTENSIVO DEL BOTÓN ACEPTAR
+            logger.info("🔍 INICIANDO DEBUG DEL BOTÓN ACEPTAR...")
+            
+            # 1. Buscar TODOS los elementos que contengan "aceptar"
             try:
-                logger.info("✅ Haciendo clic en Aceptar...")
+                todos_aceptar = self.driver.find_elements(By.XPATH, "//*[contains(translate(text(), 'ACEPTAR', 'aceptar'), 'aceptar')]")
+                logger.info(f"🔍 Elementos que contienen 'aceptar': {len(todos_aceptar)}")
+                for i, elem in enumerate(todos_aceptar):
+                    try:
+                        logger.info(f"   {i+1}. Texto: '{elem.text}', Tag: {elem.tag_name}, ID: '{elem.get_attribute('id')}', Visible: {elem.is_displayed()}, Habilitado: {elem.is_enabled()}")
+                    except:
+                        logger.info(f"   {i+1}. Error al obtener info del elemento")
+            except Exception as e:
+                logger.warning(f"⚠️ Error buscando elementos 'aceptar': {e}")
+            
+            # 2. Buscar específicamente BTN_ACEPTAR
+            try:
+                btn_aceptar_directo = self.driver.find_element(By.ID, "BTN_ACEPTAR")
+                logger.info(f"🎯 BTN_ACEPTAR encontrado:")
+                logger.info(f"   - Texto: '{btn_aceptar_directo.text}'")
+                logger.info(f"   - Visible: {btn_aceptar_directo.is_displayed()}")
+                logger.info(f"   - Habilitado: {btn_aceptar_directo.is_enabled()}")
+                logger.info(f"   - Clase: '{btn_aceptar_directo.get_attribute('class')}'")
+                logger.info(f"   - Style: '{btn_aceptar_directo.get_attribute('style')}'")
+                
+                # Obtener posición del elemento
+                location = btn_aceptar_directo.location
+                size = btn_aceptar_directo.size
+                logger.info(f"   - Posición: x={location['x']}, y={location['y']}")
+                logger.info(f"   - Tamaño: w={size['width']}, h={size['height']}")
+                
+            except Exception as e:
+                logger.error(f"❌ BTN_ACEPTAR NO encontrado: {e}")
+                
+                # Buscar botones alternativos
+                logger.info("🔍 Buscando botones alternativos...")
+                try:
+                    todos_botones = self.driver.find_elements(By.XPATH, "//button | //input[@type='button'] | //input[@type='submit'] | //*[@onclick] | //*[contains(@class, 'btn')]")
+                    logger.info(f"🔍 Total de botones encontrados: {len(todos_botones)}")
+                    for i, btn in enumerate(todos_botones[:10]):  # Solo los primeros 10
+                        try:
+                            logger.info(f"   Botón {i+1}: ID='{btn.get_attribute('id')}', Texto='{btn.text}', Visible={btn.is_displayed()}")
+                        except:
+                            pass
+                except Exception as e2:
+                    logger.warning(f"⚠️ Error buscando botones alternativos: {e2}")
+                
+                return False
+            
+            # 3. Si el botón existe, intentar hacer clic con múltiples métodos
+            logger.info("🖱️ Intentando hacer clic en BTN_ACEPTAR...")
+            
+            # Método 1: Scroll + wait + click normal
+            try:
+                logger.info("🖱️ Método 1: Scroll + Wait + Click normal...")
                 aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTAR")))
                 
                 # Hacer scroll para asegurar visibilidad
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", aceptar_btn)
-                time.sleep(0.5)
-                
-                # Usar JavaScript click para mayor confiabilidad
-                self.driver.execute_script("arguments[0].click();", aceptar_btn)
                 time.sleep(1)
-                logger.info("✅ Botón 'Aceptar' clickeado")
-            except Exception as e:
-                logger.error(f"❌ Error al hacer clic en 'Aceptar': {e}")
-                return False
+                
+                # Click normal
+                aceptar_btn.click()
+                time.sleep(2)
+                logger.info("✅ Método 1 EXITOSO - Botón 'Aceptar' clickeado")
+                
+            except Exception as e1:
+                logger.warning(f"⚠️ Método 1 falló: {e1}")
+                
+                # Método 2: JavaScript click
+                try:
+                    logger.info("🖱️ Método 2: JavaScript click...")
+                    aceptar_btn = self.driver.find_element(By.ID, "BTN_ACEPTAR")
+                    self.driver.execute_script("arguments[0].click();", aceptar_btn)
+                    time.sleep(2)
+                    logger.info("✅ Método 2 EXITOSO - Botón clickeado con JavaScript")
+                    
+                except Exception as e2:
+                    logger.warning(f"⚠️ Método 2 falló: {e2}")
+                    
+                    # Método 3: Forzar click con coordinates
+                    try:
+                        logger.info("🖱️ Método 3: ActionChains click...")
+                        from selenium.webdriver.common.action_chains import ActionChains
+                        aceptar_btn = self.driver.find_element(By.ID, "BTN_ACEPTAR")
+                        actions = ActionChains(self.driver)
+                        actions.move_to_element(aceptar_btn).click().perform()
+                        time.sleep(2)
+                        logger.info("✅ Método 3 EXITOSO - Botón clickeado con ActionChains")
+                        
+                    except Exception as e3:
+                        logger.error(f"❌ Método 3 falló: {e3}")
+                        
+                        # Método 4: Buscar por XPath alternativo
+                        try:
+                            logger.info("🖱️ Método 4: XPath alternativo...")
+                            xpath_alternatives = [
+                                "//span[contains(text(), 'Aceptar')]/..",
+                                "//button[contains(text(), 'Aceptar')]",
+                                "//input[@value='Aceptar']",
+                                "//*[@onclick and contains(text(), 'Aceptar')]"
+                            ]
+                            
+                            for xpath in xpath_alternatives:
+                                try:
+                                    alt_btn = self.driver.find_element(By.XPATH, xpath)
+                                    if alt_btn.is_displayed() and alt_btn.is_enabled():
+                                        alt_btn.click()
+                                        time.sleep(2)
+                                        logger.info(f"✅ Método 4 EXITOSO - Botón clickeado con XPath: {xpath}")
+                                        break
+                                except:
+                                    continue
+                            else:
+                                logger.error("❌ TODOS los métodos fallaron")
+                                return False
+                                
+                        except Exception as e4:
+                            logger.error(f"❌ Método 4 falló: {e4}")
+                            return False
             
-            # Hacer clic en "No" para el envío de correo
+            # Verificar si el clic funcionó buscando el botón "No" que debería aparecer después
             try:
-                logger.info("📧 Respondiendo No al envío de correo...")
-                no_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_NO")))
-                self.driver.execute_script("arguments[0].click();", no_btn)
-                time.sleep(2)  # Esperar a que se cierre la ventana y regrese a la lista
-                logger.info("✅ Botón 'No' clickeado - Llegada completada")
+                logger.info("🔍 Verificando si apareció el botón 'No' (confirmación de que Aceptar funcionó)...")
+                no_btn_check = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.ID, "BTN_NO")))
+                logger.info("✅ Botón 'No' detectado - El clic en 'Aceptar' fue exitoso")
+                
+                # Hacer clic en "No" para completar el proceso
+                self.driver.execute_script("arguments[0].click();", no_btn_check)
+                time.sleep(2)
+                logger.info("✅ Botón 'No' clickeado - Proceso de llegada completado")
+                
             except Exception as e:
-                logger.error(f"❌ Error al hacer clic en 'No': {e}")
-                return False
+                logger.warning(f"⚠️ No se detectó botón 'No': {e}")
+                logger.warning("⚠️ Puede que el clic en 'Aceptar' no haya funcionado o que la interfaz sea diferente")
+                
+                # Intentar buscar el botón "No" con métodos alternativos
+                try:
+                    no_btn_alt = self.driver.find_element(By.XPATH, "//span[contains(text(), 'No')]/..")
+                    no_btn_alt.click()
+                    time.sleep(2)
+                    logger.info("✅ Botón 'No' encontrado y clickeado con XPath alternativo")
+                except:
+                    logger.error("❌ No se pudo completar el proceso - revisión manual requerida")
+                    return False
                 
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en proceso de llegada: {e}")
+            logger.error(f"❌ Error en proceso de llegada con debug: {e}")
             return False
     
     def _autorizar(self):
