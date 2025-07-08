@@ -2,13 +2,15 @@
 """
 Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
+VERSIÓN CON PROTECCIÓN ANTI-DUPLICADOS
 """
 
 import os
 import time
 import logging
 import re
-from datetime import datetime
+import pickle
+from datetime import datetime, timedelta
 import win32com.client
 from modules.parser import parse_xls
 from modules.gm_login import login_to_gm
@@ -29,7 +31,15 @@ class AlsuaMailAutomation:
     def __init__(self):
         # Usar ruta absoluta para evitar problemas de permisos
         self.carpeta_descarga = os.path.abspath("archivos_descargados")
-        self.correos_procesados = set()  # Para evitar reprocesar
+        
+        # NUEVO: Archivos persistentes para tracking de duplicados
+        self.archivo_procesados = "correos_procesados.pkl"
+        self.archivo_viajes_creados = "viajes_creados.pkl"
+        
+        # Cargar tracking desde archivos
+        self.correos_procesados = self.cargar_correos_procesados()
+        self.viajes_creados = self.cargar_viajes_creados()
+        
         self.driver = None
         self._crear_carpeta_descarga()
         
@@ -62,6 +72,169 @@ class AlsuaMailAutomation:
             self.carpeta_descarga = os.path.join(os.path.expanduser("~"), "Downloads", "alsua_archivos")
             os.makedirs(self.carpeta_descarga, exist_ok=True)
             logger.info(f"📁 Carpeta fallback: {self.carpeta_descarga}")
+    
+    # ==========================================
+    # NUEVAS FUNCIONES ANTI-DUPLICADOS
+    # ==========================================
+    
+    def cargar_correos_procesados(self):
+        """Carga la lista de correos ya procesados desde archivo"""
+        try:
+            if os.path.exists(self.archivo_procesados):
+                with open(self.archivo_procesados, 'rb') as f:
+                    correos = pickle.load(f)
+                    # Limpiar correos antiguos (más de 30 días)
+                    cutoff_date = datetime.now() - timedelta(days=30)
+                    correos_validos = {k: v for k, v in correos.items() 
+                                     if v.get('fecha_procesado', datetime.now()) > cutoff_date}
+                    logger.info(f"📁 Cargados {len(correos_validos)} correos procesados")
+                    return correos_validos
+        except Exception as e:
+            logger.warning(f"⚠️ Error cargando correos procesados: {e}")
+        return {}
+    
+    def guardar_correos_procesados(self):
+        """Guarda la lista de correos procesados en archivo"""
+        try:
+            with open(self.archivo_procesados, 'wb') as f:
+                pickle.dump(self.correos_procesados, f)
+        except Exception as e:
+            logger.warning(f"⚠️ Error guardando correos procesados: {e}")
+    
+    def cargar_viajes_creados(self):
+        """Carga la lista de viajes ya creados desde archivo"""
+        try:
+            if os.path.exists(self.archivo_viajes_creados):
+                with open(self.archivo_viajes_creados, 'rb') as f:
+                    viajes = pickle.load(f)
+                    # Limpiar viajes antiguos (más de 15 días)
+                    cutoff_date = datetime.now() - timedelta(days=15)
+                    viajes_validos = {k: v for k, v in viajes.items() 
+                                    if v.get('fecha_creado', datetime.now()) > cutoff_date}
+                    logger.info(f"🚛 Cargados {len(viajes_validos)} viajes creados")
+                    return viajes_validos
+        except Exception as e:
+            logger.warning(f"⚠️ Error cargando viajes creados: {e}")
+        return {}
+    
+    def guardar_viajes_creados(self):
+        """Guarda la lista de viajes creados en archivo"""
+        try:
+            with open(self.archivo_viajes_creados, 'wb') as f:
+                pickle.dump(self.viajes_creados, f)
+        except Exception as e:
+            logger.warning(f"⚠️ Error guardando viajes creados: {e}")
+    
+    def generar_id_unico_correo(self, mensaje):
+        """Genera un ID único para el correo basado en múltiples factores"""
+        try:
+            # Usar múltiples elementos para crear ID único
+            asunto = mensaje.Subject or ""
+            remitente = mensaje.SenderEmailAddress or ""
+            fecha_recibido = str(mensaje.ReceivedTime)
+            
+            # Extraer prefactura del asunto
+            prefactura = self.extraer_prefactura_del_asunto(asunto)
+            
+            # Crear ID compuesto más robusto
+            fecha_corta = fecha_recibido.split()[0] if fecha_recibido else "sin_fecha"
+            id_correo = f"{prefactura}_{fecha_corta}_{abs(hash(asunto + remitente)) % 10000}"
+            return id_correo
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Error generando ID de correo: {e}")
+            return f"unknown_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    
+    def generar_id_unico_viaje(self, datos_viaje):
+        """Genera un ID único para el viaje"""
+        prefactura = datos_viaje.get('prefactura', 'SIN_PREFACTURA')
+        fecha = datos_viaje.get('fecha', 'SIN_FECHA')
+        placa_tractor = datos_viaje.get('placa_tractor', 'SIN_TRACTOR')
+        determinante = datos_viaje.get('clave_determinante', 'SIN_DETERMINANTE')
+        
+        return f"{prefactura}_{fecha}_{placa_tractor}_{determinante}"
+    
+    def ya_fue_procesado_correo(self, mensaje):
+        """Verifica si este correo específico ya fue procesado"""
+        id_correo = self.generar_id_unico_correo(mensaje)
+        
+        if id_correo in self.correos_procesados:
+            info_procesado = self.correos_procesados[id_correo]
+            logger.info(f"📧 Correo ya procesado: {id_correo}")
+            logger.info(f"   📅 Fecha procesado: {info_procesado.get('fecha_procesado')}")
+            logger.info(f"   ✅ Estado: {info_procesado.get('estado', 'COMPLETADO')}")
+            return True
+        
+        return False
+    
+    def ya_fue_creado_viaje(self, datos_viaje):
+        """Verifica si este viaje específico ya fue creado"""
+        id_viaje = self.generar_id_unico_viaje(datos_viaje)
+        
+        if id_viaje in self.viajes_creados:
+            info_creado = self.viajes_creados[id_viaje]
+            logger.info(f"🚛 Viaje ya creado: {id_viaje}")
+            logger.info(f"   📅 Fecha creado: {info_creado.get('fecha_creado')}")
+            logger.info(f"   ✅ Estado: {info_creado.get('estado', 'COMPLETADO')}")
+            return True
+        
+        return False
+    
+    def marcar_correo_procesado(self, mensaje, estado="COMPLETADO"):
+        """Marca un correo como procesado"""
+        id_correo = self.generar_id_unico_correo(mensaje)
+        
+        self.correos_procesados[id_correo] = {
+            'fecha_procesado': datetime.now(),
+            'estado': estado,
+            'prefactura': self.extraer_prefactura_del_asunto(mensaje.Subject or ""),
+            'asunto': mensaje.Subject or "",
+            'remitente': mensaje.SenderEmailAddress or ""
+        }
+        
+        self.guardar_correos_procesados()
+        logger.info(f"✅ Correo marcado como procesado: {id_correo} | Estado: {estado}")
+    
+    def marcar_viaje_creado(self, datos_viaje, estado="COMPLETADO"):
+        """Marca un viaje como creado"""
+        id_viaje = self.generar_id_unico_viaje(datos_viaje)
+        
+        self.viajes_creados[id_viaje] = {
+            'fecha_creado': datetime.now(),
+            'estado': estado,
+            'datos': datos_viaje.copy()
+        }
+        
+        self.guardar_viajes_creados()
+        logger.info(f"✅ Viaje marcado como creado: {id_viaje} | Estado: {estado}")
+    
+    def limpiar_archivos_antiguos(self):
+        """Limpia archivos de tracking antiguos"""
+        try:
+            # Limpiar correos procesados antiguos
+            correos_originales = len(self.correos_procesados)
+            self.correos_procesados = self.cargar_correos_procesados()
+            correos_finales = len(self.correos_procesados)
+            
+            if correos_originales != correos_finales:
+                self.guardar_correos_procesados()
+                logger.info(f"🧹 Correos limpiados: {correos_originales} → {correos_finales}")
+            
+            # Limpiar viajes creados antiguos
+            viajes_originales = len(self.viajes_creados)
+            self.viajes_creados = self.cargar_viajes_creados()
+            viajes_finales = len(self.viajes_creados)
+            
+            if viajes_originales != viajes_finales:
+                self.guardar_viajes_creados()
+                logger.info(f"🧹 Viajes limpiados: {viajes_originales} → {viajes_finales}")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error limpiando archivos: {e}")
+    
+    # ==========================================
+    # FUNCIONES ORIGINALES MEJORADAS
+    # ==========================================
     
     def extraer_prefactura_del_asunto(self, asunto):
         """Extrae el número de prefactura del asunto del correo"""
@@ -116,8 +289,13 @@ class AlsuaMailAutomation:
             return datetime.now().strftime("%d/%m/%Y")
     
     def procesar_correo_individual(self, mensaje):
-        """Procesa un correo individual"""
+        """Procesa un correo individual - VERSIÓN MEJORADA ANTI-DUPLICADOS"""
         try:
+            # ===== NUEVA VERIFICACIÓN ANTI-DUPLICADOS =====
+            if self.ya_fue_procesado_correo(mensaje):
+                logger.info("⏭️ Saltando correo ya procesado")
+                return False
+            
             asunto = mensaje.Subject or ""
             remitente = mensaje.SenderEmailAddress or ""
             fecha_recibido = mensaje.ReceivedTime
@@ -132,16 +310,11 @@ class AlsuaMailAutomation:
             if not "prefactura" in asunto.lower():
                 return False
             
-            # Evitar reprocesar correos
-            correo_id = f"{fecha_recibido}_{asunto}"
-            if correo_id in self.correos_procesados:
-                return False
-                
             adjuntos = mensaje.Attachments
             if adjuntos.Count == 0:
                 return False
             
-            logger.info(f"📩 Procesando correo: {asunto}")
+            logger.info(f"📩 Procesando correo NUEVO: {asunto}")
             
             # Extraer datos del asunto
             prefactura = self.extraer_prefactura_del_asunto(asunto)
@@ -149,10 +322,14 @@ class AlsuaMailAutomation:
             
             if not prefactura:
                 logger.warning(f"⚠️ No se pudo extraer prefactura del asunto: {asunto}")
+                # Marcar como procesado con error para evitar reintento
+                self.marcar_correo_procesado(mensaje, "ERROR_SIN_PREFACTURA")
                 return False
                 
             if not clave_determinante:
                 logger.warning(f"⚠️ No se pudo extraer clave determinante del asunto: {asunto}")
+                # Marcar como procesado con error para evitar reintento
+                self.marcar_correo_procesado(mensaje, "ERROR_SIN_DETERMINANTE")
                 return False
             
             # Procesar archivos adjuntos
@@ -182,7 +359,9 @@ class AlsuaMailAutomation:
                         logger.info(f"📥 Archivo descargado en ruta alternativa: {ruta_local}")
                     except Exception as e2:
                         logger.error(f"❌ Error también en ruta alternativa: {e2}")
-                        continue  # Saltar este archivo y continuar con el siguiente
+                        # Marcar correo como procesado con error
+                        self.marcar_correo_procesado(mensaje, "ERROR_DESCARGA_ARCHIVO")
+                        continue
                 
                 # Parsear archivo
                 resultado = parse_xls(ruta_local, determinante_from_asunto=clave_determinante)
@@ -190,11 +369,22 @@ class AlsuaMailAutomation:
                 if "error" in resultado:
                     logger.warning(f"⚠️ Archivo no válido: {resultado['error']}")
                     os.remove(ruta_local)  # Limpiar archivo inválido
+                    # Marcar correo como procesado con error
+                    self.marcar_correo_procesado(mensaje, f"ERROR_PARSE: {resultado['error']}")
                     continue
                 
                 # Completar datos faltantes
                 resultado["prefactura"] = prefactura
                 resultado["fecha"] = self.convertir_fecha_formato(resultado.get("fecha"))
+                
+                # ===== NUEVA VERIFICACIÓN ANTI-DUPLICADOS DE VIAJE =====
+                if self.ya_fue_creado_viaje(resultado):
+                    logger.info("⏭️ Saltando viaje ya creado en GM Transport")
+                    # Marcar correo como procesado pero indicar que el viaje ya existe
+                    self.marcar_correo_procesado(mensaje, "VIAJE_YA_EXISTE")
+                    mensaje.UnRead = False  # Marcar como leído
+                    os.remove(ruta_local)  # Limpiar archivo
+                    return False
                 
                 logger.info("✅ Viaje VACIO válido encontrado:")
                 logger.info(f"   📋 Prefactura: {resultado['prefactura']}")
@@ -206,8 +396,9 @@ class AlsuaMailAutomation:
                 
                 # Ejecutar automatización GM
                 if self.ejecutar_automatizacion_gm(resultado):
-                    # Marcar correo como procesado solo si fue exitoso
-                    self.correos_procesados.add(correo_id)
+                    # ===== MARCAR COMO PROCESADO Y CREADO =====
+                    self.marcar_correo_procesado(mensaje, "COMPLETADO")
+                    self.marcar_viaje_creado(resultado, "COMPLETADO")
                     
                     # Marcar correo como leído para evitar reprocesamiento
                     mensaje.UnRead = False
@@ -218,15 +409,19 @@ class AlsuaMailAutomation:
                     
                     return True
                 else:
-                    logger.warning("⚠️ Viaje falló - necesita revisión manual")
+                    logger.warning("⚠️ Viaje falló - marcando para evitar reintento")
+                    # Marcar correo como procesado con error para evitar bucle infinito
+                    self.marcar_correo_procesado(mensaje, "ERROR_GM_AUTOMATION")
                     logger.warning(f"📋 Archivo conservado para revisión: {ruta_local}")
-                    # NO eliminamos el archivo para que puedan revisarlo
-                    # NO marcamos el correo como procesado para evitar reprocesar
-                    # Pero SÍ continuamos con el siguiente correo
                     return False
                     
         except Exception as e:
             logger.error(f"❌ Error al procesar correo: {e}")
+            # Marcar como procesado con error para evitar bucle infinito
+            try:
+                self.marcar_correo_procesado(mensaje, "ERROR_PROCESAMIENTO")
+            except:
+                pass
             return False
             
         return False
@@ -266,8 +461,11 @@ class AlsuaMailAutomation:
             return False
     
     def revisar_correos_nuevos(self):
-        """Revisa correos nuevos en Outlook"""
+        """Revisa correos nuevos en Outlook - VERSIÓN MEJORADA"""
         try:
+            # Limpiar archivos antiguos automáticamente
+            self.limpiar_archivos_antiguos()
+            
             logger.info("📬 Revisando correos nuevos...")
             
             # Conectar a Outlook
@@ -280,19 +478,40 @@ class AlsuaMailAutomation:
             
             correos_procesados = 0
             correos_totales = mensajes.Count
+            correos_saltados = 0
             
             logger.info(f"📊 Correos no leídos encontrados: {correos_totales}")
+            logger.info(f"📊 Correos ya procesados en memoria: {len(self.correos_procesados)}")
+            logger.info(f"📊 Viajes ya creados en memoria: {len(self.viajes_creados)}")
             
             for mensaje in mensajes:
-                if self.procesar_correo_individual(mensaje):
-                    correos_procesados += 1
+                try:
+                    # Verificación rápida para saltear correos obvios
+                    remitente = mensaje.SenderEmailAddress or ""
+                    if "PreFacturacionTransportes@walmart.com" not in remitente:
+                        continue
                     
-                # Limitar procesamiento para evitar sobrecarga
-                if correos_procesados >= 5:  # Máximo 5 correos por ciclo
-                    logger.info("⚠️ Límite de procesamiento alcanzado, esperando siguiente ciclo")
-                    break
+                    if self.procesar_correo_individual(mensaje):
+                        correos_procesados += 1
+                    else:
+                        correos_saltados += 1
+                        
+                    # Limitar procesamiento para evitar sobrecarga
+                    if correos_procesados >= 3:  # Reducido a 3 para evitar sobrecarga
+                        logger.info("⚠️ Límite de procesamiento alcanzado, esperando siguiente ciclo")
+                        break
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error procesando mensaje individual: {e}")
+                    correos_saltados += 1
+                    continue
             
-            logger.info(f"✅ Ciclo completado: {correos_procesados} correos procesados de {correos_totales}")
+            logger.info(f"✅ Ciclo completado:")
+            logger.info(f"   📧 Total correos revisados: {correos_totales}")
+            logger.info(f"   ✅ Correos procesados: {correos_procesados}")
+            logger.info(f"   ⏭️ Correos saltados: {correos_saltados}")
+            logger.info(f"   💾 Total en tracking: correos={len(self.correos_procesados)}, viajes={len(self.viajes_creados)}")
+            
             return True
             
         except Exception as e:
@@ -301,7 +520,8 @@ class AlsuaMailAutomation:
     
     def ejecutar_bucle_continuo(self, intervalo_minutos=5):
         """Ejecuta el sistema en bucle continuo"""
-        logger.info("🚀 Iniciando sistema de automatización Alsua Transport")
+        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v2.0")
+        logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS ACTIVADA")
         logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
@@ -353,6 +573,21 @@ class AlsuaMailAutomation:
                 pass
                 
         return resultado
+    
+    def mostrar_estadisticas(self):
+        """Muestra estadísticas del sistema"""
+        logger.info("📊 ESTADÍSTICAS DEL SISTEMA:")
+        logger.info(f"   📧 Correos procesados: {len(self.correos_procesados)}")
+        logger.info(f"   🚛 Viajes creados: {len(self.viajes_creados)}")
+        
+        # Mostrar últimos procesados
+        if self.correos_procesados:
+            logger.info("   📧 Últimos correos procesados:")
+            items = list(self.correos_procesados.items())[-3:]
+            for key, value in items:
+                estado = value.get('estado', 'DESCONOCIDO')
+                prefactura = value.get('prefactura', 'Sin prefactura')
+                logger.info(f"      - {prefactura} | {estado}")
 
 def main():
     """Función principal"""
@@ -360,12 +595,16 @@ def main():
     
     print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║              ALSUA TRANSPORT - SISTEMA COMPLETO             ║
+    ║              ALSUA TRANSPORT - SISTEMA COMPLETO v2.0        ║
     ║                  Mail Reader + GM Automation                ║
+    ║                  🛡️ PROTECCIÓN ANTI-DUPLICADOS               ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
     sistema = AlsuaMailAutomation()
+    
+    # Mostrar estadísticas iniciales
+    sistema.mostrar_estadisticas()
     
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
         # Modo prueba: una sola ejecución
