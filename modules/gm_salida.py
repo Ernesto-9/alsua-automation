@@ -134,24 +134,57 @@ class GMSalidaAutomation:
             return False
     
     def configurar_filtros_busqueda(self):
-        """Configura los filtros de búsqueda"""
+        """Configura los filtros de búsqueda con los checkboxes específicos"""
         try:
-            # Abrir configuración de Búsqueda General
+            logger.info("⚙️ Configurando filtros de búsqueda...")
+            
+            # Paso 1: Abrir configuración de Búsqueda General
             busqueda_link = self.wait.until(EC.element_to_be_clickable((By.ID, "LINK_BUSQUEDAGENERAL")))
             busqueda_link.click()
             time.sleep(2)
             logger.info("✅ Configuración de Búsqueda General abierta")
             
-            # Hacer clic en "Seleccionar" para aplicar la configuración de filtros
+            # Paso 2: DESMARCAR filtros que NO queremos
+            filtros_a_desmarcar = ["_1_TABLE_BUSQUEDAGENERAL_1", "_2_TABLE_BUSQUEDAGENERAL_1"]
+            
+            for filtro_id in filtros_a_desmarcar:
+                try:
+                    checkbox = self.driver.find_element(By.ID, filtro_id)
+                    if checkbox.is_selected():
+                        self.driver.execute_script("arguments[0].click();", checkbox)
+                        logger.info(f"   ✅ DESMARCADO: {filtro_id}")
+                        time.sleep(0.3)
+                    else:
+                        logger.info(f"   ℹ️ Ya desmarcado: {filtro_id}")
+                except Exception as e:
+                    logger.warning(f"   ⚠️ No se pudo desmarcar {filtro_id}: {e}")
+            
+            # Paso 3: MARCAR filtros que SÍ queremos
+            filtros_a_marcar = ["_5_TABLE_BUSQUEDAGENERAL_1", "_7_TABLE_BUSQUEDAGENERAL_1", "_8_TABLE_BUSQUEDAGENERAL_1"]
+            
+            for filtro_id in filtros_a_marcar:
+                try:
+                    checkbox = self.driver.find_element(By.ID, filtro_id)
+                    if not checkbox.is_selected():
+                        self.driver.execute_script("arguments[0].click();", checkbox)
+                        logger.info(f"   ✅ MARCADO: {filtro_id}")
+                        time.sleep(0.3)
+                    else:
+                        logger.info(f"   ℹ️ Ya marcado: {filtro_id}")
+                except Exception as e:
+                    logger.warning(f"   ⚠️ No se pudo marcar {filtro_id}: {e}")
+            
+            # Paso 4: Aplicar configuración
             try:
                 seleccionar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_SELECCIONARBUSQUEDAGENERAL")))
                 seleccionar_btn.click()
                 time.sleep(2)
-                logger.info("✅ Botón 'Seleccionar' clickeado - Filtros configurados")
+                logger.info("✅ Filtros aplicados con 'Seleccionar'")
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en 'Seleccionar': {e}")
                 return False
             
+            logger.info("✅ Configuración de filtros completada")
             return True
             
         except Exception as e:
@@ -233,10 +266,34 @@ class GMSalidaAutomation:
         try:
             logger.info("🔍 Buscando viajes en la tabla...")
             
-            # TODO: TEMPORAL PARA PRUEBAS - BORRAR DESPUÉS
-            logger.info("⏸️ MODO PRUEBAS: Selecciona manualmente el viaje que quieres procesar")
-            input("🟢 Presiona ENTER después de seleccionar el viaje que quieres...")
-            logger.info("✅ Continuando automatización...")
+            # Verificar si hay resultados en la tabla
+            try:
+                # Buscar filas de la tabla que contengan datos
+                filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
+                
+                if len(filas_tabla) == 0:
+                    logger.error("❌ No se encontraron viajes en la tabla")
+                    return False
+                elif len(filas_tabla) == 1:
+                    # Solo hay un viaje - seleccionarlo automáticamente
+                    primera_fila = filas_tabla[0]
+                    self.driver.execute_script("arguments[0].click();", primera_fila)
+                    time.sleep(1)
+                    logger.info("✅ Viaje único seleccionado automáticamente")
+                else:
+                    # Múltiples viajes - seleccionar el primero
+                    logger.info(f"ℹ️ Se encontraron {len(filas_tabla)} viajes")
+                    primera_fila = filas_tabla[0]
+                    self.driver.execute_script("arguments[0].click();", primera_fila)
+                    time.sleep(1)
+                    logger.info("✅ Primer viaje seleccionado automáticamente")
+                
+            except Exception as e:
+                logger.warning(f"⚠️ Error en selección automática: {e}")
+                # Fallback: selección manual
+                logger.info("⏸️ SELECCIÓN MANUAL: Selecciona manualmente el viaje que quieres procesar")
+                input("🟢 Presiona ENTER después de seleccionar el viaje...")
+                logger.info("✅ Continuando automatización...")
             
             # Verificar que hay un viaje seleccionado
             try:
@@ -245,7 +302,7 @@ class GMSalidaAutomation:
                     logger.info("✅ Viaje seleccionado - Link 'Salida' disponible")
                     return True
                 else:
-                    logger.error("❌ No se detectó link 'Salida' - ¿Seleccionaste un viaje?")
+                    logger.error("❌ No se detectó link 'Salida' - ¿Hay un viaje seleccionado?")
                     return False
                     
             except Exception as e:
@@ -366,26 +423,31 @@ class GMSalidaAutomation:
             
             logger.info(f"📋 Procesando: Prefactura={prefactura}, Fecha={fecha_viaje}, Determinante={clave_determinante}")
             
-            # Configurar filtros si es necesario
+            # Configurar filtros MEJORADO
             if configurar_filtros:
+                logger.info("⚙️ Configurando filtros de búsqueda...")
                 if not self.configurar_filtros_busqueda():
-                    logger.warning("⚠️ No se pudieron configurar los filtros de búsqueda")
-                    # Continuar de todas formas
+                    logger.warning("⚠️ No se pudieron configurar los filtros - continuando de todas formas")
+                    # Continuar de todas formas, los filtros no son críticos
             
             # Ajustar fecha desde
             if not self.ajustar_fecha_desde(fecha_viaje):
-                return False
+                logger.warning("⚠️ Error ajustando fecha - continuando")
+                # No es crítico, continuar
             
             # Seleccionar sucursal
             if not self.seleccionar_sucursal(clave_determinante):
-                return False
+                logger.warning("⚠️ Error seleccionando sucursal - continuando")
+                # No es crítico, continuar
             
             # Buscar viaje
             if not self.buscar_viaje(prefactura):
+                logger.error("❌ Error crítico buscando viaje")
                 return False
             
             # Seleccionar viaje de la tabla
             if not self.seleccionar_viaje_de_tabla():
+                logger.error("❌ Error crítico seleccionando viaje")
                 return False
             
             # Procesar salida del viaje
