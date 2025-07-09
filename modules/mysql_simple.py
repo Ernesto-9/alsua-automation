@@ -144,18 +144,18 @@ class MySQLAcumuladoPrefactura:
             # Convertir fecha al formato correcto
             fecha_procesada = self._procesar_fecha(fecha_viaje)
             
-            # Query INSERT incluyendo campos obligatorios
+            # Query INSERT incluyendo TODOS los campos obligatorios
             query = """
                 INSERT INTO acumuladoprefactura 
-                (NUMERO, NOPREFACTURA, FECHA, UUID, VIAJEGM, estatus, PLACATRACTOR, PLACAREMOLQUE, TOTALFACTURA2, TOTALFACTURA3)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (NUMERO, NOPREFACTURA, FECHA, UUID, VIAJEGM, estatus, PLACATRACTOR, PLACAREMOLQUE, TOTALFACTURA2, TOTALFACTURA3, TOTALENTREGAS)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """
             
             # Generar valores para campos obligatorios
             import time
             numero_temporal = str(int(time.time()) % 99999999999)  # Número único basado en timestamp
             
-            valores = (numero_temporal, prefactura, fecha_procesada, uuid, viajegm, estatus, placa_tractor, placa_remolque, "0", "0")
+            valores = (numero_temporal, prefactura, fecha_procesada, uuid, viajegm, estatus, placa_tractor, placa_remolque, "0", "0", 1)
             cursor.execute(query, valores)
             
             logger.info(f"✅ Viaje registrado en MySQL:")
