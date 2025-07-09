@@ -18,7 +18,7 @@ class ProcesadorLlegadaFactura:
         self.wait = WebDriverWait(driver, 20)
         
     def procesar_llegada_y_factura(self):
-        """Proceso principal de llegada y facturación"""
+        """Proceso principal de llegada y facturación CON PAUSA PARA EXTRACCIÓN"""
         try:
             logger.info("🚀 Iniciando proceso de llegada y facturación")
             
@@ -321,7 +321,7 @@ class ProcesadorLlegadaFactura:
             return False
     
     def _procesar_facturacion(self):
-        """Proceso completo de facturación"""
+        """Proceso completo de facturación CON PAUSA PARA EXTRACCIÓN"""
         try:
             logger.info("💰 Iniciando proceso de facturación...")
             
@@ -351,6 +351,27 @@ class ProcesadorLlegadaFactura:
             except Exception as e:
                 logger.error(f"❌ Error al seleccionar tipo de documento: {e}")
                 return False
+            
+            # 🚨🚨🚨 PAUSA CRÍTICA PARA EXTRACCIÓN MANUAL 🚨🚨🚨
+            logger.info("🚨" * 20)
+            logger.info("🚨 PAUSA PARA EXTRACCIÓN DE DATOS")
+            logger.info("🚨 Antes de hacer clic en 'Aceptar', extrae:")
+            logger.info("🚨 1. UUIDE (folio de la factura)")
+            logger.info("🚨 2. VIAJEGM (dato del viaje)")
+            logger.info("🚨 3. Cualquier otro dato necesario")
+            logger.info("🚨" * 20)
+            
+            # OBTENER DATOS EXTRAÍDOS DEL USUARIO
+            uuide = input("📋 Ingresa UUIDE (folio de la factura): ").strip()
+            viajegm = input("📋 Ingresa VIAJEGM (dato del viaje): ").strip()
+            
+            logger.info(f"✅ Datos extraídos:")
+            logger.info(f"   🆔 UUIDE: {uuide}")
+            logger.info(f"   🚛 VIAJEGM: {viajegm}")
+            
+            # Guardar los datos extraídos en el objeto para uso posterior
+            self.datos_viaje['uuide'] = uuide if uuide else None
+            self.datos_viaje['viajegm'] = viajegm if viajegm else None
             
             # Hacer clic en "Aceptar" para confirmar la facturación
             try:
@@ -503,17 +524,35 @@ class ProcesadorLlegadaFactura:
                 
         except Exception as e:
             logger.warning(f"⚠️ Error al verificar datos de factura: {e}")
+    
+    def obtener_datos_extraidos(self):
+        """Retorna los datos extraídos (UUIDE y VIAJEGM)"""
+        return {
+            'uuide': self.datos_viaje.get('uuide'),
+            'viajegm': self.datos_viaje.get('viajegm')
+        }
 
 
 def procesar_llegada_factura(driver, datos_viaje):
-    """Función principal para procesar llegada y facturación"""
+    """Función principal para procesar llegada y facturación CON EXTRACCIÓN"""
     try:
-        logger.info("🚀 Iniciando ProcesadorLlegadaFactura...")
+        logger.info("🚀 Iniciando ProcesadorLlegadaFactura CON EXTRACCIÓN...")
         procesador = ProcesadorLlegadaFactura(driver, datos_viaje)
         resultado = procesador.procesar_llegada_y_factura()
         
         if resultado:
             logger.info("✅ Proceso de llegada y facturación completado exitosamente")
+            
+            # Retornar también los datos extraídos
+            datos_extraidos = procesador.obtener_datos_extraidos()
+            logger.info(f"📊 Datos extraídos: {datos_extraidos}")
+            
+            # Actualizar datos_viaje con la información extraída
+            if datos_extraidos['uuide']:
+                datos_viaje['uuide'] = datos_extraidos['uuide']
+            if datos_extraidos['viajegm']:
+                datos_viaje['viajegm'] = datos_extraidos['viajegm']
+                
         else:
             logger.error("❌ Error en proceso de llegada y facturación")
             
