@@ -105,34 +105,38 @@ class MySQLAcumuladoPrefactura:
             logger.error(f"❌ Error verificando tabla: {e}")
             return False
     
-    def registrar_viaje_exitoso(self, prefactura, fecha_viaje, uuide=None, viajegm=None):
+    def registrar_viaje_exitoso(self, prefactura, fecha_viaje, uuid=None, viajegm=None, placa_tractor=None, placa_remolque=None):
         """Registra un viaje exitoso en la tabla"""
         return self._registrar_viaje(
             prefactura=prefactura,
             fecha_viaje=fecha_viaje,
             estatus='EXITOSO',
             anotaciones=None,
-            uuide=uuide,
-            viajegm=viajegm
+            uuid=uuid,
+            viajegm=viajegm,
+            placa_tractor=placa_tractor,
+            placa_remolque=placa_remolque
         )
     
-    def registrar_viaje_fallido(self, prefactura, fecha_viaje, motivo_fallo):
+    def registrar_viaje_fallido(self, prefactura, fecha_viaje, motivo_fallo, placa_tractor=None, placa_remolque=None):
         """Registra un viaje fallido en la tabla"""
         return self._registrar_viaje(
             prefactura=prefactura,
             fecha_viaje=fecha_viaje,
             estatus='FALLIDO',
             anotaciones=motivo_fallo,
-            uuide=None,
-            viajegm=None
+            uuid=None,
+            viajegm=None,
+            placa_tractor=placa_tractor,
+            placa_remolque=placa_remolque
         )
     
-    def _registrar_viaje(self, prefactura, fecha_viaje, estatus, anotaciones, uuide=None, viajegm=None):
-        """Registra un viaje en la base de datos"""
+    def _registrar_viaje(self, prefactura, fecha_viaje, estatus, anotaciones, uuid=None, viajegm=None, placa_tractor=None, placa_remolque=None):
+        """Registra un viaje en la base de datos usando la estructura real"""
         try:
             if not self.conectar():
                 logger.warning("⚠️ No se pudo conectar a MySQL - guardando en archivo")
-                self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuide, viajegm)
+                self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuid, viajegm, placa_tractor, placa_remolque)
                 return False
             
             cursor = self.connection.cursor()
@@ -140,26 +144,30 @@ class MySQLAcumuladoPrefactura:
             # Convertir fecha al formato correcto
             fecha_procesada = self._procesar_fecha(fecha_viaje)
             
-            # Query INSERT
+            # Query INSERT usando los nombres de columnas reales
             query = """
                 INSERT INTO acumuladoprefactura 
-                (UUIDE, VIAJEGM, prefactura, fecha, estatus, anotaciones)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (NOPREFACTURA, FECHA, UUID, VIAJEGM, estatus, PLACATRACTOR, PLACAREMOLQUE)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             
-            valores = (uuide, viajegm, prefactura, fecha_procesada, estatus, anotaciones)
+            valores = (prefactura, fecha_procesada, uuid, viajegm, estatus, placa_tractor, placa_remolque)
             cursor.execute(query, valores)
             
             logger.info(f"✅ Viaje registrado en MySQL:")
-            logger.info(f"   📋 Prefactura: {prefactura}")
-            logger.info(f"   📅 Fecha: {fecha_procesada}")
-            logger.info(f"   📊 Estatus: {estatus}")
-            if uuide:
-                logger.info(f"   🆔 UUIDE: {uuide}")
+            logger.info(f"   📋 NOPREFACTURA: {prefactura}")
+            logger.info(f"   📅 FECHA: {fecha_procesada}")
+            logger.info(f"   📊 estatus: {estatus}")
+            if uuid:
+                logger.info(f"   🆔 UUID: {uuid}")
             if viajegm:
                 logger.info(f"   🚛 VIAJEGM: {viajegm}")
+            if placa_tractor:
+                logger.info(f"   🚗 PLACATRACTOR: {placa_tractor}")
+            if placa_remolque:
+                logger.info(f"   🚚 PLACAREMOLQUE: {placa_remolque}")
             if anotaciones:
-                logger.info(f"   📝 Anotaciones: {anotaciones}")
+                logger.info(f"   📝 Notas: {anotaciones}")
             
             cursor.close()
             return True
@@ -167,11 +175,11 @@ class MySQLAcumuladoPrefactura:
         except Error as e:
             logger.error(f"❌ Error MySQL: {e}")
             logger.error(f"   Error Code: {e.errno}")
-            self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuide, viajegm)
+            self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuid, viajegm, placa_tractor, placa_remolque)
             return False
         except Exception as e:
             logger.error(f"❌ Error general: {e}")
-            self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuide, viajegm)
+            self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuid, viajegm, placa_tractor, placa_remolque)
             return False
     
     def _procesar_fecha(self, fecha_str):
@@ -189,14 +197,14 @@ class MySQLAcumuladoPrefactura:
             # Usar fecha actual como fallback
             return datetime.now().strftime('%Y-%m-%d')
     
-    def _guardar_fallback(self, prefactura, fecha_viaje, estatus, anotaciones, uuide, viajegm):
+    def _guardar_fallback(self, prefactura, fecha_viaje, estatus, anotaciones, uuid, viajegm, placa_tractor, placa_remolque):
         """Guarda en archivo si MySQL no está disponible"""
         try:
             archivo_fallback = "viajes_fallback.log"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             with open(archivo_fallback, 'a', encoding='utf-8') as f:
-                f.write(f"{timestamp}|{prefactura}|{fecha_viaje}|{estatus}|{anotaciones or ''}|{uuide or ''}|{viajegm or ''}\n")
+                f.write(f"{timestamp}|{prefactura}|{fecha_viaje}|{estatus}|{anotaciones or ''}|{uuid or ''}|{viajegm or ''}|{placa_tractor or ''}|{placa_remolque or ''}\n")
                 
             logger.warning(f"⚠️ Viaje guardado en archivo fallback: {archivo_fallback}")
             
@@ -228,13 +236,13 @@ class MySQLAcumuladoPrefactura:
 mysql_acumulado = MySQLAcumuladoPrefactura()
 
 # Funciones de conveniencia (compatibilidad con código existente)
-def registrar_viaje_exitoso(prefactura, fecha_viaje, uuide=None, viajegm=None):
+def registrar_viaje_exitoso(prefactura, fecha_viaje, uuid=None, viajegm=None, placa_tractor=None, placa_remolque=None):
     """Registra un viaje exitoso"""
-    return mysql_acumulado.registrar_viaje_exitoso(prefactura, fecha_viaje, uuide, viajegm)
+    return mysql_acumulado.registrar_viaje_exitoso(prefactura, fecha_viaje, uuid, viajegm, placa_tractor, placa_remolque)
 
-def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo):
+def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor=None, placa_remolque=None):
     """Registra un viaje fallido"""
-    return mysql_acumulado.registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo)
+    return mysql_acumulado.registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor, placa_remolque)
 
 def cerrar_conexion():
     """Cierra la conexión MySQL"""
@@ -251,11 +259,11 @@ if __name__ == "__main__":
         print("\n🧪 Probando registros de ejemplo...")
         
         # Ejemplo viaje exitoso
-        exito1 = registrar_viaje_exitoso("7996845", "08/07/2025", "UUID123", "GM456")
+        exito1 = registrar_viaje_exitoso("7996845", "08/07/2025", "UUID123", "GM456", "94BB1F", "852YH6")
         print(f"Viaje exitoso: {'✅' if exito1 else '❌'}")
         
         # Ejemplo viaje fallido
-        exito2 = registrar_viaje_fallido("7996846", "08/07/2025", "Operador ocupado")
+        exito2 = registrar_viaje_fallido("7996846", "08/07/2025", "Operador ocupado", "94BB1F", "852YH6")
         print(f"Viaje fallido: {'✅' if exito2 else '❌'}")
     
     # Cerrar conexión
