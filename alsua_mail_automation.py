@@ -2,7 +2,7 @@
 """
 Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
-VERSIÓN FINAL CON PROTECCIÓN ANTI-DUPLICADOS Y MANEJO DE OPERADOR OCUPADO
+VERSIÓN MEJORADA CON MANEJO ROBUSTO DE DRIVER CORRUPTO
 """
 
 import os
@@ -41,6 +41,7 @@ class AlsuaMailAutomation:
         self.viajes_creados = self.cargar_viajes_creados()
         
         self.driver = None
+        self.driver_corrupto = False  # NUEVO: Flag para trackear driver corrupto
         self._crear_carpeta_descarga()
         
     def _crear_carpeta_descarga(self):
@@ -267,7 +268,84 @@ class AlsuaMailAutomation:
             logger.error(f"❌ Error registrando viaje para revisión: {e}")
     
     # ==========================================
-    # FUNCIONES PRINCIPALES
+    # NUEVAS FUNCIONES PARA MANEJO DE DRIVER
+    # ==========================================
+    
+    def verificar_driver_valido(self):
+        """Verifica si el driver actual sigue siendo válido"""
+        if not self.driver or self.driver_corrupto:
+            return False
+            
+        try:
+            # Intentar una operación simple para verificar que el driver funciona
+            current_url = self.driver.current_url
+            title = self.driver.title
+            
+            # Verificar que estamos en una página válida de GM Transport
+            if "softwareparatransporte.com" in current_url:
+                logger.info(f"✅ Driver válido - URL: {current_url[:80]}...")
+                return True
+            else:
+                logger.warning(f"⚠️ Driver en página incorrecta: {current_url}")
+                return False
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Driver inválido detectado: {e}")
+            self.driver_corrupto = True
+            return False
+    
+    def cerrar_driver_corrupto(self):
+        """Cierra y limpia el driver corrupto"""
+        try:
+            if self.driver:
+                logger.info("🗑️ Cerrando driver corrupto...")
+                self.driver.quit()
+                time.sleep(2)  # Esperar a que se cierre completamente
+                logger.info("✅ Driver corrupto cerrado")
+        except Exception as e:
+            logger.warning(f"⚠️ Error cerrando driver corrupto: {e}")
+        finally:
+            self.driver = None
+            self.driver_corrupto = False
+    
+    def inicializar_driver_nuevo(self):
+        """Inicializa un nuevo driver con login"""
+        try:
+            logger.info("🔄 Inicializando nuevo driver...")
+            
+            # Asegurar que no hay driver anterior
+            if self.driver:
+                self.cerrar_driver_corrupto()
+            
+            # Crear nuevo driver con login
+            self.driver = login_to_gm()
+            
+            if self.driver:
+                self.driver_corrupto = False
+                logger.info("✅ Nuevo driver inicializado exitosamente")
+                return True
+            else:
+                logger.error("❌ Error en login GM")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error crítico inicializando driver: {e}")
+            self.driver = None
+            self.driver_corrupto = True
+            return False
+    
+    def obtener_driver_valido(self):
+        """Obtiene un driver válido, creando uno nuevo si es necesario"""
+        # Si el driver actual es válido, usarlo
+        if self.verificar_driver_valido():
+            return True
+        
+        # Si no es válido, crear uno nuevo
+        logger.info("🔄 Driver no válido, creando uno nuevo...")
+        return self.inicializar_driver_nuevo()
+    
+    # ==========================================
+    # FUNCIONES PRINCIPALES MODIFICADAS
     # ==========================================
     
     def extraer_prefactura_del_asunto(self, asunto):
@@ -323,7 +401,7 @@ class AlsuaMailAutomation:
             return datetime.now().strftime("%d/%m/%Y")
     
     def procesar_correo_individual(self, mensaje):
-        """Procesa un correo individual - MANEJO INTELIGENTE DE ERRORES"""
+        """Procesa un correo individual - MANEJO INTELIGENTE DE ERRORES Y DRIVER"""
         try:
             # ===== VERIFICACIÓN ANTI-DUPLICADOS =====
             if self.ya_fue_procesado_correo(mensaje):
@@ -457,6 +535,22 @@ class AlsuaMailAutomation:
                     
                     return "OPERADOR_OCUPADO"
                     
+                elif resultado_gm == "DRIVER_CORRUPTO":
+                    # 🚨 DRIVER CORRUPTO - NO MARCAR COMO PROCESADO PARA PERMITIR REINTENTO
+                    logger.error("🚨 DRIVER CORRUPTO: Fallo en navegación GM Transport")
+                    logger.info("🔄 NO marcando correo como procesado - se reintentará en próximo ciclo")
+                    logger.info("📧 Correo permanecerá como no leído para reintento automático")
+                    
+                    # NO registrar para revisión manual - es error técnico resoluble
+                    # NO marcar correo como procesado - permitir reintento
+                    # NO marcar como leído - mantener como no leído
+                    
+                    # Limpiar archivo Excel ya que se volverá a descargar
+                    os.remove(ruta_local)
+                    logger.info(f"🗑️ Archivo limpiado para reintento: {ruta_local}")
+                    
+                    return "DRIVER_CORRUPTO"
+                    
                 elif resultado_gm:
                     # ✅ ÉXITO COMPLETO - REGISTRAR EN MYSQL
                     try:
@@ -513,86 +607,80 @@ class AlsuaMailAutomation:
         return False
     
     def ejecutar_automatizacion_gm(self, datos_viaje):
-        """Ejecuta la automatización completa de GM Transport - CON MANEJO DE OPERADOR OCUPADO"""
+        """Ejecuta la automatización completa de GM Transport - CON MANEJO ROBUSTO DE DRIVER"""
         try:
             logger.info("🤖 Iniciando automatización GM Transport...")
             
-            # Verificar si el driver sigue activo
-            driver_valido = False
-            if self.driver:
-                try:
-                    # Intentar una operación simple para verificar que el driver funciona
-                    self.driver.current_url
-                    driver_valido = True
-                    logger.info("✅ Driver existente válido")
-                except Exception as e:
-                    logger.warning(f"⚠️ Driver existente inválido: {e}")
-                    try:
-                        self.driver.quit()
-                    except:
-                        pass
-                    self.driver = None
+            # PASO 1: VERIFICAR/OBTENER DRIVER VÁLIDO
+            if not self.obtener_driver_valido():
+                logger.error("❌ No se pudo obtener driver válido para GM Transport")
+                # Marcar como corrupto para forzar reinicio en próximo intento
+                self.driver_corrupto = True
+                return "DRIVER_CORRUPTO"
             
-            # Inicializar driver si no existe o falló
-            if not driver_valido:
-                logger.info("🔐 Realizando nuevo login en GM Transport...")
-                try:
-                    self.driver = login_to_gm()
-                    
-                    if not self.driver:
-                        logger.error("❌ Error en login GM")
-                        return False
-                        
-                    logger.info("✅ Login exitoso en GM Transport")
-                except Exception as e:
-                    logger.error(f"❌ Error crítico en login: {e}")
-                    return False
-            
-            # Crear instancia de automatización con los datos del correo
+            # PASO 2: CREAR INSTANCIA DE AUTOMATIZACIÓN
             try:
                 automation = GMTransportAutomation(self.driver)
                 automation.datos_viaje = datos_viaje
                 
-                # Ejecutar proceso completo
+                # PASO 3: EJECUTAR PROCESO COMPLETO CON MANEJO DE ERRORES
+                logger.info("🚀 Ejecutando proceso completo de GM Transport...")
                 resultado = automation.fill_viaje_form()
                 
                 if resultado == "OPERADOR_OCUPADO":
                     # El navegador ya fue cerrado en gm_salida.py
                     logger.warning("🚨 Operador ocupado detectado")
                     logger.info("📝 Error ya registrado en MySQL")
-                    self.driver = None  # Marcar driver como inválido
+                    # Marcar driver como corrupto para forzar nuevo login
+                    self.driver = None
+                    self.driver_corrupto = True
                     return "OPERADOR_OCUPADO"
                     
                 elif resultado:
                     logger.info("🎉 Automatización GM completada exitosamente")
+                    # Driver sigue siendo válido
                     return True
                 else:
                     logger.error("❌ Error en automatización GM")
+                    # Verificar si el driver sigue siendo válido después del error
+                    if not self.verificar_driver_valido():
+                        logger.warning("⚠️ Driver corrupto después del error")
+                        self.cerrar_driver_corrupto()
+                        return "DRIVER_CORRUPTO"
                     return False
                     
-            except Exception as e:
-                logger.error(f"❌ Error durante automatización: {e}")
-                # Si hay error, intentar cerrar driver corrupto
-                try:
-                    if self.driver:
-                        self.driver.quit()
-                        self.driver = None
-                        logger.info("🗑️ Driver corrupto cerrado")
-                except:
-                    pass
-                return False
+            except Exception as automation_error:
+                logger.error(f"❌ Error durante automatización: {automation_error}")
+                
+                # Verificar si el error fue por driver corrupto
+                if any(keyword in str(automation_error).lower() for keyword in 
+                       ['invalid session', 'chrome not reachable', 'no such window', 'session deleted']):
+                    logger.error("🚨 Error detectado como driver corrupto")
+                    self.cerrar_driver_corrupto()
+                    return "DRIVER_CORRUPTO"
+                else:
+                    # Error general - verificar si driver sigue válido
+                    if not self.verificar_driver_valido():
+                        logger.warning("⚠️ Driver corrupto después del error general")
+                        self.cerrar_driver_corrupto()
+                        return "DRIVER_CORRUPTO"
+                    return False
                 
         except Exception as e:
             logger.error(f"❌ Error general en automatización GM: {e}")
-            return False
+            # En caso de error general, asumir que el driver está corrupto
+            self.cerrar_driver_corrupto()
+            return "DRIVER_CORRUPTO"
     
-    def revisar_correos_nuevos(self):
-        """Revisa correos nuevos en Outlook - CON MANEJO DE OPERADOR OCUPADO"""
+    def revisar_correos_nuevos(self, modo_test=False):
+        """Revisa correos nuevos en Outlook - CON MANEJO ROBUSTO DE ERRORES"""
         try:
             # Limpiar archivos antiguos automáticamente
             self.limpiar_archivos_antiguos()
             
             logger.info("📬 Revisando correos nuevos...")
+            if modo_test:
+                logger.info("🧪 MODO TEST: Pausará después de cada viaje para inspección")
             
             # Conectar a Outlook
             outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
@@ -605,7 +693,9 @@ class AlsuaMailAutomation:
             correos_procesados = 0
             correos_totales = mensajes.Count
             correos_saltados = 0
-            operadores_ocupados = 0  # NUEVO CONTADOR
+            operadores_ocupados = 0
+            drivers_corruptos = 0
+            reintentos_pendientes = 0  # NUEVO CONTADOR
             
             logger.info(f"📊 Correos no leídos encontrados: {correos_totales}")
             logger.info(f"📊 Correos ya procesados en memoria: {len(self.correos_procesados)}")
@@ -618,24 +708,67 @@ class AlsuaMailAutomation:
                     if "PreFacturacionTransportes@walmart.com" not in remitente:
                         continue
                     
+                    # Extraer prefactura para logging
+                    asunto = mensaje.Subject or ""
+                    prefactura = self.extraer_prefactura_del_asunto(asunto)
+                    
+                    logger.info(f"🚀 Procesando viaje: {prefactura}")
                     resultado_procesamiento = self.procesar_correo_individual(mensaje)
                     
                     if resultado_procesamiento == "OPERADOR_OCUPADO":
                         operadores_ocupados += 1
-                        logger.warning(f"🚨 Viaje #{operadores_ocupados} con operador ocupado - registrado en MySQL")
+                        logger.warning(f"🚨 Viaje {prefactura} con operador ocupado - registrado en MySQL")
+                        
+                        # PAUSA EN MODO TEST
+                        if modo_test:
+                            input(f"🚨 OPERADOR OCUPADO en viaje {prefactura}. Presiona ENTER para continuar...")
+                        else:
+                            time.sleep(3)
+                            
+                    elif resultado_procesamiento == "DRIVER_CORRUPTO":
+                        drivers_corruptos += 1
+                        reintentos_pendientes += 1
+                        logger.error(f"🚨 Viaje {prefactura} con driver corrupto - se reintentará automáticamente")
+                        
+                        # PAUSA EN MODO TEST
+                        if modo_test:
+                            input(f"🔧 DRIVER CORRUPTO en viaje {prefactura}. NO marcado como procesado - se reintentará. Presiona ENTER para continuar...")
+                        else:
+                            time.sleep(5)
+                            
                     elif resultado_procesamiento:
                         correos_procesados += 1
+                        logger.info(f"✅ Viaje {prefactura} completado exitosamente")
+                        
+                        # PAUSA EN MODO TEST
+                        if modo_test:
+                            input(f"✅ VIAJE EXITOSO {prefactura}. Presiona ENTER para continuar...")
+                        else:
+                            time.sleep(2)
                     else:
                         correos_saltados += 1
                         
-                    # Limitar procesamiento para evitar sobrecarga
-                    if correos_procesados >= 3:
+                        # PAUSA EN MODO TEST SOLO SI ES UN ERROR QUE REQUIERE ATENCIÓN
+                        if modo_test and "ERROR_GM_AUTOMATION" in str(resultado_procesamiento):
+                            input(f"❌ ERROR EN VIAJE {prefactura} - requiere revisión manual. Presiona ENTER para continuar...")
+                        
+                    # Limitar procesamiento para evitar sobrecarga (excepto en modo test)
+                    if not modo_test and correos_procesados >= 3:
                         logger.info("⚠️ Límite de procesamiento alcanzado, esperando siguiente ciclo")
+                        break
+                    
+                    # Si hay muchos errores de driver, parar para evitar bucle (excepto en modo test)
+                    if not modo_test and drivers_corruptos >= 2:
+                        logger.warning("🚨 Múltiples errores de driver detectados - pausando ciclo")
                         break
                         
                 except Exception as e:
                     logger.error(f"❌ Error procesando mensaje individual: {e}")
                     correos_saltados += 1
+                    
+                    # PAUSA EN MODO TEST PARA ERRORES INESPERADOS
+                    if modo_test:
+                        input(f"❌ ERROR INESPERADO procesando correo. Presiona ENTER para continuar...")
                     continue
             
             logger.info(f"✅ Ciclo completado:")
@@ -643,11 +776,18 @@ class AlsuaMailAutomation:
             logger.info(f"   ✅ Correos procesados: {correos_procesados}")
             logger.info(f"   ⏭️ Correos saltados: {correos_saltados}")
             logger.info(f"   🚨 Operadores ocupados: {operadores_ocupados}")
+            logger.info(f"   🔧 Drivers corruptos: {drivers_corruptos}")
+            logger.info(f"   🔄 Reintentos pendientes: {reintentos_pendientes}")
             logger.info(f"   💾 Total en tracking: correos={len(self.correos_procesados)}, viajes={len(self.viajes_creados)}")
             
             if operadores_ocupados > 0:
                 logger.info("📝 Los errores de operador ocupado fueron registrados en MySQL")
                 logger.info("🔧 Estos viajes requieren revisión manual")
+            
+            if drivers_corruptos > 0:
+                logger.warning("🚨 Errores de driver corrupto detectados")
+                logger.warning("🔄 Estos correos NO fueron marcados como procesados - se reintentarán automáticamente")
+                logger.warning("💡 Si persisten, considera verificar la configuración del navegador")
             
             return True
             
@@ -657,21 +797,22 @@ class AlsuaMailAutomation:
     
     def ejecutar_bucle_continuo(self, intervalo_minutos=5):
         """Ejecuta el sistema en bucle continuo"""
-        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v2.0")
+        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v3.0")
         logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS ACTIVADA")
-        logger.info("🚨 MANEJO DE OPERADOR OCUPADO CON MYSQL")  # NUEVO
+        logger.info("🚨 MANEJO DE OPERADOR OCUPADO CON MYSQL")
+        logger.info("🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO")  # NUEVO
         logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
         logger.info("🤖 Automatización GM completa habilitada")
-        logger.info("💾 Viajes registrados en base de datos MySQL")  # NUEVO
-        logger.info("🔧 Errores marcados para revisión manual")  # NUEVO
+        logger.info("💾 Viajes registrados en base de datos MySQL")
+        logger.info("🔧 Errores marcados para revisión manual")
         logger.info("=" * 70)
         
         try:
             while True:
                 try:
-                    self.revisar_correos_nuevos()
+                    self.revisar_correos_nuevos(modo_test=False)
                     
                     logger.info(f"😴 Esperando {intervalo_minutos} minutos hasta próxima revisión...")
                     time.sleep(intervalo_minutos * 60)
@@ -682,6 +823,12 @@ class AlsuaMailAutomation:
                     
                 except Exception as e:
                     logger.error(f"❌ Error en ciclo: {e}")
+                    # Cerrar driver corrupto en caso de error grave
+                    if self.driver:
+                        try:
+                            self.cerrar_driver_corrupto()
+                        except:
+                            pass
                     logger.info(f"🔄 Reintentando en {intervalo_minutos} minutos...")
                     time.sleep(intervalo_minutos * 60)
                     
@@ -689,10 +836,10 @@ class AlsuaMailAutomation:
             logger.info("🛑 Sistema detenido por usuario")
             
         finally:
+            # Cerrar driver si existe
             if self.driver:
                 try:
-                    self.driver.quit()
-                    logger.info("✅ Driver cerrado correctamente")
+                    self.cerrar_driver_corrupto()
                 except:
                     pass
             
@@ -707,16 +854,17 @@ class AlsuaMailAutomation:
             logger.info("👋 Sistema de automatización finalizado")
     
     def ejecutar_revision_unica(self):
-        """Ejecuta una sola revisión de correos (para pruebas)"""
+        """Ejecuta una sola revisión de correos (para pruebas) - CON PAUSA MANUAL DESPUÉS DE CADA VIAJE"""
         logger.info("🧪 Ejecutando revisión única de correos...")
+        logger.info("⏸️ MODO TEST: Se pausará después de cada viaje esperando tu confirmación")
         
-        resultado = self.revisar_correos_nuevos()
+        resultado = self.revisar_correos_nuevos(modo_test=True)
         
         if self.driver:
-            input("🟢 Presiona ENTER para cerrar el navegador...")
+            logger.info("🔍 MODO DEBUG: El navegador permanecerá abierto para inspección final...")
+            input("🟢 Presiona ENTER para cerrar el navegador y finalizar la sesión de prueba...")
             try:
-                self.driver.quit()
-                logger.info("✅ Driver cerrado correctamente")
+                self.cerrar_driver_corrupto()
             except:
                 pass
                 
@@ -743,10 +891,11 @@ def main():
     
     print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║              ALSUA TRANSPORT - SISTEMA COMPLETO v2.0        ║
+    ║              ALSUA TRANSPORT - SISTEMA COMPLETO v3.0        ║
     ║                  Mail Reader + GM Automation                ║
     ║                  🛡️ PROTECCIÓN ANTI-DUPLICADOS               ║
     ║                  🚨 MANEJO DE OPERADOR OCUPADO              ║
+    ║                  🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO        ║
     ║                  💾 REGISTRO MYSQL                          ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
