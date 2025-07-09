@@ -356,21 +356,21 @@ class ProcesadorLlegadaFactura:
             logger.info("🚨" * 20)
             logger.info("🚨 PAUSA PARA EXTRACCIÓN DE DATOS")
             logger.info("🚨 Antes de hacer clic en 'Aceptar', extrae:")
-            logger.info("🚨 1. UUIDE (folio de la factura)")
+            logger.info("🚨 1. UUID (folio de la factura)")
             logger.info("🚨 2. VIAJEGM (dato del viaje)")
             logger.info("🚨 3. Cualquier otro dato necesario")
             logger.info("🚨" * 20)
             
             # OBTENER DATOS EXTRAÍDOS DEL USUARIO
-            uuide = input("📋 Ingresa UUIDE (folio de la factura): ").strip()
+            uuid = input("📋 Ingresa UUID (folio de la factura): ").strip()
             viajegm = input("📋 Ingresa VIAJEGM (dato del viaje): ").strip()
             
             logger.info(f"✅ Datos extraídos:")
-            logger.info(f"   🆔 UUIDE: {uuide}")
+            logger.info(f"   🆔 UUID: {uuid}")
             logger.info(f"   🚛 VIAJEGM: {viajegm}")
             
             # Guardar los datos extraídos en el objeto para uso posterior
-            self.datos_viaje['uuide'] = uuide if uuide else None
+            self.datos_viaje['uuid'] = uuid if uuid else None
             self.datos_viaje['viajegm'] = viajegm if viajegm else None
             
             # Hacer clic en "Aceptar" para confirmar la facturación
@@ -526,9 +526,9 @@ class ProcesadorLlegadaFactura:
             logger.warning(f"⚠️ Error al verificar datos de factura: {e}")
     
     def obtener_datos_extraidos(self):
-        """Retorna los datos extraídos (UUIDE y VIAJEGM)"""
+        """Retorna los datos extraídos (UUID y VIAJEGM)"""
         return {
-            'uuide': self.datos_viaje.get('uuide'),
+            'uuid': self.datos_viaje.get('uuid'),
             'viajegm': self.datos_viaje.get('viajegm')
         }
 
@@ -548,8 +548,8 @@ def procesar_llegada_factura(driver, datos_viaje):
             logger.info(f"📊 Datos extraídos: {datos_extraidos}")
             
             # Actualizar datos_viaje con la información extraída
-            if datos_extraidos['uuide']:
-                datos_viaje['uuide'] = datos_extraidos['uuide']
+            if datos_extraidos['uuid']:
+                datos_viaje['uuid'] = datos_extraidos['uuid']
             if datos_extraidos['viajegm']:
                 datos_viaje['viajegm'] = datos_extraidos['viajegm']
                 
