@@ -3,6 +3,7 @@
 Módulo reutilizable para extracción de datos de PDFs
 Usado en múltiples automatizaciones de Alsua Transport
 ACTUALIZADO: Extrae UUID y Viaje GM automáticamente
+VERSIÓN MEJORADA: Intercepta URLs y extrae del DOM
 """
 
 import os
@@ -12,6 +13,11 @@ import logging
 import re
 import PyPDF2
 from datetime import datetime
+import requests
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -38,8 +44,301 @@ class PDFExtractor:
         else:
             logger.info(f"✅ Carpeta PDFs verificada: {self.carpeta_pdfs}")
     
+    def interceptar_url_pdf(self, driver, timeout=10):
+        """
+        NUEVO MÉTODO: Intercepta la URL del PDF cuando se abre
+        
+        Returns:
+            str: URL del PDF o None
+        """
+        try:
+            logger.info("🎯 Interceptando URL del PDF...")
+            
+            # Método 1: Buscar iframes con PDF
+            try:
+                iframes = driver.find_elements(By.TAG_NAME, "iframe")
+                for iframe in iframes:
+                    src = iframe.get_attribute("src")
+                    if src and (".pdf" in src.lower() or "pdf" in src.lower()):
+                        logger.info(f"✅ PDF encontrado en iframe: {src}")
+                        return src
+            except Exception as e:
+                logger.warning(f"⚠️ No se encontró PDF en iframes: {e}")
+            
+            # Método 2: Buscar elementos embed/object
+            try:
+                embeds = driver.find_elements(By.TAG_NAME, "embed")
+                for embed in embeds:
+                    src = embed.get_attribute("src")
+                    type_attr = embed.get_attribute("type")
+                    if src and (type_attr == "application/pdf" or ".pdf" in src.lower()):
+                        logger.info(f"✅ PDF encontrado en embed: {src}")
+                        return src
+                
+                objects = driver.find_elements(By.TAG_NAME, "object")
+                for obj in objects:
+                    data = obj.get_attribute("data")
+                    type_attr = obj.get_attribute("type")
+                    if data and (type_attr == "application/pdf" or ".pdf" in data.lower()):
+                        logger.info(f"✅ PDF encontrado en object: {data}")
+                        return data
+            except Exception as e:
+                logger.warning(f"⚠️ No se encontró PDF en embed/object: {e}")
+            
+            # Método 3: Interceptar peticiones de red
+            try:
+                # Obtener logs de red del navegador
+                logs = driver.get_log('performance')
+                for log in logs:
+                    message = log.get('message', '')
+                    if 'pdf' in message.lower():
+                        # Buscar URLs en el log
+                        urls = re.findall(r'https?://[^\s"]+\.pdf[^\s"]*', message)
+                        if urls:
+                            logger.info(f"✅ PDF encontrado en logs de red: {urls[0]}")
+                            return urls[0]
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo acceder a logs de red: {e}")
+            
+            # Método 4: Buscar en ventanas nuevas
+            try:
+                ventanas_originales = driver.window_handles
+                if len(ventanas_originales) > 1:
+                    # Cambiar a la última ventana
+                    driver.switch_to.window(ventanas_originales[-1])
+                    current_url = driver.current_url
+                    
+                    if ".pdf" in current_url.lower():
+                        logger.info(f"✅ PDF abierto en nueva ventana: {current_url}")
+                        # Volver a la ventana original
+                        driver.switch_to.window(ventanas_originales[0])
+                        return current_url
+                    
+                    # Volver a la ventana original
+                    driver.switch_to.window(ventanas_originales[0])
+            except Exception as e:
+                logger.warning(f"⚠️ Error verificando ventanas: {e}")
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error interceptando URL del PDF: {e}")
+            return None
+    
+    def extraer_datos_del_dom(self, driver):
+        """
+        NUEVO MÉTODO: Extrae UUID y Viaje GM directamente del DOM
+        Maneja específicamente PDFs embebidos en el CRM
+        
+        Returns:
+            dict: {"uuid": str, "viaje_gm": str} o valores None
+        """
+        try:
+            logger.info("🔍 Extrayendo datos directamente del DOM...")
+            
+            # Esperar un momento para que el contenido se cargue
+            time.sleep(3)
+            
+            # MÉTODO 1: Buscar en el visor de PDF de Chrome embebido
+            try:
+                # Buscar el iframe o embed que contiene el PDF
+                pdf_frames = driver.find_elements(By.XPATH, "//iframe | //embed | //object")
+                
+                for frame in pdf_frames:
+                    try:
+                        # Verificar si es un PDF
+                        frame_src = frame.get_attribute("src") or frame.get_attribute("data") or ""
+                        frame_type = frame.get_attribute("type") or ""
+                        
+                        if "pdf" in frame_src.lower() or frame_type == "application/pdf":
+                            logger.info(f"📄 PDF embebido encontrado: {frame.tag_name}")
+                            
+                            # Cambiar al contexto del iframe
+                            driver.switch_to.frame(frame)
+                            
+                            # Buscar en el visor de PDF de Chrome
+                            # El visor de Chrome renderiza el texto en elementos específicos
+                            try:
+                                # Esperar que el PDF se cargue
+                                time.sleep(2)
+                                
+                                # Buscar texto en el visor de Chrome PDF
+                                # Chrome PDF viewer usa divs con clase específica
+                                pdf_text = ""
+                                
+                                # Intento 1: Buscar en elementos del visor
+                                text_elements = driver.find_elements(By.XPATH, "//div[@class='textLayer']//span")
+                                if text_elements:
+                                    logger.info(f"✅ Encontrados {len(text_elements)} elementos de texto en PDF viewer")
+                                    for elem in text_elements:
+                                        pdf_text += elem.text + " "
+                                
+                                # Intento 2: Si no hay textLayer, buscar cualquier texto
+                                if not pdf_text:
+                                    logger.info("🔍 Buscando texto alternativo en PDF viewer...")
+                                    body = driver.find_element(By.TAG_NAME, "body")
+                                    pdf_text = body.text
+                                
+                                # Volver al contexto principal
+                                driver.switch_to.default_content()
+                                
+                                if pdf_text:
+                                    logger.info(f"📋 Texto extraído del PDF embebido: {len(pdf_text)} caracteres")
+                                    
+                                    # Buscar UUID y Viaje GM en el texto extraído
+                                    resultado = self._buscar_datos_en_texto(pdf_text)
+                                    if resultado["uuid"] or resultado["viaje_gm"]:
+                                        return resultado
+                                        
+                            except Exception as e:
+                                logger.warning(f"⚠️ Error extrayendo de iframe: {e}")
+                                driver.switch_to.default_content()
+                                
+                    except Exception as e:
+                        logger.warning(f"⚠️ Error procesando frame: {e}")
+                        try:
+                            driver.switch_to.default_content()
+                        except:
+                            pass
+                            
+            except Exception as e:
+                logger.warning(f"⚠️ Error buscando en frames: {e}")
+            
+            # MÉTODO 2: Buscar en el DOM principal (fuera de iframes)
+            try:
+                # Asegurarse de estar en el contexto principal
+                driver.switch_to.default_content()
+                
+                # Obtener todo el texto visible en la página
+                body_text = driver.find_element(By.TAG_NAME, "body").text
+                logger.info(f"📋 Texto del DOM principal: {len(body_text)} caracteres")
+                
+                # Buscar datos en el texto
+                resultado = self._buscar_datos_en_texto(body_text)
+                if resultado["uuid"] or resultado["viaje_gm"]:
+                    return resultado
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Error extrayendo del DOM principal: {e}")
+            
+            # MÉTODO 3: Buscar en elementos específicos que podrían contener los datos
+            try:
+                # Buscar en cualquier elemento que pueda contener UUID o Viaje GM
+                elementos_con_datos = driver.find_elements(By.XPATH, 
+                    "//*[contains(text(), '-') and (string-length(text()) > 20 or contains(text(), 'COB-') or contains(text(), 'HMO-'))]")
+                
+                for elem in elementos_con_datos[:20]:  # Limitar a 20 elementos
+                    texto = elem.text.strip()
+                    if texto:
+                        resultado = self._buscar_datos_en_texto(texto)
+                        if resultado["uuid"] or resultado["viaje_gm"]:
+                            logger.info(f"✅ Datos encontrados en elemento: {elem.tag_name}")
+                            return resultado
+                            
+            except Exception as e:
+                logger.warning(f"⚠️ Error buscando en elementos específicos: {e}")
+            
+            logger.warning("⚠️ No se encontraron datos en el DOM")
+            return {"uuid": None, "viaje_gm": None}
+            
+        except Exception as e:
+            logger.error(f"❌ Error extrayendo datos del DOM: {e}")
+            # Asegurarse de volver al contexto principal
+            try:
+                driver.switch_to.default_content()
+            except:
+                pass
+            return {"uuid": None, "viaje_gm": None}
+    
+    def _buscar_datos_en_texto(self, texto):
+        """
+        Método auxiliar para buscar UUID y Viaje GM en un texto
+        
+        Args:
+            texto: Texto donde buscar
+            
+        Returns:
+            dict: {"uuid": str, "viaje_gm": str} o valores None
+        """
+        try:
+            # Buscar UUID
+            uuid = None
+            uuid_pattern = r"([A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12})"
+            uuid_matches = re.findall(uuid_pattern, texto, re.IGNORECASE)
+            
+            if uuid_matches:
+                uuid = uuid_matches[0].upper()
+                logger.info(f"✅ UUID encontrado: {uuid}")
+            
+            # Buscar Viaje GM
+            viaje_gm = None
+            viaje_patterns = [
+                r"Viaje\s+GM[:\s]+([A-Z]{2,4}-\d{4,6})",
+                r"VIAJE\s+GM[:\s]+([A-Z]{2,4}-\d{4,6})",
+                r"ViajeGM[:\s]+([A-Z]{2,4}-\d{4,6})",
+                r"VIAJEGM[:\s]+([A-Z]{2,4}-\d{4,6})",
+                r"([A-Z]{2,4}-\d{4,6})",  # Patrón genérico para COB-12345, HMO-12345
+            ]
+            
+            for pattern in viaje_patterns:
+                matches = re.findall(pattern, texto, re.IGNORECASE)
+                if matches:
+                    # Filtrar para obtener solo códigos válidos de viaje
+                    for match in matches:
+                        if match.startswith(('COB-', 'HMO-', 'OBR-', 'HER-')):
+                            viaje_gm = match.strip()
+                            logger.info(f"✅ Viaje GM encontrado: {viaje_gm}")
+                            break
+                    if viaje_gm:
+                        break
+            
+            return {
+                "uuid": uuid,
+                "viaje_gm": viaje_gm
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error buscando datos en texto: {e}")
+            return {"uuid": None, "viaje_gm": None}
+    
+    def descargar_pdf_desde_url(self, url, nombre_archivo=None):
+        """
+        NUEVO MÉTODO: Descarga un PDF desde una URL
+        
+        Args:
+            url: URL del PDF
+            nombre_archivo: Nombre opcional para el archivo
+            
+        Returns:
+            str: Ruta del archivo descargado o None
+        """
+        try:
+            logger.info(f"📥 Descargando PDF desde URL: {url}")
+            
+            # Generar nombre de archivo si no se proporciona
+            if not nombre_archivo:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                nombre_archivo = f"factura_{timestamp}.pdf"
+            
+            ruta_completa = os.path.join(self.carpeta_pdfs, nombre_archivo)
+            
+            # Descargar el archivo
+            response = requests.get(url, timeout=30, verify=False)
+            response.raise_for_status()
+            
+            # Guardar el archivo
+            with open(ruta_completa, 'wb') as f:
+                f.write(response.content)
+            
+            logger.info(f"✅ PDF descargado exitosamente: {nombre_archivo}")
+            return ruta_completa
+            
+        except Exception as e:
+            logger.error(f"❌ Error descargando PDF: {e}")
+            return None
+    
     def configurar_descarga_chrome(self, driver):
-        """CONFIGURACIÓN SIMPLE: Configura Chrome para descargar PDFs directamente sin abrirlos"""
+        """Configuración SIMPLE: Configura Chrome para descargar PDFs directamente sin abrirlos"""
         try:
             logger.info("🔧 Configurando Chrome para descarga directa de PDFs...")
             
@@ -204,7 +503,7 @@ class PDFExtractor:
     
     def extraer_viaje_gm(self, texto_pdf):
         """
-        NUEVA FUNCIÓN: Extrae el Viaje GM del texto del PDF
+        Extrae el Viaje GM del texto del PDF
         
         Args:
             texto_pdf: Texto extraído del PDF
@@ -258,7 +557,7 @@ class PDFExtractor:
     
     def extraer_datos_completos(self, texto_pdf):
         """
-        NUEVA FUNCIÓN: Extrae tanto UUID como Viaje GM del PDF
+        Extrae tanto UUID como Viaje GM del PDF
         
         Args:
             texto_pdf: Texto extraído del PDF
@@ -293,7 +592,7 @@ class PDFExtractor:
     
     def extraer_de_pdf_automatico(self, driver, timeout=15):
         """
-        FUNCIÓN ACTUALIZADA: Proceso completo de descarga y extracción automática
+        FUNCIÓN MEJORADA: Proceso completo de extracción con múltiples métodos
         
         Args:
             driver: WebDriver de Selenium
@@ -303,38 +602,72 @@ class PDFExtractor:
             dict: {"uuid": str, "viaje_gm": str} con los datos extraídos
         """
         try:
-            logger.info("🚀 Iniciando extracción automática completa")
+            logger.info("🚀 Iniciando extracción automática completa MEJORADA")
             
-            # Paso 1: Configurar descarga
+            # MÉTODO 1: Intentar extraer directamente del DOM
+            logger.info("📄 Método 1: Extrayendo datos del DOM...")
+            datos_dom = self.extraer_datos_del_dom(driver)
+            
+            if datos_dom["uuid"] and datos_dom["viaje_gm"]:
+                logger.info("🎉 Datos extraídos exitosamente del DOM")
+                return datos_dom
+            
+            # MÉTODO 2: Interceptar URL del PDF y descargarlo
+            logger.info("📄 Método 2: Interceptando URL del PDF...")
+            pdf_url = self.interceptar_url_pdf(driver)
+            
+            if pdf_url:
+                # Descargar el PDF
+                pdf_path = self.descargar_pdf_desde_url(pdf_url)
+                
+                if pdf_path:
+                    # Extraer texto del PDF
+                    texto_pdf = self.extraer_texto_pdf(pdf_path)
+                    
+                    if texto_pdf:
+                        # Extraer datos completos
+                        datos_pdf = self.extraer_datos_completos(texto_pdf)
+                        
+                        # Combinar datos del DOM y del PDF (priorizar los que falten)
+                        if not datos_dom["uuid"] and datos_pdf["uuid"]:
+                            datos_dom["uuid"] = datos_pdf["uuid"]
+                        if not datos_dom["viaje_gm"] and datos_pdf["viaje_gm"]:
+                            datos_dom["viaje_gm"] = datos_pdf["viaje_gm"]
+                        
+                        if datos_dom["uuid"] or datos_dom["viaje_gm"]:
+                            logger.info("🎉 Datos extraídos exitosamente combinando métodos")
+                            return datos_dom
+            
+            # MÉTODO 3: Método original - esperar descarga automática
+            logger.info("📄 Método 3: Esperando descarga automática...")
             self.configurar_descarga_chrome(driver)
             
-            # Paso 2: Esperar que aparezca un PDF nuevo
-            logger.info(f"⏳ Esperando PDF nuevo (timeout: {timeout}s)...")
             pdf_path = self.buscar_pdf_mas_reciente(timeout)
             
-            if not pdf_path:
-                logger.error("❌ No se encontró PDF descargado")
-                return {"uuid": None, "viaje_gm": None}
+            if pdf_path:
+                texto_pdf = self.extraer_texto_pdf(pdf_path)
+                
+                if texto_pdf:
+                    datos_pdf = self.extraer_datos_completos(texto_pdf)
+                    
+                    # Combinar con datos del DOM si existen
+                    if not datos_dom["uuid"] and datos_pdf["uuid"]:
+                        datos_dom["uuid"] = datos_pdf["uuid"]
+                    if not datos_dom["viaje_gm"] and datos_pdf["viaje_gm"]:
+                        datos_dom["viaje_gm"] = datos_pdf["viaje_gm"]
+                    
+                    return datos_dom
             
-            # Paso 3: Extraer texto del PDF
-            texto_pdf = self.extraer_texto_pdf(pdf_path)
+            # Si llegamos aquí, retornar lo que hayamos podido extraer del DOM
+            if datos_dom["uuid"] or datos_dom["viaje_gm"]:
+                logger.warning("⚠️ Extracción parcial - solo algunos datos encontrados")
+                return datos_dom
             
-            if not texto_pdf:
-                logger.error("❌ No se pudo extraer texto del PDF")
-                return {"uuid": None, "viaje_gm": None}
-            
-            # Paso 4: Extraer datos completos
-            datos_extraidos = self.extraer_datos_completos(texto_pdf)
-            
-            if datos_extraidos["uuid"] or datos_extraidos["viaje_gm"]:
-                logger.info(f"🎉 Extracción completada exitosamente")
-            else:
-                logger.error("❌ No se pudieron extraer los datos del PDF")
-            
-            return datos_extraidos
+            logger.error("❌ No se pudieron extraer los datos con ningún método")
+            return {"uuid": None, "viaje_gm": None}
             
         except Exception as e:
-            logger.error(f"❌ Error en extracción automática: {e}")
+            logger.error(f"❌ Error en extracción automática mejorada: {e}")
             return {"uuid": None, "viaje_gm": None}
     
     def limpiar_pdfs_viejos(self):
@@ -388,7 +721,7 @@ class PDFExtractor:
 # Funciones de conveniencia para uso rápido
 def extraer_datos_automatico(driver, carpeta_pdfs="pdfs_temporales", timeout=15):
     """
-    NUEVA FUNCIÓN: Extrae UUID y Viaje GM automáticamente
+    FUNCIÓN MEJORADA: Extrae UUID y Viaje GM automáticamente
     
     Args:
         driver: WebDriver de Selenium
