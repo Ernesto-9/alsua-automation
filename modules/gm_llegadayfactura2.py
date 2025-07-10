@@ -328,32 +328,34 @@ class ProcesadorLlegadaFactura:
             try:
                 imprimir_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_IMPRIMIR")))
                 
-                # ANTES de hacer clic, configurar la extracción automática
-                logger.info("🔧 Configurando extracción automática de PDF...")
+                # 🚨🚨🚨 PAUSA MANUAL PARA DESCARGA 🚨🚨🚨
+                logger.info("🚨" * 20)
+                logger.info("🚨 PAUSA MANUAL PARA DESCARGA DE FACTURA")
+                logger.info("🚨 Haz clic en 'Imprimir' y descarga la factura manualmente")
+                logger.info("🚨 Busca en el PDF:")
+                logger.info("🚨 1. UUID/Folio Fiscal")
+                logger.info("🚨 2. VIAJEGM (número del viaje)")
+                logger.info("🚨 3. Cualquier otro dato que veas relevante")
+                logger.info("🚨" * 20)
                 
-                # Hacer clic en "Imprimir" (esto debería descargar el PDF)
+                # Hacer clic en "Imprimir" para que aparezca el PDF
                 self.driver.execute_script("arguments[0].click();", imprimir_btn)
-                logger.info("✅ Botón 'Imprimir' clickeado - PDF descargándose...")
+                logger.info("✅ Botón 'Imprimir' clickeado - PDF debe aparecer")
                 
-                # EXTRAER FOLIO FISCAL AUTOMÁTICAMENTE
-                uuid_extraido = extraer_folio_fiscal_automatico(self.driver, timeout=15)
+                # PAUSA PARA DESCARGA MANUAL
+                input("📋 Descarga la factura manualmente y presiona ENTER cuando hayas terminado...")
                 
-                if uuid_extraido:
-                    logger.info(f"✅ Folio fiscal extraído automáticamente: {uuid_extraido}")
-                    self.datos_viaje['uuid'] = uuid_extraido
-                else:
-                    logger.warning("⚠️ No se pudo extraer folio automáticamente")
-                    # Fallback: solicitar manualmente solo en caso de emergencia
-                    logger.info("📋 Fallback: Extracción manual requerida")
-                    uuid_manual = input("📋 Ingresa UUID (folio de la factura) manualmente: ").strip()
-                    self.datos_viaje['uuid'] = uuid_manual if uuid_manual else None
+                # OBTENER DATOS MANUALMENTE
+                uuid_extraido = input("📋 Ingresa UUID/Folio Fiscal que encontraste: ").strip()
+                viajegm_extraido = input("📋 Ingresa VIAJEGM que encontraste: ").strip()
                 
-                # VIAJEGM por ahora lo dejamos vacío
-                self.datos_viaje['viajegm'] = None
+                logger.info(f"✅ Datos extraídos manualmente:")
+                logger.info(f"   🆔 UUID: {uuid_extraido}")
+                logger.info(f"   🚛 VIAJEGM: {viajegm_extraido}")
                 
-                logger.info(f"✅ Datos finales:")
-                logger.info(f"   🆔 UUID: {self.datos_viaje.get('uuid', 'N/A')}")
-                logger.info(f"   🚛 VIAJEGM: {self.datos_viaje.get('viajegm', 'N/A')}")
+                # Guardar los datos extraídos
+                self.datos_viaje['uuid'] = uuid_extraido if uuid_extraido else None
+                self.datos_viaje['viajegm'] = viajegm_extraido if viajegm_extraido else None
                 
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en 'Imprimir': {e}")
