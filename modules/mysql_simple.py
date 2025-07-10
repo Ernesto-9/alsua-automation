@@ -187,6 +187,89 @@ class MySQLAcumuladoPrefactura:
             self._guardar_fallback(prefactura, fecha_viaje, estatus, anotaciones, uuid, viajegm, placa_tractor, placa_remolque)
             return False
     
+    def actualizar_uuid_viajegm(self, prefactura, fecha_viaje, uuid, viajegm):
+        """
+        NUEVA FUNCIÓN: Actualiza UUID y VIAJEGM de un registro existente
+        
+        Args:
+            prefactura: Número de prefactura para identificar el registro
+            fecha_viaje: Fecha del viaje para mayor precisión
+            uuid: UUID extraído del PDF (folio fiscal)
+            viajegm: Código del viaje en GM
+            
+        Returns:
+            bool: True si se actualizó correctamente, False si hubo error
+        """
+        try:
+            if not self.conectar():
+                logger.warning("⚠️ No se pudo conectar a MySQL para actualizar UUID/VIAJEGM")
+                return False
+            
+            cursor = self.connection.cursor()
+            
+            # Convertir fecha al formato correcto
+            fecha_procesada = self._procesar_fecha(fecha_viaje)
+            
+            # Query UPDATE para actualizar UUID y VIAJEGM
+            query = """
+                UPDATE acumuladoprefactura 
+                SET UUID = %s, VIAJEGM = %s
+                WHERE NOPREFACTURA = %s AND FECHA = %s
+                ORDER BY NUMERO DESC
+                LIMIT 1
+            """
+            
+            valores = (uuid, viajegm, prefactura, fecha_procesada)
+            cursor.execute(query, valores)
+            
+            # Verificar cuántas filas se actualizaron
+            filas_afectadas = cursor.rowcount
+            
+            if filas_afectadas > 0:
+                logger.info(f"✅ UUID y VIAJEGM actualizados en MySQL:")
+                logger.info(f"   📋 Prefactura: {prefactura}")
+                logger.info(f"   📅 Fecha: {fecha_procesada}")
+                logger.info(f"   🆔 UUID: {uuid}")
+                logger.info(f"   🚛 VIAJEGM: {viajegm}")
+                logger.info(f"   ✅ Filas actualizadas: {filas_afectadas}")
+                
+                cursor.close()
+                return True
+            else:
+                logger.warning(f"⚠️ No se encontró registro para actualizar:")
+                logger.warning(f"   Prefactura: {prefactura}")
+                logger.warning(f"   Fecha: {fecha_procesada}")
+                
+                # Intentar buscar sin fecha
+                query_sin_fecha = """
+                    UPDATE acumuladoprefactura 
+                    SET UUID = %s, VIAJEGM = %s
+                    WHERE NOPREFACTURA = %s AND estatus = 'EXITOSO'
+                    ORDER BY NUMERO DESC
+                    LIMIT 1
+                """
+                
+                cursor.execute(query_sin_fecha, (uuid, viajegm, prefactura))
+                filas_afectadas = cursor.rowcount
+                
+                if filas_afectadas > 0:
+                    logger.info(f"✅ UUID y VIAJEGM actualizados (sin filtro de fecha):")
+                    logger.info(f"   ✅ Filas actualizadas: {filas_afectadas}")
+                    cursor.close()
+                    return True
+                else:
+                    logger.error(f"❌ No se pudo actualizar - registro no encontrado")
+                    cursor.close()
+                    return False
+            
+        except Error as e:
+            logger.error(f"❌ Error MySQL al actualizar UUID/VIAJEGM: {e}")
+            logger.error(f"   Error Code: {e.errno}")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error general al actualizar UUID/VIAJEGM: {e}")
+            return False
+    
     def _procesar_fecha(self, fecha_str):
         """Convierte fecha de DD/MM/YYYY a YYYY-MM-DD"""
         try:
@@ -249,6 +332,10 @@ def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor
     """Registra un viaje fallido"""
     return mysql_acumulado.registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor, placa_remolque)
 
+def actualizar_uuid_viajegm(prefactura, fecha_viaje, uuid, viajegm):
+    """NUEVA FUNCIÓN: Actualiza UUID y VIAJEGM de un registro existente"""
+    return mysql_acumulado.actualizar_uuid_viajegm(prefactura, fecha_viaje, uuid, viajegm)
+
 def cerrar_conexion():
     """Cierra la conexión MySQL"""
     mysql_acumulado.desconectar()
@@ -270,6 +357,11 @@ if __name__ == "__main__":
         # Ejemplo viaje fallido
         exito2 = registrar_viaje_fallido("7996846", "08/07/2025", "Operador ocupado", "94BB1F", "852YH6")
         print(f"Viaje fallido: {'✅' if exito2 else '❌'}")
+        
+        # NUEVO: Probar actualización
+        print("\n🧪 Probando actualización de UUID/VIAJEGM...")
+        exito3 = actualizar_uuid_viajegm("7996845", "08/07/2025", "12345678-1234-1234-1234-123456789012", "COB-12345")
+        print(f"Actualización UUID/VIAJEGM: {'✅' if exito3 else '❌'}")
     
     # Cerrar conexión
     cerrar_conexion()
