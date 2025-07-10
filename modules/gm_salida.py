@@ -295,24 +295,27 @@ class GMSalidaAutomation:
                     except:
                         logger.info(f"   {i+1}: Error obteniendo info del elemento")
             
-            # Decidir qué selector usar
+            # Decidir qué selector usar - PRIORIZAR WALMART
             elementos_a_usar = None
             selector_usado = ""
             
-            if elementos_proviajes:
-                elementos_a_usar = elementos_proviajes
-                selector_usado = "TABLE_PROVIAJES"
-            elif elementos_walmart:
+            if elementos_walmart:
+                # PRIORIDAD 1: Usar elementos con texto WALMART (los viajes reales)
                 elementos_a_usar = elementos_walmart
                 selector_usado = "WALMART text"
-            elif filas_tabla and len(filas_tabla) <= 10:  # Solo si hay pocas filas (filtrados)
+            elif elementos_proviajes and len(elementos_proviajes) <= 20:
+                # PRIORIDAD 2: Solo usar TABLE_PROVIAJES si hay pocos elementos (evitar headers)
+                elementos_a_usar = elementos_proviajes
+                selector_usado = "TABLE_PROVIAJES"
+            elif filas_tabla and len(filas_tabla) <= 10:
+                # PRIORIDAD 3: Filas de tabla solo si hay muy pocas
                 elementos_a_usar = filas_tabla
                 selector_usado = "filas de tabla"
             else:
                 logger.error("❌ No se encontraron elementos válidos para seleccionar")
-                logger.error(f"   - TABLE_PROVIAJES: {len(elementos_proviajes)}")
-                logger.error(f"   - Filas tabla: {len(filas_tabla)}")
-                logger.error(f"   - WALMART: {len(elementos_walmart)}")
+                logger.error(f"   - WALMART: {len(elementos_walmart)} (MEJOR OPCIÓN)")
+                logger.error(f"   - TABLE_PROVIAJES: {len(elementos_proviajes)} (muchos elementos, incluye headers)")
+                logger.error(f"   - Filas tabla: {len(filas_tabla)} (muchas filas)")
                 return False
             
             logger.info(f"✅ Usando selector: {selector_usado} con {len(elementos_a_usar)} elementos")
