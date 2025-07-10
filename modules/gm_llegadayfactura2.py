@@ -359,6 +359,11 @@ class ProcesadorLlegadaFactura:
                 else:
                     logger.warning("⚠️ No se pudo extraer VIAJEGM del PDF")
                 
+                # 🚀 NUEVO: REGISTRAR VIAJE EXITOSO COMPLETO EN MYSQL
+                logger.info("💾 Registrando viaje exitoso completo en MySQL...")
+                if not self._registrar_viaje_exitoso_completo():
+                    logger.warning("⚠️ Error registrando en MySQL - continuando proceso")
+                
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en 'Imprimir' o extraer datos: {e}")
                 return False
@@ -394,6 +399,79 @@ class ProcesadorLlegadaFactura:
             
         except Exception as e:
             logger.error(f"❌ Error en proceso de impresión y extracción automática: {e}")
+            return False
+    
+    def _registrar_viaje_exitoso_completo(self):
+        """
+        🚀 NUEVA FUNCIÓN: Registra viaje exitoso con TODOS los datos disponibles en MySQL
+        """
+        try:
+            logger.info("📊 Preparando registro completo de viaje exitoso...")
+            
+            # Extraer TODOS los datos disponibles
+            prefactura = self.datos_viaje.get('prefactura')
+            fecha_viaje = self.datos_viaje.get('fecha')
+            uuid = self.datos_viaje.get('uuid')
+            viajegm = self.datos_viaje.get('viajegm')
+            placa_tractor = self.datos_viaje.get('placa_tractor')
+            placa_remolque = self.datos_viaje.get('placa_remolque')
+            
+            # Log de datos que se van a registrar
+            logger.info("📋 DATOS COMPLETOS PARA MYSQL:")
+            logger.info(f"   📋 Prefactura: {prefactura}")
+            logger.info(f"   📅 Fecha: {fecha_viaje}")
+            logger.info(f"   🆔 UUID: {uuid}")
+            logger.info(f"   🚛 Viaje GM: {viajegm}")
+            logger.info(f"   🚗 Placa Tractor: {placa_tractor}")
+            logger.info(f"   🚚 Placa Remolque: {placa_remolque}")
+            logger.info(f"   💰 Importe: {self.datos_viaje.get('importe', 'No disponible')}")
+            logger.info(f"   👤 Cliente: {self.datos_viaje.get('cliente_codigo', 'No disponible')}")
+            logger.info(f"   🎯 Determinante: {self.datos_viaje.get('clave_determinante', 'No disponible')}")
+            
+            # Validar datos críticos
+            if not prefactura:
+                logger.error("❌ Error crítico: No hay prefactura para registrar")
+                return False
+                
+            if not fecha_viaje:
+                logger.error("❌ Error crítico: No hay fecha para registrar")
+                return False
+            
+            # Importar y registrar en MySQL
+            try:
+                from .mysql_simple import registrar_viaje_exitoso
+                
+                exito_mysql = registrar_viaje_exitoso(
+                    prefactura=prefactura,
+                    fecha_viaje=fecha_viaje,
+                    uuid=uuid,
+                    viajegm=viajegm,
+                    placa_tractor=placa_tractor,
+                    placa_remolque=placa_remolque
+                )
+                
+                if exito_mysql:
+                    logger.info("🎉 VIAJE EXITOSO REGISTRADO COMPLETAMENTE EN MYSQL:")
+                    logger.info(f"   ✅ Prefactura: {prefactura}")
+                    logger.info(f"   ✅ Fecha: {fecha_viaje}")
+                    logger.info(f"   ✅ UUID: {uuid or 'No extraído'}")
+                    logger.info(f"   ✅ Viaje GM: {viajegm or 'No extraído'}")
+                    logger.info(f"   ✅ Placas: {placa_tractor}/{placa_remolque}")
+                    logger.info("💾 Base de datos actualizada exitosamente")
+                    return True
+                else:
+                    logger.warning("⚠️ MySQL no disponible - registro guardado en archivo fallback")
+                    return False
+                    
+            except ImportError as e:
+                logger.error(f"❌ Error importando mysql_simple: {e}")
+                return False
+            except Exception as e:
+                logger.error(f"❌ Error registrando en MySQL: {e}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error general en registro MySQL: {e}")
             return False
     
     def obtener_datos_extraidos(self):

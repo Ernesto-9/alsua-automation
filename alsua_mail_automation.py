@@ -3,6 +3,7 @@
 Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
 VERSIÓN MEJORADA CON MANEJO ROBUSTO DE DRIVER CORRUPTO
+ACTUALIZADO: Sin registros MySQL duplicados (se maneja en gm_llegadayfactura2.py)
 """
 
 import os
@@ -552,12 +553,10 @@ class AlsuaMailAutomation:
                     return "DRIVER_CORRUPTO"
                     
                 elif resultado_gm:
-                    # ✅ ÉXITO COMPLETO - REGISTRAR EN MYSQL
-                    try:
-                        from modules.mysql_simple import registrar_viaje_exitoso
-                        registrar_viaje_exitoso(resultado['prefactura'], resultado['fecha'])
-                    except Exception as e:
-                        logger.warning(f"⚠️ Error registrando viaje exitoso en MySQL: {e}")
+                    # ✅ ÉXITO COMPLETO - EL REGISTRO MySQL YA SE HIZO EN gm_llegadayfactura2.py
+                    logger.info("🎉 VIAJE EXITOSO COMPLETADO")
+                    logger.info("💾 Registro MySQL ya realizado en gm_llegadayfactura2.py")
+                    logger.info("📊 Datos completos (UUID, Viaje GM, placas) ya en base de datos")
                     
                     self.marcar_correo_procesado(mensaje, "COMPLETADO")
                     self.marcar_viaje_creado(resultado, "COMPLETADO")
@@ -638,6 +637,7 @@ class AlsuaMailAutomation:
                     
                 elif resultado:
                     logger.info("🎉 Automatización GM completada exitosamente")
+                    logger.info("💾 Registro MySQL completo ya realizado en gm_llegadayfactura2.py")
                     # Driver sigue siendo válido
                     return True
                 else:
@@ -739,6 +739,7 @@ class AlsuaMailAutomation:
                     elif resultado_procesamiento:
                         correos_procesados += 1
                         logger.info(f"✅ Viaje {prefactura} completado exitosamente")
+                        logger.info("💾 Todos los datos (UUID, Viaje GM, placas) registrados en MySQL")
                         
                         # PAUSA EN MODO TEST
                         if modo_test:
@@ -779,6 +780,7 @@ class AlsuaMailAutomation:
             logger.info(f"   🔧 Drivers corruptos: {drivers_corruptos}")
             logger.info(f"   🔄 Reintentos pendientes: {reintentos_pendientes}")
             logger.info(f"   💾 Total en tracking: correos={len(self.correos_procesados)}, viajes={len(self.viajes_creados)}")
+            logger.info("💾 IMPORTANTE: Registros MySQL completos se realizan en gm_llegadayfactura2.py")
             
             if operadores_ocupados > 0:
                 logger.info("📝 Los errores de operador ocupado fueron registrados en MySQL")
@@ -801,11 +803,12 @@ class AlsuaMailAutomation:
         logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS ACTIVADA")
         logger.info("🚨 MANEJO DE OPERADOR OCUPADO CON MYSQL")
         logger.info("🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO")  # NUEVO
+        logger.info("💾 REGISTRO MySQL COMPLETO EN gm_llegadayfactura2.py")  # NUEVO
         logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
         logger.info("🤖 Automatización GM completa habilitada")
-        logger.info("💾 Viajes registrados en base de datos MySQL")
+        logger.info("📊 Datos completos: UUID, Viaje GM, placas, fecha, prefactura")
         logger.info("🔧 Errores marcados para revisión manual")
         logger.info("=" * 70)
         
@@ -875,6 +878,7 @@ class AlsuaMailAutomation:
         logger.info("📊 ESTADÍSTICAS DEL SISTEMA:")
         logger.info(f"   📧 Correos procesados: {len(self.correos_procesados)}")
         logger.info(f"   🚛 Viajes creados: {len(self.viajes_creados)}")
+        logger.info("   💾 Registro MySQL: COMPLETO en gm_llegadayfactura2.py")
         
         # Mostrar últimos procesados
         if self.correos_procesados:
@@ -896,7 +900,8 @@ def main():
     ║                  🛡️ PROTECCIÓN ANTI-DUPLICADOS               ║
     ║                  🚨 MANEJO DE OPERADOR OCUPADO              ║
     ║                  🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO        ║
-    ║                  💾 REGISTRO MYSQL                          ║
+    ║                  💾 REGISTRO MySQL COMPLETO                 ║
+    ║                  📊 UUID + Viaje GM + Placas               ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
