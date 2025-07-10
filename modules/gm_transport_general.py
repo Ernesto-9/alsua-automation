@@ -98,8 +98,51 @@ class GMTransportAutomation:
             'detalle': detalle
         }
     
+    def registrar_determinante_faltante_mysql(self, determinante_faltante):
+        """
+        NUEVA FUNCIÓN: Registra específicamente determinantes faltantes en MySQL
+        """
+        try:
+            from .mysql_simple import registrar_viaje_fallido
+            
+            prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
+            fecha_viaje = self.datos_viaje.get('fecha', '')
+            placa_tractor = self.datos_viaje.get('placa_tractor', '')
+            placa_remolque = self.datos_viaje.get('placa_remolque', '')
+            
+            # Motivo específico para determinantes faltantes
+            motivo_fallo = f"Determinante {determinante_faltante} no encontrada en clave_ruta_base.csv"
+            
+            # Registrar en MySQL
+            exito_mysql = registrar_viaje_fallido(
+                prefactura=prefactura,
+                fecha_viaje=fecha_viaje, 
+                motivo_fallo=motivo_fallo,
+                placa_tractor=placa_tractor,
+                placa_remolque=placa_remolque
+            )
+            
+            if exito_mysql:
+                logger.error("🚨 DETERMINANTE FALTANTE REGISTRADA EN MySQL:")
+                logger.error(f"   📋 Prefactura: {prefactura}")
+                logger.error(f"   🎯 Determinante faltante: {determinante_faltante}")
+                logger.error(f"   🚛 Placas: {placa_tractor} / {placa_remolque}")
+                logger.error(f"   💾 Estado: Registrado en base de datos")
+                logger.error("   🔧 ACCIÓN: Agregar determinante a clave_ruta_base.csv")
+                return True
+            else:
+                logger.warning("⚠️ MySQL no disponible - registrado en archivo fallback")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error registrando determinante faltante en MySQL: {e}")
+            return False
+    
     def obtener_ruta_y_base(self, determinante):
-        """Obtiene la ruta GM y base origen desde el CSV"""
+        """
+        FUNCIÓN MODIFICADA: Obtiene la ruta GM y base origen desde el CSV
+        Ahora retorna estado específico para determinantes faltantes
+        """
         csv_path = 'modules/clave_ruta_base.csv'
         
         logger.info(f"🔍 Buscando ruta para determinante: {determinante}")
@@ -110,24 +153,34 @@ class GMTransportAutomation:
                 logger.error(f"❌ No existe el archivo: {csv_path}")
                 logger.error(f"📂 Directorio actual: {os.getcwd()}")
                 logger.error(f"📂 Archivos en modules/: {os.listdir('modules/') if os.path.exists('modules/') else 'modules/ no existe'}")
-                return None, None
+                return None, None, "ARCHIVO_CSV_NO_EXISTE"
                 
             with open(csv_path, newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
                 logger.info(f"📋 Columnas en CSV: {reader.fieldnames}")
                 
+                # Lista para logging de determinantes disponibles
+                determinantes_disponibles = []
+                
                 for i, row in enumerate(reader):
                     logger.info(f"📄 Fila {i}: {row}")
+                    determinantes_disponibles.append(row['determinante'])
+                    
                     if row['determinante'] == str(determinante):
                         logger.info(f"✅ ENCONTRADO: determinante {determinante} -> ruta {row['ruta_gm']}, base {row['base_origen']}")
-                        return row['ruta_gm'], row['base_origen']
-                        
-                logger.warning(f"⚠️ No se encontró determinante {determinante} en el CSV")
+                        return row['ruta_gm'], row['base_origen'], "ENCONTRADO"
+                
+                # NUEVO: Si llegamos aquí, la determinante NO existe
+                logger.error("🚨 DETERMINANTE NO ENCONTRADA EN LISTA")
+                logger.error(f"🎯 Determinante buscada: {determinante}")
+                logger.error(f"📋 Determinantes disponibles: {determinantes_disponibles}")
+                logger.error("💡 Esta determinante debe agregarse al archivo clave_ruta_base.csv")
+                
+                return None, None, "DETERMINANTE_NO_ENCONTRADA"
                         
         except Exception as e:
             logger.error(f"❌ Error al leer CSV: {e}")
-            
-        return None, None
+            return None, None, "ERROR_LECTURA_CSV"
     
     def llenar_fecha(self, id_input, fecha_valor):
         """Llena un campo de fecha de forma robusta"""
@@ -475,7 +528,9 @@ class GMTransportAutomation:
             return False, "ERROR_SELECCION_TRACTOR"
     
     def fill_viaje_form(self):
-        """Función principal para llenar el formulario de viaje"""
+        """
+        FUNCIÓN PRINCIPAL MODIFICADA: Maneja determinantes faltantes
+        """
         try:
             logger.info("🚀 Iniciando llenado de formulario de viaje")
             
@@ -539,12 +594,43 @@ class GMTransportAutomation:
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo hacer clic en campo de ruta: {e}")
             
-            # Obtener y configurar ruta GM
+            # 🚨 NUEVA LÓGICA: Obtener y validar determinante
             logger.info("🗺️ Obteniendo ruta GM...")
-            ruta_gm, base_origen = self.obtener_ruta_y_base(clave_determinante)
+            ruta_gm, base_origen, estado_determinante = self.obtener_ruta_y_base(clave_determinante)
             
-            if ruta_gm and base_origen:
-                logger.info(f"✅ Ruta encontrada: {ruta_gm}, Base: {base_origen}")
+            # 🚨 MANEJO CRÍTICO: Determinante no encontrada
+            if estado_determinante == "DETERMINANTE_NO_ENCONTRADA":
+                logger.error("🚨 DETERMINANTE NO ENCONTRADA - REGISTRANDO ERROR Y TERMINANDO VIAJE")
+                
+                # Registrar específicamente en MySQL
+                if self.registrar_determinante_faltante_mysql(clave_determinante):
+                    logger.error("✅ Error registrado exitosamente en MySQL")
+                else:
+                    logger.error("❌ Error registrado en archivo fallback")
+                
+                # Registrar también en el sistema de errores local
+                self.registrar_error_viaje(
+                    "DETERMINANTE_NO_ENCONTRADA", 
+                    f"Determinante {clave_determinante} no existe en clave_ruta_base.csv - Debe agregarse manualmente"
+                )
+                
+                logger.error("🔄 RETORNANDO FALSE - El sistema continuará con el siguiente viaje")
+                return False  # ← IMPORTANTE: Retorna False para que continúe con siguiente viaje
+            
+            # 🚨 OTROS ERRORES DE DETERMINANTE
+            elif estado_determinante in ["ARCHIVO_CSV_NO_EXISTE", "ERROR_LECTURA_CSV"]:
+                logger.error(f"🚨 ERROR CRÍTICO EN DETERMINANTES: {estado_determinante}")
+                self.registrar_error_viaje(
+                    estado_determinante,
+                    f"Error técnico con archivo clave_ruta_base.csv"
+                )
+                return False  # ← También continúa con siguiente viaje
+            
+            # ✅ DETERMINANTE ENCONTRADA - CONTINUAR NORMALMENTE
+            elif estado_determinante == "ENCONTRADO":
+                logger.info(f"✅ Determinante válida: {clave_determinante} -> Ruta: {ruta_gm}, Base: {base_origen}")
+                
+                # Llenar ruta GM
                 self.llenar_campo_texto("EDT_FOLIORUTA", ruta_gm, "Ruta GM")
                 
                 # Disparar evento change con pausa
@@ -562,13 +648,6 @@ class GMTransportAutomation:
                 
                 # Seleccionar base origen
                 self.seleccionar_base_origen(base_origen)
-            else:
-                error_msg = f"DETERMINANTE_NO_ENCONTRADO"
-                detalle = f"Determinante {clave_determinante} no existe en clave_ruta_base.csv"
-                self.registrar_error_viaje(error_msg, detalle)
-                
-                logger.warning("⚠️ Determinante no encontrado - continuando sin ruta y base")
-                logger.warning("📝 Se requerirá configuración manual de ruta y base en GM Transport")
             
             # Seleccionar remolque con manejo de errores
             logger.info("🚛 Seleccionando remolque...")
