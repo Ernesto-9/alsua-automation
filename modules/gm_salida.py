@@ -262,7 +262,7 @@ class GMSalidaAutomation:
             return False
     
     def seleccionar_viaje_de_tabla(self):
-        """Selecciona el viaje de la tabla de resultados"""
+        """FUNCIÓN ACTUALIZADA: Selecciona el viaje de la tabla automáticamente SIN pausas manuales"""
         try:
             logger.info("🔍 Buscando viajes en la tabla...")
             
@@ -282,27 +282,25 @@ class GMSalidaAutomation:
                     logger.info("✅ Viaje único seleccionado automáticamente")
                 else:
                     # Múltiples viajes - seleccionar el primero
-                    logger.info(f"ℹ️ Se encontraron {len(filas_tabla)} viajes")
+                    logger.info(f"ℹ️ Se encontraron {len(filas_tabla)} viajes, seleccionando el primero")
                     primera_fila = filas_tabla[0]
                     self.driver.execute_script("arguments[0].click();", primera_fila)
                     time.sleep(1)
                     logger.info("✅ Primer viaje seleccionado automáticamente")
                 
             except Exception as e:
-                logger.warning(f"⚠️ Error en selección automática: {e}")
-                # Fallback: selección manual
-                logger.info("⏸️ SELECCIÓN MANUAL: Selecciona manualmente el viaje que quieres procesar")
-                input("🟢 Presiona ENTER después de seleccionar el viaje...")
-                logger.info("✅ Continuando automatización...")
+                logger.error(f"❌ Error en selección automática de viaje: {e}")
+                logger.error("❌ No se pudo seleccionar viaje automáticamente")
+                return False
             
             # Verificar que hay un viaje seleccionado
             try:
                 salida_check = self.driver.find_element(By.LINK_TEXT, "Salida")
                 if salida_check.is_displayed():
-                    logger.info("✅ Viaje seleccionado - Link 'Salida' disponible")
+                    logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
                     return True
                 else:
-                    logger.error("❌ No se detectó link 'Salida' - ¿Hay un viaje seleccionado?")
+                    logger.error("❌ No se detectó link 'Salida' - Error en selección de viaje")
                     return False
                     
             except Exception as e:
@@ -310,7 +308,7 @@ class GMSalidaAutomation:
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error al seleccionar viaje de tabla: {e}")
+            logger.error(f"❌ Error general al seleccionar viaje de tabla: {e}")
             return False
     
     def procesar_salida_viaje(self):
@@ -445,9 +443,9 @@ class GMSalidaAutomation:
                 logger.error("❌ Error crítico buscando viaje")
                 return False
             
-            # Seleccionar viaje de la tabla
+            # Seleccionar viaje de la tabla (SIN pausas manuales)
             if not self.seleccionar_viaje_de_tabla():
-                logger.error("❌ Error crítico seleccionando viaje")
+                logger.error("❌ Error crítico seleccionando viaje automáticamente")
                 return False
             
             # Procesar salida del viaje
