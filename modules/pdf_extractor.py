@@ -39,16 +39,61 @@ class PDFExtractor:
             logger.info(f"✅ Carpeta PDFs verificada: {self.carpeta_pdfs}")
     
     def configurar_descarga_chrome(self, driver):
-        """Configura Chrome para descargar PDFs automáticamente"""
+        """CONFIGURACIÓN SIMPLE: Configura Chrome para descargar PDFs directamente sin abrirlos"""
         try:
+            logger.info("🔧 Configurando Chrome para descarga directa de PDFs...")
+            
+            # Configuración 1: Comportamiento básico de descarga
             driver.execute_cdp_cmd('Page.setDownloadBehavior', {
                 'behavior': 'allow',
                 'downloadPath': self.carpeta_pdfs
             })
-            logger.info("✅ Chrome configurado para descarga automática de PDFs")
+            logger.info("✅ Directorio de descarga configurado")
+            
+            # Configuración 2: Preferencias para abrir PDFs externamente (descargar en lugar de mostrar)
+            try:
+                driver.execute_cdp_cmd('Runtime.evaluate', {
+                    'expression': '''
+                        // Configurar preferencias para descargar PDFs directamente
+                        chrome.settingsPrivate.setPref('plugins.always_open_pdf_externally', true);
+                        chrome.settingsPrivate.setPref('download.prompt_for_download', false);
+                    '''
+                })
+                logger.info("✅ Preferencias de PDF configuradas para descarga directa")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudieron configurar preferencias directamente: {e}")
+                
+                # Fallback: Configurar mediante CDP
+                try:
+                    driver.execute_cdp_cmd('Browser.setDownloadBehavior', {
+                        'behavior': 'allow',
+                        'downloadPath': self.carpeta_pdfs
+                    })
+                    logger.info("✅ Configuración alternativa aplicada")
+                except Exception as e2:
+                    logger.warning(f"⚠️ Configuración alternativa falló: {e2}")
+            
+            # Configuración 3: Deshabilitar visor de PDF interno de forma simple
+            try:
+                driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                    'source': '''
+                        // Deshabilitar visor interno de PDF
+                        Object.defineProperty(navigator, 'pdfViewerEnabled', {
+                            value: false,
+                            writable: false,
+                            configurable: false
+                        });
+                    '''
+                })
+                logger.info("✅ Visor interno de PDF deshabilitado")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo deshabilitar visor interno: {e}")
+            
+            logger.info("🚀 Configuración simple de descarga completada")
             return True
+            
         except Exception as e:
-            logger.warning(f"⚠️ No se pudo configurar descarga automática: {e}")
+            logger.error(f"❌ Error en configuración de descarga: {e}")
             return False
     
     def buscar_pdf_mas_reciente(self, timeout=10):
