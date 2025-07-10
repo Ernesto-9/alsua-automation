@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import time
 from datetime import datetime
+from .pdf_extractor import extraer_datos_automatico
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -272,12 +273,6 @@ class ProcesadorLlegadaFactura:
                 logger.error(f"❌ Error al seleccionar tipo de documento: {e}")
                 return False
             
-            # 🚨🚨🚨 EXTRACCIÓN AUTOMÁTICA DE FOLIO FISCAL 🚨🚨🚨
-            logger.info("🚨" * 20)
-            logger.info("🚨 EXTRACCIÓN AUTOMÁTICA DE FOLIO FISCAL")
-            logger.info("🚨 Configurando descarga y procesando PDF...")
-            logger.info("🚨" * 20)
-            
             # Hacer clic en "Aceptar" para confirmar la facturación
             try:
                 aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Aceptar')]/..")))
@@ -300,7 +295,7 @@ class ProcesadorLlegadaFactura:
                 return False
             
             # Procesar impresión y extracción de folio
-            if not self._procesar_impresion_y_extraccion():
+            if not self._procesar_impresion_y_extraccion_automatica():
                 return False
                 
             return True
@@ -309,10 +304,10 @@ class ProcesadorLlegadaFactura:
             logger.error(f"❌ Error en proceso de facturación: {e}")
             return False
     
-    def _procesar_impresion_y_extraccion(self):
-        """Procesar impresión y extraer folio fiscal automáticamente"""
+    def _procesar_impresion_y_extraccion_automatica(self):
+        """NUEVA FUNCIÓN: Procesar impresión y extraer folio fiscal AUTOMÁTICAMENTE"""
         try:
-            logger.info("🖨️ Procesando impresión y extracción de folio...")
+            logger.info("🖨️ Procesando impresión y extracción automática de datos...")
             
             # Hacer clic en "Regresar" si está disponible
             try:
@@ -323,41 +318,49 @@ class ProcesadorLlegadaFactura:
             except Exception as e:
                 logger.warning(f"⚠️ Botón 'Regresar' no encontrado: {e}")
             
-            # Hacer clic en "Imprimir" y extraer folio automáticamente
+            # Hacer clic en "Imprimir" y extraer datos automáticamente
             try:
                 imprimir_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_IMPRIMIR")))
                 
-                # 🚨🚨🚨 PAUSA MANUAL PARA DESCARGA 🚨🚨🚨
                 logger.info("🚨" * 20)
-                logger.info("🚨 PAUSA MANUAL PARA DESCARGA DE FACTURA")
-                logger.info("🚨 Haz clic en 'Imprimir' y descarga la factura manualmente")
-                logger.info("🚨 Busca en el PDF:")
-                logger.info("🚨 1. UUID/Folio Fiscal")
-                logger.info("🚨 2. VIAJEGM (número del viaje)")
-                logger.info("🚨 3. Cualquier otro dato que veas relevante")
+                logger.info("🚨 INICIANDO EXTRACCIÓN AUTOMÁTICA DE DATOS")
+                logger.info("🚨 Configurando descarga automática y extrayendo PDF...")
                 logger.info("🚨" * 20)
                 
-                # Hacer clic en "Imprimir" para que aparezca el PDF
+                # Configurar descarga automática antes de hacer clic
+                from .pdf_extractor import PDFExtractor
+                extractor = PDFExtractor("pdfs_temporales")
+                extractor.configurar_descarga_chrome(self.driver)
+                
+                # Hacer clic en "Imprimir" para que se descargue el PDF
                 self.driver.execute_script("arguments[0].click();", imprimir_btn)
-                logger.info("✅ Botón 'Imprimir' clickeado - PDF debe aparecer")
+                logger.info("✅ Botón 'Imprimir' clickeado - Iniciando descarga automática")
                 
-                # PAUSA PARA DESCARGA MANUAL
-                input("📋 Descarga la factura manualmente y presiona ENTER cuando hayas terminado...")
+                # Esperar y extraer datos automáticamente
+                logger.info("⏳ Esperando descarga del PDF...")
+                datos_extraidos = extraer_datos_automatico(self.driver, "pdfs_temporales", timeout=20)
                 
-                # OBTENER DATOS MANUALMENTE
-                uuid_extraido = input("📋 Ingresa UUID/Folio Fiscal que encontraste: ").strip()
-                viajegm_extraido = input("📋 Ingresa VIAJEGM que encontraste: ").strip()
+                # Verificar extracción
+                uuid_extraido = datos_extraidos.get("uuid")
+                viajegm_extraido = datos_extraidos.get("viaje_gm")
                 
-                logger.info(f"✅ Datos extraídos manualmente:")
+                logger.info(f"✅ Datos extraídos automáticamente:")
                 logger.info(f"   🆔 UUID: {uuid_extraido}")
                 logger.info(f"   🚛 VIAJEGM: {viajegm_extraido}")
                 
-                # Guardar los datos extraídos
-                self.datos_viaje['uuid'] = uuid_extraido if uuid_extraido else None
-                self.datos_viaje['viajegm'] = viajegm_extraido if viajegm_extraido else None
+                # Guardar los datos extraídos en datos_viaje
+                if uuid_extraido:
+                    self.datos_viaje['uuid'] = uuid_extraido
+                else:
+                    logger.warning("⚠️ No se pudo extraer UUID del PDF")
+                    
+                if viajegm_extraido:
+                    self.datos_viaje['viajegm'] = viajegm_extraido
+                else:
+                    logger.warning("⚠️ No se pudo extraer VIAJEGM del PDF")
                 
             except Exception as e:
-                logger.error(f"❌ Error al hacer clic en 'Imprimir': {e}")
+                logger.error(f"❌ Error al hacer clic en 'Imprimir' o extraer datos: {e}")
                 return False
             
             # Cerrar ventana de impresión
@@ -386,11 +389,11 @@ class ProcesadorLlegadaFactura:
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo marcar como 'No impreso': {e}")
             
-            logger.info("✅ Proceso de impresión y extracción completado")
+            logger.info("✅ Proceso de impresión y extracción automática completado")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en proceso de impresión y extracción: {e}")
+            logger.error(f"❌ Error en proceso de impresión y extracción automática: {e}")
             return False
     
     def obtener_datos_extraidos(self):

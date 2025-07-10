@@ -262,53 +262,44 @@ class GMSalidaAutomation:
             return False
     
     def seleccionar_viaje_de_tabla(self):
-        """FUNCIÓN ACTUALIZADA: Selecciona el viaje de la tabla automáticamente SIN pausas manuales"""
+        """FUNCIÓN SIMPLE: Selecciona el primer viaje de la tabla después del filtrado"""
         try:
             logger.info("🔍 Buscando viajes en la tabla...")
             
-            # Verificar si hay resultados en la tabla
-            try:
-                # Buscar filas de la tabla que contengan datos
-                filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
-                
-                if len(filas_tabla) == 0:
-                    logger.error("❌ No se encontraron viajes en la tabla")
-                    return False
-                elif len(filas_tabla) == 1:
-                    # Solo hay un viaje - seleccionarlo automáticamente
-                    primera_fila = filas_tabla[0]
-                    self.driver.execute_script("arguments[0].click();", primera_fila)
-                    time.sleep(1)
-                    logger.info("✅ Viaje único seleccionado automáticamente")
-                else:
-                    # Múltiples viajes - seleccionar el primero
-                    logger.info(f"ℹ️ Se encontraron {len(filas_tabla)} viajes, seleccionando el primero")
-                    primera_fila = filas_tabla[0]
-                    self.driver.execute_script("arguments[0].click();", primera_fila)
-                    time.sleep(1)
-                    logger.info("✅ Primer viaje seleccionado automáticamente")
-                
-            except Exception as e:
-                logger.error(f"❌ Error en selección automática de viaje: {e}")
-                logger.error("❌ No se pudo seleccionar viaje automáticamente")
+            # Esperar 1 segundo tras aplicar filtros para que aparezcan los viajes
+            time.sleep(1)
+            
+            # Buscar elementos de viajes en la tabla
+            elementos_viajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
+            
+            if len(elementos_viajes) == 0:
+                logger.error("❌ No se encontraron viajes en la tabla")
                 return False
             
-            # Verificar que hay un viaje seleccionado
+            logger.info(f"ℹ️ Se encontraron {len(elementos_viajes)} viajes, seleccionando el primero")
+            
+            # Hacer clic en el primer viaje
+            primer_viaje = elementos_viajes[0]
+            self.driver.execute_script("arguments[0].click();", primer_viaje)
+            logger.info("✅ Primer viaje seleccionado automáticamente")
+            
+            # Esperar 3 segundos para que aparezca el link "Salida"
+            time.sleep(3)
+            
+            # Verificar que apareció el link "Salida"
             try:
-                salida_check = self.driver.find_element(By.LINK_TEXT, "Salida")
-                if salida_check.is_displayed():
-                    logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
-                    return True
-                else:
-                    logger.error("❌ No se detectó link 'Salida' - Error en selección de viaje")
-                    return False
-                    
+                salida_check = WebDriverWait(self.driver, 5).until(
+                    EC.presence_of_element_located((By.LINK_TEXT, "Salida"))
+                )
+                logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
+                return True
+                
             except Exception as e:
-                logger.error(f"❌ Error al verificar viaje seleccionado: {e}")
+                logger.error(f"❌ Link 'Salida' no apareció: {e}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error general al seleccionar viaje de tabla: {e}")
+            logger.error(f"❌ Error al seleccionar viaje de tabla: {e}")
             return False
     
     def procesar_salida_viaje(self):
