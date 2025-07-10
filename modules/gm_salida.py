@@ -262,55 +262,107 @@ class GMSalidaAutomation:
             return False
     
     def seleccionar_viaje_de_tabla(self):
-        """Selecciona el viaje de la tabla de resultados"""
+        """FUNCIÓN CON DEBUG: Selecciona el primer viaje de la tabla después del filtrado"""
         try:
             logger.info("🔍 Buscando viajes en la tabla...")
             
-            # Verificar si hay resultados en la tabla
-            try:
-                # Buscar filas de la tabla que contengan datos
-                filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
-                
-                if len(filas_tabla) == 0:
-                    logger.error("❌ No se encontraron viajes en la tabla")
-                    return False
-                elif len(filas_tabla) == 1:
-                    # Solo hay un viaje - seleccionarlo automáticamente
-                    primera_fila = filas_tabla[0]
-                    self.driver.execute_script("arguments[0].click();", primera_fila)
-                    time.sleep(1)
-                    logger.info("✅ Viaje único seleccionado automáticamente")
-                else:
-                    # Múltiples viajes - seleccionar el primero
-                    logger.info(f"ℹ️ Se encontraron {len(filas_tabla)} viajes")
-                    primera_fila = filas_tabla[0]
-                    self.driver.execute_script("arguments[0].click();", primera_fila)
-                    time.sleep(1)
-                    logger.info("✅ Primer viaje seleccionado automáticamente")
-                
-            except Exception as e:
-                logger.warning(f"⚠️ Error en selección automática: {e}")
-                # Fallback: selección manual
-                logger.info("⏸️ SELECCIÓN MANUAL: Selecciona manualmente el viaje que quieres procesar")
-                input("🟢 Presiona ENTER después de seleccionar el viaje...")
-                logger.info("✅ Continuando automatización...")
+            # Esperar más tiempo tras aplicar filtros
+            time.sleep(3)
             
-            # Verificar que hay un viaje seleccionado
+            # DEBUG: Buscar elementos de viajes con múltiples selectores
+            logger.info("🔍 DEBUG: Probando diferentes selectores...")
+            
+            # Selector 1: TABLE_PROVIAJES
+            elementos_proviajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
+            logger.info(f"📊 Selector TABLE_PROVIAJES encontró: {len(elementos_proviajes)} elementos")
+            
+            # Selector 2: Filas de tabla genéricas
+            filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
+            logger.info(f"📊 Selector filas de tabla encontró: {len(filas_tabla)} elementos")
+            
+            # Selector 3: Buscar elementos con texto "WALMART" o "WAL MART"
+            elementos_walmart = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
+            logger.info(f"📊 Elementos con WALMART encontrados: {len(elementos_walmart)} elementos")
+            
+            # DEBUG: Mostrar algunos IDs de elementos encontrados
+            if elementos_proviajes:
+                logger.info("🔍 IDs de elementos TABLE_PROVIAJES:")
+                for i, elem in enumerate(elementos_proviajes[:3]):  # Mostrar máximo 3
+                    try:
+                        elem_id = elem.get_attribute('id')
+                        elem_text = elem.text[:50] if elem.text else "Sin texto"
+                        logger.info(f"   {i+1}: ID='{elem_id}' Texto='{elem_text}'")
+                    except:
+                        logger.info(f"   {i+1}: Error obteniendo info del elemento")
+            
+            # Decidir qué selector usar
+            elementos_a_usar = None
+            selector_usado = ""
+            
+            if elementos_proviajes:
+                elementos_a_usar = elementos_proviajes
+                selector_usado = "TABLE_PROVIAJES"
+            elif elementos_walmart:
+                elementos_a_usar = elementos_walmart
+                selector_usado = "WALMART text"
+            elif filas_tabla and len(filas_tabla) <= 10:  # Solo si hay pocas filas (filtrados)
+                elementos_a_usar = filas_tabla
+                selector_usado = "filas de tabla"
+            else:
+                logger.error("❌ No se encontraron elementos válidos para seleccionar")
+                logger.error(f"   - TABLE_PROVIAJES: {len(elementos_proviajes)}")
+                logger.error(f"   - Filas tabla: {len(filas_tabla)}")
+                logger.error(f"   - WALMART: {len(elementos_walmart)}")
+                return False
+            
+            logger.info(f"✅ Usando selector: {selector_usado} con {len(elementos_a_usar)} elementos")
+            
+            # Hacer clic en el primer elemento
+            primer_elemento = elementos_a_usar[0]
             try:
-                salida_check = self.driver.find_element(By.LINK_TEXT, "Salida")
-                if salida_check.is_displayed():
-                    logger.info("✅ Viaje seleccionado - Link 'Salida' disponible")
-                    return True
-                else:
-                    logger.error("❌ No se detectó link 'Salida' - ¿Hay un viaje seleccionado?")
+                # Intentar hacer scroll al elemento primero
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", primer_elemento)
+                time.sleep(0.5)
+                
+                # Hacer clic
+                self.driver.execute_script("arguments[0].click();", primer_elemento)
+                logger.info(f"✅ Primer elemento seleccionado automáticamente usando {selector_usado}")
+                
+                # Esperar más tiempo para que GM procese la selección
+                time.sleep(4)
+                
+                # Verificar que apareció el link "Salida"
+                try:
+                    salida_check = WebDriverWait(self.driver, 10).until(
+                        EC.presence_of_element_located((By.LINK_TEXT, "Salida"))
+                    )
+                    if salida_check.is_displayed():
+                        logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
+                        return True
+                    else:
+                        logger.error("❌ Link 'Salida' existe pero no es visible")
+                        return False
+                        
+                except Exception as e:
+                    logger.error(f"❌ Link 'Salida' no apareció después de 10 segundos: {e}")
+                    
+                    # DEBUG: Mostrar qué links están disponibles
+                    try:
+                        todos_links = self.driver.find_elements(By.TAG_NAME, "a")
+                        links_visibles = [link.text.strip() for link in todos_links 
+                                        if link.is_displayed() and link.text.strip()]
+                        logger.info(f"🔍 Links disponibles actualmente: {links_visibles[:10]}")
+                    except:
+                        pass
+                    
                     return False
                     
             except Exception as e:
-                logger.error(f"❌ Error al verificar viaje seleccionado: {e}")
+                logger.error(f"❌ Error al hacer clic en el elemento: {e}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error al seleccionar viaje de tabla: {e}")
+            logger.error(f"❌ Error general al seleccionar viaje de tabla: {e}")
             return False
     
     def procesar_salida_viaje(self):
@@ -445,9 +497,9 @@ class GMSalidaAutomation:
                 logger.error("❌ Error crítico buscando viaje")
                 return False
             
-            # Seleccionar viaje de la tabla
+            # Seleccionar viaje de la tabla (SIN pausas manuales)
             if not self.seleccionar_viaje_de_tabla():
-                logger.error("❌ Error crítico seleccionando viaje")
+                logger.error("❌ Error crítico seleccionando viaje automáticamente")
                 return False
             
             # Procesar salida del viaje
