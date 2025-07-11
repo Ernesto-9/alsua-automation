@@ -352,14 +352,14 @@ class MySQLAcumuladoPrefactura:
             # Usar fecha actual como fallback
             return datetime.now().strftime('%Y-%m-%d')
     
-    def _guardar_fallback(self, prefactura, fecha_viaje, estatus, anotaciones, uuid, viajegm, placa_tractor, placa_remolque):
+    def _guardar_fallback(self, prefactura, fecha_viaje, estatus, erroresrobot, uuid, viajegm, placa_tractor, placa_remolque):
         """Guarda en archivo si MySQL no está disponible"""
         try:
             archivo_fallback = "viajes_fallback.log"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             
             with open(archivo_fallback, 'a', encoding='utf-8') as f:
-                f.write(f"{timestamp}|{prefactura}|{fecha_viaje}|{estatus}|{anotaciones or ''}|{uuid or ''}|{viajegm or ''}|{placa_tractor or ''}|{placa_remolque or ''}\n")
+                f.write(f"{timestamp}|{prefactura}|{fecha_viaje}|{estatus}|{erroresrobot or ''}|{uuid or ''}|{viajegm or ''}|{placa_tractor or ''}|{placa_remolque or ''}\n")
                 
             logger.warning(f"⚠️ Viaje guardado en archivo fallback: {archivo_fallback}")
             

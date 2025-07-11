@@ -4,6 +4,7 @@ Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
 VERSIÓN MEJORADA CON MANEJO ROBUSTO DE DRIVER CORRUPTO
 ACTUALIZADO: Sin registros MySQL duplicados (se maneja en gm_llegadayfactura2.py)
+NUEVO: Arreglo COM para funcionar con Flask
 """
 
 import os
@@ -13,6 +14,7 @@ import re
 import pickle
 from datetime import datetime, timedelta
 import win32com.client
+import pythoncom  # NUEVO: Para inicialización COM
 from modules.parser import parse_xls
 from modules.gm_login import login_to_gm
 from modules.gm_transport_general import GMTransportAutomation
@@ -43,6 +45,10 @@ class AlsuaMailAutomation:
         
         self.driver = None
         self.driver_corrupto = False  # NUEVO: Flag para trackear driver corrupto
+        
+        # NUEVO: Control de inicialización COM
+        self.com_inicializado = False
+        
         self._crear_carpeta_descarga()
         
     def _crear_carpeta_descarga(self):
@@ -74,6 +80,39 @@ class AlsuaMailAutomation:
             self.carpeta_descarga = os.path.join(os.path.expanduser("~"), "Downloads", "alsua_archivos")
             os.makedirs(self.carpeta_descarga, exist_ok=True)
             logger.info(f"📁 Carpeta fallback: {self.carpeta_descarga}")
+    
+    # ==========================================
+    # NUEVAS FUNCIONES COM PARA FLASK
+    # ==========================================
+    
+    def inicializar_com(self):
+        """
+        NUEVA FUNCIÓN: Inicializa COM para el thread actual
+        Necesario cuando se ejecuta desde Flask
+        """
+        try:
+            if not self.com_inicializado:
+                logger.info("🔧 Inicializando COM para thread actual...")
+                pythoncom.CoInitialize()
+                self.com_inicializado = True
+                logger.info("✅ COM inicializado exitosamente")
+                return True
+        except Exception as e:
+            logger.error(f"❌ Error inicializando COM: {e}")
+            return False
+    
+    def limpiar_com(self):
+        """
+        NUEVA FUNCIÓN: Limpia COM al finalizar
+        """
+        try:
+            if self.com_inicializado:
+                logger.info("🧹 Limpiando inicialización COM...")
+                pythoncom.CoUninitialize()
+                self.com_inicializado = False
+                logger.info("✅ COM limpiado exitosamente")
+        except Exception as e:
+            logger.warning(f"⚠️ Error limpiando COM: {e}")
     
     # ==========================================
     # FUNCIONES ANTI-DUPLICADOS
@@ -673,8 +712,15 @@ class AlsuaMailAutomation:
             return "DRIVER_CORRUPTO"
     
     def revisar_correos_nuevos(self, modo_test=False):
-        """Revisa correos nuevos en Outlook - CON MANEJO ROBUSTO DE ERRORES"""
+        """
+        FUNCIÓN MODIFICADA: Revisa correos nuevos en Outlook CON INICIALIZACIÓN COM
+        """
         try:
+            # 🔧 NUEVO: INICIALIZAR COM PARA FLASK
+            if not self.inicializar_com():
+                logger.error("❌ No se pudo inicializar COM - aborting")
+                return False
+            
             # Limpiar archivos antiguos automáticamente
             self.limpiar_archivos_antiguos()
             
@@ -682,9 +728,14 @@ class AlsuaMailAutomation:
             if modo_test:
                 logger.info("🧪 MODO TEST: Pausará después de cada viaje para inspección")
             
-            # Conectar a Outlook
-            outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
-            inbox = outlook.GetDefaultFolder(6)  # Bandeja de entrada
+            # Conectar a Outlook CON COM INICIALIZADO
+            try:
+                outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
+                inbox = outlook.GetDefaultFolder(6)  # Bandeja de entrada
+                logger.info("✅ Conexión a Outlook establecida exitosamente")
+            except Exception as e:
+                logger.error(f"❌ Error conectando a Outlook: {e}")
+                return False
             
             # Obtener solo correos no leídos, más recientes primero
             mensajes = inbox.Items.Restrict("[UnRead] = True")
@@ -796,14 +847,18 @@ class AlsuaMailAutomation:
         except Exception as e:
             logger.error(f"❌ Error al revisar correos: {e}")
             return False
+        finally:
+            # 🔧 NUEVO: LIMPIAR COM AL FINALIZAR
+            self.limpiar_com()
     
     def ejecutar_bucle_continuo(self, intervalo_minutos=5):
         """Ejecuta el sistema en bucle continuo"""
         logger.info("🚀 Iniciando sistema de automatización Alsua Transport v3.0")
         logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS ACTIVADA")
         logger.info("🚨 MANEJO DE OPERADOR OCUPADO CON MYSQL")
-        logger.info("🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO")  # NUEVO
-        logger.info("💾 REGISTRO MySQL COMPLETO EN gm_llegadayfactura2.py")  # NUEVO
+        logger.info("🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO")
+        logger.info("💾 REGISTRO MySQL COMPLETO EN gm_llegadayfactura2.py")
+        logger.info("🌐 COMPATIBLE CON FLASK Y THREADING")  # NUEVO
         logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
@@ -845,6 +900,9 @@ class AlsuaMailAutomation:
                     self.cerrar_driver_corrupto()
                 except:
                     pass
+            
+            # 🔧 NUEVO: LIMPIAR COM AL FINALIZAR
+            self.limpiar_com()
             
             # CERRAR CONEXIÓN MYSQL AL FINALIZAR
             try:
@@ -902,6 +960,7 @@ def main():
     ║                  🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO        ║
     ║                  💾 REGISTRO MySQL COMPLETO                 ║
     ║                  📊 UUID + Viaje GM + Placas               ║
+    ║                  🌐 COMPATIBLE CON FLASK                    ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
