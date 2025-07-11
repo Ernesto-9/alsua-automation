@@ -57,6 +57,109 @@ class GMSalidaAutomation:
             logger.error(f"❌ Error al calcular fecha anterior: {e}")
             return fecha_str
     
+    def llenar_fecha_salida_robusto(self, campo_id, fecha_valor):
+        """
+        FUNCIÓN MEJORADA: Llena fecha de salida con validación anti-1000
+        
+        Args:
+            campo_id: ID del campo de fecha
+            fecha_valor: Fecha en formato DD/MM/YYYY
+            
+        Returns:
+            bool: True si se insertó correctamente, False si falló
+        """
+        try:
+            logger.info(f"🎯 Llenando fecha ROBUSTA en {campo_id}: {fecha_valor}")
+            
+            # Intentar hasta 3 veces si hay problemas
+            for intento in range(3):
+                logger.info(f"🔄 Intento {intento + 1}/3 para insertar fecha")
+                
+                # Paso 1: Localizar y hacer clic en el campo
+                campo = self.wait.until(EC.element_to_be_clickable((By.ID, campo_id)))
+                
+                # Paso 2: LIMPIEZA AGRESIVA
+                logger.info("🧹 Limpieza agresiva del campo...")
+                campo.click()
+                time.sleep(0.3)
+                
+                # Múltiples métodos de limpieza
+                campo.send_keys(Keys.CONTROL + "a")  # Seleccionar todo
+                time.sleep(0.1)
+                campo.send_keys(Keys.DELETE)         # Borrar selección
+                time.sleep(0.1)
+                campo.clear()                        # Método clear adicional
+                time.sleep(0.1)
+                
+                # Limpieza adicional caracter por caracter
+                for _ in range(15):  # Eliminar hasta 15 caracteres residuales
+                    campo.send_keys(Keys.BACKSPACE)
+                    time.sleep(0.05)
+                
+                # Paso 3: Verificar que está limpio
+                valor_actual = campo.get_attribute("value")
+                logger.info(f"📋 Campo después de limpieza: '{valor_actual}'")
+                
+                if valor_actual and len(valor_actual) > 0:
+                    logger.warning(f"⚠️ Campo no está completamente limpio: '{valor_actual}'")
+                    # Una limpieza final
+                    campo.send_keys(Keys.HOME)
+                    time.sleep(0.1)
+                    for _ in range(20):
+                        campo.send_keys(Keys.DELETE)
+                        time.sleep(0.02)
+                
+                # Paso 4: INSERTAR FECHA LENTAMENTE
+                logger.info(f"⌨️ Insertando fecha: {fecha_valor}")
+                time.sleep(0.5)  # Pausa antes de escribir
+                
+                # Escribir carácter por carácter para evitar problemas
+                for i, char in enumerate(fecha_valor):
+                    campo.send_keys(char)
+                    time.sleep(0.08)  # Pausa entre caracteres
+                
+                # Paso 5: VALIDACIÓN INMEDIATA
+                time.sleep(0.5)  # Esperar que se procese
+                valor_final = campo.get_attribute("value")
+                logger.info(f"✅ Valor final en campo: '{valor_final}'")
+                
+                # Verificar que no tiene el problema del 1000
+                if "1000" in valor_final:
+                    logger.error(f"🚨 ERROR DETECTADO: Fecha con '1000': '{valor_final}'")
+                    logger.error("🔄 Reintentando limpieza e inserción...")
+                    continue
+                    
+                # Verificar longitud razonable (DD/MM/YYYY = 10 caracteres + posible hora)
+                if len(valor_final) > 20:
+                    logger.error(f"🚨 ERROR DETECTADO: Fecha muy larga: '{valor_final}' ({len(valor_final)} chars)")
+                    logger.error("🔄 Reintentando limpieza e inserción...")
+                    continue
+                
+                # Verificar que contiene la fecha esperada
+                if fecha_valor.replace("/", "") not in valor_final.replace("/", "").replace(" ", ""):
+                    logger.error(f"🚨 ERROR DETECTADO: Fecha no coincide")
+                    logger.error(f"   Esperado: {fecha_valor}")
+                    logger.error(f"   Obtenido: {valor_final}")
+                    logger.error("🔄 Reintentando...")
+                    continue
+                
+                # Si llegamos aquí, la fecha está correcta
+                logger.info(f"✅ Fecha insertada correctamente: '{valor_final}'")
+                
+                # Confirmar con ENTER
+                campo.send_keys(Keys.ENTER)
+                time.sleep(0.3)
+                
+                return True
+                
+            # Si llegamos aquí, fallaron todos los intentos
+            logger.error(f"❌ ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error en llenar_fecha_salida_robusto: {e}")
+            return False
+    
     def detectar_operador_ocupado(self):
         """
         Detecta el BTN_OK de operador ocupado
@@ -196,22 +299,16 @@ class GMSalidaAutomation:
         try:
             fecha_desde = self.calcular_fecha_anterior(fecha_viaje)
             
-            campo_fecha = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_DESDE")))
-            campo_fecha.click()
-            time.sleep(0.3)
+            # USAR FUNCIÓN ROBUSTA PARA FECHA DESDE
+            exito = self.llenar_fecha_salida_robusto("EDT_DESDE", fecha_desde)
             
-            # Limpiar campo
-            campo_fecha.send_keys(Keys.CONTROL + "a")
-            campo_fecha.send_keys(Keys.DELETE)
-            
-            # Insertar nueva fecha
-            campo_fecha.send_keys(fecha_desde)
-            campo_fecha.send_keys(Keys.ENTER)
-            time.sleep(0.2)
-            
-            logger.info(f"✅ Fecha 'desde' ajustada a: {fecha_desde}")
-            return True
-            
+            if exito:
+                logger.info(f"✅ Fecha 'desde' ajustada a: {fecha_desde}")
+                return True
+            else:
+                logger.error(f"❌ Error al ajustar fecha desde con función robusta")
+                return False
+                
         except Exception as e:
             logger.error(f"❌ Error al ajustar fecha desde: {e}")
             return False
@@ -369,7 +466,7 @@ class GMSalidaAutomation:
             return False
     
     def procesar_salida_viaje(self):
-        """Proceso específico de salida del viaje CON DETECCIÓN DE OPERADOR OCUPADO"""
+        """Proceso específico de salida del viaje CON DETECCIÓN DE OPERADOR OCUPADO Y FECHA ROBUSTA"""
         try:
             logger.info("🚛 Iniciando proceso de SALIDA del viaje")
             
@@ -395,12 +492,16 @@ class GMSalidaAutomation:
                 logger.error(f"❌ Error al hacer clic en 'Salida': {e}")
                 return False
             
-            # Paso 2: Llenar fecha de salida
+            # Paso 2: Llenar fecha de salida CON FUNCIÓN ROBUSTA
             try:
-                fecha_input = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_SALIDA")))
-                fecha_input.clear()
-                fecha_input.send_keys(fecha_viaje)
-                logger.info(f"✅ Fecha de salida '{fecha_viaje}' insertada")
+                logger.info("📅 Llenando fecha de salida con método ROBUSTO...")
+                exito_fecha = self.llenar_fecha_salida_robusto("EDT_SALIDA", fecha_viaje)
+                
+                if not exito_fecha:
+                    logger.error("❌ ERROR CRÍTICO: No se pudo insertar fecha de salida después de intentos robustos")
+                    return False
+                
+                logger.info(f"✅ Fecha de salida '{fecha_viaje}' insertada con éxito")
                 
                 # Verificar si hay error después de insertar fecha
                 time.sleep(1)
@@ -485,7 +586,7 @@ class GMSalidaAutomation:
                     logger.warning("⚠️ No se pudieron configurar los filtros - continuando de todas formas")
                     # Continuar de todas formas, los filtros no son críticos
             
-            # Ajustar fecha desde
+            # Ajustar fecha desde CON FUNCIÓN ROBUSTA
             if not self.ajustar_fecha_desde(fecha_viaje):
                 logger.warning("⚠️ Error ajustando fecha - continuando")
                 # No es crítico, continuar
@@ -525,7 +626,7 @@ class GMSalidaAutomation:
 # Función principal para ser llamada desde otros módulos
 def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
     """
-    Función principal para procesar la salida del viaje
+    Función principal para procesar la salida del viaje CON MEJORAS ANTI-1000
     Retorna:
     - True: Éxito
     - False: Error que debe detener el proceso
