@@ -26,8 +26,29 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         total_input.send_keys(Keys.CONTROL + "a")  # Selecciona todo
         total_input.send_keys(Keys.DELETE)         # Borra lo anterior
         total_input.send_keys(str(total_factura_valor))
-        total_input.send_keys(Keys.ENTER)
         print(f"✅ Total del viaje '{total_factura_valor}' insertado")
+        
+        # 🔧 SECUENCIA CORRECTA PARA FORZAR RECÁLCULO 🔧
+        print("🔧 Ejecutando secuencia para forzar recálculo...")
+        
+        # Paso 1: Doble clic para seleccionar la cajita del monto
+        print("🔧 Paso 1: Doble clic para seleccionar cajita...")
+        total_input.click()
+        time.sleep(0.2)
+        total_input.click()
+        time.sleep(0.5)
+        print("✅ Doble clic completado")
+        
+        # Paso 2: TAB para procesar el cambio
+        print("🔧 Paso 2: TAB para procesar el cambio...")
+        total_input.send_keys(Keys.TAB)
+        time.sleep(1)  # Tiempo extra para que aparezca la cajita de Chrome
+        print("✅ TAB enviado - esperando cajita de Chrome...")
+        
+        # Paso 3: La cajita de Chrome debería aparecer y ser aceptada automáticamente
+        # (esto lo maneja la automatización existente)
+        time.sleep(1)  # Tiempo para que se procese todo
+        print("✅ Secuencia de recálculo completada")
         
         # 🚨 PAUSA PARA DEBUGGING 🚨
         print("🔍" * 50)
