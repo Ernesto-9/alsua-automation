@@ -26,8 +26,22 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         total_input.send_keys(Keys.CONTROL + "a")  # Selecciona todo
         total_input.send_keys(Keys.DELETE)         # Borra lo anterior
         total_input.send_keys(str(total_factura_valor))
-        total_input.send_keys(Keys.ENTER)
         print(f"✅ Total del viaje '{total_factura_valor}' insertado")
+        
+        # 🔧 FORZAR RECÁLCULO EN GM TRANSPORT 🔧
+        print("🔧 Forzando recálculo del sistema...")
+        
+        # Método 1: TAB para que GM procese el cambio
+        total_input.send_keys(Keys.TAB)
+        time.sleep(0.5)
+        print("✅ TAB enviado para forzar recálculo")
+        
+        # Método 2: Doble clic en el campo para asegurar procesamiento
+        total_input.click()
+        time.sleep(0.2)
+        total_input.click()
+        time.sleep(0.5)
+        print("✅ Doble clic realizado para confirmar procesamiento")
         
         # 🚨 PAUSA PARA DEBUGGING 🚨
         print("🔍" * 50)
