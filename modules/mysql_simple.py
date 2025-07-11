@@ -207,7 +207,7 @@ class MySQLAcumuladoPrefactura:
             # Query UPDATE para completar los datos faltantes
             query = """
                 UPDATE acumuladoprefactura 
-                SET UUID = %s, VIAJEGM = %s, estatus = 'EXITOSO'
+                SET UUID = %s, VIAJEGM = %s, estatusr = 'EXITOSO', USUARIO = 'ROBOT'
                 WHERE NOPREFACTURA = %s
             """
             
@@ -222,7 +222,7 @@ class MySQLAcumuladoPrefactura:
                 logger.info(f"   📋 NOPREFACTURA: {prefactura}")
                 logger.info(f"   🆔 UUID: {uuid}")
                 logger.info(f"   🚛 VIAJEGM: {viajegm}")
-                logger.info(f"   📊 estatus: EXITOSO")
+                logger.info(f"   📊 estatusr: EXITOSO")
                 logger.info(f"   ✅ Filas actualizadas: {filas_afectadas}")
                 
                 # Si tenemos placas, actualizar también esos campos
@@ -267,7 +267,7 @@ class MySQLAcumuladoPrefactura:
             # Query UPDATE para marcar como fallido Y registrar el error
             query = """
                 UPDATE acumuladoprefactura 
-                SET estatus = 'FALLIDO', erroresrobot = %s
+                SET estatusr = 'FALLIDO', erroresrobot = %s
                 WHERE NOPREFACTURA = %s
             """
             
@@ -279,7 +279,7 @@ class MySQLAcumuladoPrefactura:
             if filas_afectadas > 0:
                 logger.info(f"✅ Viaje FALLIDO actualizado en MySQL:")
                 logger.info(f"   📋 NOPREFACTURA: {prefactura}")
-                logger.info(f"   📊 estatus: FALLIDO")
+                logger.info(f"   📊 estatusr: FALLIDO")
                 logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
                 logger.info(f"   ✅ Filas actualizadas: {filas_afectadas}")
                 

@@ -4,12 +4,17 @@ import time
 from alsua_mail_automation import AlsuaMailAutomation
 from modules.mysql_simple import mysql_acumulado
 
-app = Flask(__name__)
+app = Flask(_name_)
 estado = {"ejecutando": False, "hilo": None}
 
 def ejecutar_bucle():
-    sistema = AlsuaMailAutomation()
-    sistema.ejecutar_bucle_continuo(intervalo_minutos=5)
+    print(">>> Iniciando hilo de automatización desde Flask <<<")
+    try:
+        sistema = AlsuaMailAutomation()
+        print(">>> Instancia creada, ejecutando bucle continuo <<<")
+        sistema.ejecutar_bucle_continuo(intervalo_minutos=5)
+    except Exception as e:
+        print(f"Error en ejecución del bucle: {e}")
 
 @app.route("/")
 def index():
@@ -41,18 +46,21 @@ def index():
 @app.route("/iniciar")
 def iniciar():
     if not estado["ejecutando"]:
+        print(">>> Botón Iniciar presionado <<<")
         estado["ejecutando"] = True
         estado["hilo"] = threading.Thread(target=ejecutar_bucle)
         estado["hilo"].start()
+    else:
+        print(">>> Ya se estaba ejecutando la automatización <<<")
     return redirect("/")
 
 @app.route("/detener")
 def detener():
     if estado["ejecutando"]:
+        print(">>> Botón Detener presionado <<<")
         estado["ejecutando"] = False
-        # Esto solo detiene el flag, no mata el hilo de inmediato
-        # Si quieres control más fino habría que modificar el bucle
+        # Solo detiene el flag, no mata el hilo de inmediato
     return redirect("/")
 
-if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=5000)
+if _name_ == "_main_":
+    app.run(debug=False, host="0.0.0.0", port=5050)

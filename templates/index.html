@@ -7,17 +7,17 @@
 <body>
     <h1>Panel de Automatización ALSUA</h1>
 
-    <p><strong>Estado actual:</strong> {{ 'Ejecutando' if estado.ejecutando else 'Detenida' }}</p>
+    <p><strong>Estado actual:</strong> {{ 'Ejecutando' if estado["ejecutando"] else 'Detenida' }}</p>
 
     <form action="/iniciar" method="get" style="display:inline;">
-        <button type="submit" {% if estado.ejecutando %}disabled{% endif %}>
-            ▶️ Iniciar Automatización
+        <button type="submit" {% if estado["ejecutando"] %}disabled{% endif %}>
+            ▶ Iniciar Automatización
         </button>
     </form>
 
     <form action="/detener" method="get" style="display:inline;">
-        <button type="submit" {% if not estado.ejecutando %}disabled{% endif %}>
-            ⏹️ Detener Automatización
+        <button type="submit" {% if not estado["ejecutando"] %}disabled{% endif %}>
+            ⏹ Detener Automatización
         </button>
     </form>
 
