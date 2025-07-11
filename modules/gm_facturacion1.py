@@ -28,6 +28,41 @@ def ir_a_facturacion(driver, total_factura_valor, datos_viaje=None):
         total_input.send_keys(str(total_factura_valor))
         total_input.send_keys(Keys.ENTER)
         print(f"✅ Total del viaje '{total_factura_valor}' insertado")
+        
+        # 🚨 PAUSA PARA DEBUGGING 🚨
+        print("🔍" * 50)
+        print("🔍 PAUSA PARA DEBUGGING DEL IMPORTE")
+        print(f"🔍 Importe que se insertó: {total_factura_valor}")
+        print(f"🔍 Tipo de dato: {type(total_factura_valor)}")
+        print("🔍 REVISA EN PANTALLA:")
+        print("🔍 1. ¿Se insertó correctamente el importe?")
+        print("🔍 2. ¿Está en el formato correcto?")
+        print("🔍 3. ¿GM lo acepta sin errores?")
+        print("🔍 4. ¿Hay algún mensaje de error?")
+        print("🔍")
+        
+        # Obtener valor actual del campo para verificación
+        try:
+            valor_actual = total_input.get_attribute("value")
+            print(f"🔍 Valor actual en el campo: '{valor_actual}'")
+        except Exception as e:
+            print(f"🔍 No se pudo leer valor actual: {e}")
+            
+        # Información adicional del viaje para contexto
+        if datos_viaje:
+            print(f"🔍 DATOS DEL VIAJE:")
+            print(f"🔍   Prefactura: {datos_viaje.get('prefactura', 'N/A')}")
+            print(f"🔍   Fecha: {datos_viaje.get('fecha', 'N/A')}")
+            print(f"🔍   Placa Tractor: {datos_viaje.get('placa_tractor', 'N/A')}")
+            print(f"🔍   Placa Remolque: {datos_viaje.get('placa_remolque', 'N/A')}")
+            print(f"🔍   Determinante: {datos_viaje.get('clave_determinante', 'N/A')}")
+            
+        print("🔍" * 50)
+        print("🔍 Presiona ENTER para continuar con la automatización...")
+        input()  # PAUSA - Espera ENTER del usuario
+        print("🔍 Continuando automatización...")
+        print("🔍" * 50)
+        
     except Exception as e:
         print(f"❌ Error al insertar total de factura: {e}")
         return False
