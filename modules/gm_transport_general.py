@@ -22,44 +22,12 @@ class GMTransportAutomation:
     def __init__(self, driver):
         self.driver = driver
         self.wait = WebDriverWait(driver, 15)
-        self.datos_viaje = self.cargar_datos_viaje()
+        # ❌ ELIMINADO: Ya no carga datos dummy por defecto
+        # Los datos del viaje DEBEN venir del sistema de correos
+        self.datos_viaje = {}
         
-    def cargar_datos_viaje(self):
-        """Carga los datos del viaje desde el archivo XLS o usa datos por defecto"""
-        # Datos por defecto (incluyendo placas para pruebas)
-        datos_default = {
-
-            'fecha': '01/07/2025',
-            'prefactura': '7996845',  
-            'cliente_codigo': '040512',
-            'importe': '310.75',  
-            'clave_determinante': '2899',
-            'placa_remolque': '852YH6',
-            'placa_tractor': '94BB1F'
-        }
-        
-        archivo_prueba = "tests/ejemplo.xls"
-        
-        try:
-            if os.path.exists(archivo_prueba):
-                logger.info(f"📄 Leyendo archivo: {archivo_prueba}")
-                parsed = parse_xls(archivo_prueba, determinante_from_asunto="8121")
-                
-                if isinstance(parsed, dict):
-                    if "error" not in parsed:
-                        datos_default.update(parsed)
-                        logger.info("✅ Datos cargados exitosamente desde archivo")
-                    else:
-                        logger.warning(f"⚠️ Error al parsear archivo: {parsed['error']}")
-                else:
-                    logger.warning("⚠️ Formato inesperado desde parser")
-            else:
-                logger.warning(f"⚠️ No se encontró archivo: {archivo_prueba}")
-                
-        except Exception as e:
-            logger.error(f"❌ Error al cargar datos: {e}")
-            
-        return datos_default
+    # ❌ FUNCIÓN ELIMINADA: cargar_datos_viaje() que contenía datos dummy
+    # Los datos ahora SOLO vienen del procesamiento real de correos
     
     def registrar_error_viaje(self, tipo_error, detalle=""):
         """
@@ -111,15 +79,6 @@ class GMTransportAutomation:
         logger.error("🔧 ACCIÓN REQUERIDA: Revisar y completar manualmente en GM Transport")
         logger.error("=" * 80)
         
-        # Guardar en archivo temporal (MANTENER para compatibilidad)
-        try:
-            error_file = "errores_viajes.log"
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(error_file, 'a', encoding='utf-8') as f:
-                f.write(f"{timestamp}|{prefactura}|{placa_tractor}|{placa_remolque}|{determinante}|{tipo_error}|{detalle}\n")
-        except Exception as e:
-            logger.warning(f"⚠️ No se pudo guardar error en archivo: {e}")
-            
         return {
             'timestamp': datetime.now().isoformat(),
             'prefactura': prefactura,
@@ -566,10 +525,28 @@ class GMTransportAutomation:
     
     def fill_viaje_form(self):
         """
-        FUNCIÓN PRINCIPAL SIMPLIFICADA: Solo registra en CSV
+        FUNCIÓN PRINCIPAL LIMPIA: Los datos DEBEN venir del sistema de correos
         """
         try:
             logger.info("🚀 Iniciando llenado de formulario de viaje")
+            
+            # ✅ VALIDACIÓN CRÍTICA: Verificar que tenemos datos válidos
+            if not self.datos_viaje:
+                logger.error("❌ ERROR CRÍTICO: No hay datos del viaje")
+                logger.error("💡 Los datos deben ser asignados desde el sistema de correos")
+                return False
+            
+            # Validar campos críticos
+            campos_requeridos = ['fecha', 'prefactura', 'cliente_codigo', 'importe', 'clave_determinante', 'placa_tractor', 'placa_remolque']
+            campos_faltantes = [campo for campo in campos_requeridos if not self.datos_viaje.get(campo)]
+            
+            if campos_faltantes:
+                logger.error(f"❌ ERROR CRÍTICO: Campos faltantes: {campos_faltantes}")
+                logger.error("💡 Los datos deben venir completos del sistema de correos")
+                return False
+            
+            logger.info("✅ Datos del viaje validados correctamente")
+            logger.info(f"📋 Datos recibidos: {self.datos_viaje}")
             
             # Navegar al módulo de creación de viajes automáticamente
             from .navigate_to_create_viaje import navigate_to_create_viaje
@@ -585,7 +562,7 @@ class GMTransportAutomation:
             total_factura_valor = str(self.datos_viaje['importe'])
             clave_determinante = self.datos_viaje['clave_determinante']
             
-            logger.info(f"📋 Datos a procesar: {self.datos_viaje}")
+            logger.info(f"📋 Procesando viaje REAL: Prefactura {prefactura_valor}")
             
             # Llenar campos básicos
             self.llenar_campo_texto("EDT_NOVIAJECLIENTE", prefactura_valor, "Prefactura")
@@ -725,7 +702,11 @@ class GMTransportAutomation:
             logger.info("🚛 Ejecutando proceso de SALIDA...")
             try:
                 resultado_salida = procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True)
-                if not resultado_salida:
+                if resultado_salida == "OPERADOR_OCUPADO":
+                    logger.error("🚨 OPERADOR OCUPADO detectado en proceso de salida")
+                    logger.error("📊 Error ya registrado en CSV por gm_salida.py")
+                    return "OPERADOR_OCUPADO"
+                elif not resultado_salida:
                     logger.error("❌ Error en proceso de salida - Este viaje necesita revisión manual")
                     logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error en salida")
                     return False
@@ -759,17 +740,18 @@ class GMTransportAutomation:
 # Función legacy para compatibilidad
 def fill_viaje_form(driver):
     """Función de compatibilidad con el código anterior"""
-    automation = GMTransportAutomation(driver)
-    return automation.fill_viaje_form()
+    logger.error("❌ ERROR: Esta función ya no debe usarse directamente")
+    logger.error("💡 Los datos deben venir del sistema de correos, no de datos dummy")
+    return False
 
 # Función principal para ser llamada desde otros módulos
 def procesar_viaje_completo(driver):
     """Función principal para procesar un viaje completo"""
-    automation = GMTransportAutomation(driver)
-    return automation.fill_viaje_form()
+    logger.error("❌ ERROR: Esta función ya no debe usarse directamente")
+    logger.error("💡 Los datos deben venir del sistema de correos, no de datos dummy")
+    return False
 
 # Ejemplo de uso
 if __name__ == "__main__":
-    # Este bloque se ejecutaría solo si ejecutas este archivo directamente
-    # Aquí puedes agregar código de prueba
-    pass
+    logger.error("❌ Este módulo no debe ejecutarse directamente")
+    logger.error("💡 Los datos deben venir del sistema de correos automatizado")
