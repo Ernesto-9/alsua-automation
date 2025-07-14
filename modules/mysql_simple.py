@@ -2,6 +2,7 @@
 """
 Handler MySQL MODIFICADO para leer desde viajes_log.csv
 NUEVO FLUJO: CSV → MySQL (fuente única de verdad es el CSV)
+LIMPIO: Sin archivos de fallback - todo va al CSV unificado
 """
 
 import mysql.connector
@@ -200,6 +201,8 @@ class MySQLSyncFromCSV:
             # Verificar que la prefactura existe en la BD
             if not self.verificar_prefactura_existe(prefactura):
                 logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD - no se puede actualizar")
+                # YA NO GUARDAMOS EN FALLBACK - solo loggeamos la advertencia
+                logger.warning(f"💡 Considera agregar prefactura {prefactura} manualmente a la BD")
                 return False
             
             cursor = self.connection.cursor()
@@ -262,8 +265,9 @@ class MySQLSyncFromCSV:
             
             # Verificar que la prefactura existe en la BD
             if not self.verificar_prefactura_existe(prefactura):
-                logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD - guardando en fallback")
-                self._guardar_fallback_registro(registro)
+                logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD")
+                # YA NO GUARDAMOS EN FALLBACK - solo loggeamos la advertencia
+                logger.warning(f"💡 Considera agregar prefactura {prefactura} manualmente a la BD")
                 return False
             
             cursor = self.connection.cursor()
@@ -328,20 +332,6 @@ class MySQLSyncFromCSV:
                     
         except Exception as e:
             logger.warning(f"⚠️ Error actualizando placas: {e}")
-    
-    def _guardar_fallback_registro(self, registro):
-        """Guarda registro en archivo fallback si no se puede procesar en MySQL"""
-        try:
-            archivo_fallback = "mysql_sync_fallback.log"
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            with open(archivo_fallback, 'a', encoding='utf-8') as f:
-                f.write(f"{timestamp}|{registro}\n")
-                
-            logger.warning(f"⚠️ Registro guardado en fallback: {archivo_fallback}")
-            
-        except Exception as e:
-            logger.error(f"❌ Error guardando fallback: {e}")
     
     def sincronizar_desde_csv(self):
         """
