@@ -11,6 +11,8 @@ from .gm_facturacion1 import ir_a_facturacion
 from .gm_salida import procesar_salida_viaje
 from .gm_llegadayfactura2 import procesar_llegada_factura
 from .parser import parse_xls
+# SIMPLIFICADO: Solo importar sistema de log CSV
+from viajes_log import registrar_viaje_fallido as log_viaje_fallido
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -60,13 +62,43 @@ class GMTransportAutomation:
         return datos_default
     
     def registrar_error_viaje(self, tipo_error, detalle=""):
-        """Registra errores específicos del viaje para revisión manual"""
+        """
+        FUNCIÓN SIMPLIFICADA: Registra errores SOLO en el log CSV
+        """
         prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
         placa_tractor = self.datos_viaje.get('placa_tractor', 'DESCONOCIDA')
         placa_remolque = self.datos_viaje.get('placa_remolque', 'DESCONOCIDA')
         determinante = self.datos_viaje.get('clave_determinante', 'DESCONOCIDO')
+        fecha_viaje = self.datos_viaje.get('fecha', '')
+        importe = self.datos_viaje.get('importe', '')
+        cliente_codigo = self.datos_viaje.get('cliente_codigo', '')
         
-        # Log específico para operadores
+        # Registrar en log CSV unificado
+        try:
+            motivo_completo = f"{tipo_error}"
+            if detalle:
+                motivo_completo += f" - {detalle}"
+                
+            exito_log = log_viaje_fallido(
+                prefactura=prefactura,
+                motivo_fallo=motivo_completo,
+                determinante=determinante,
+                fecha_viaje=fecha_viaje,
+                placa_tractor=placa_tractor,
+                placa_remolque=placa_remolque,
+                importe=importe,
+                cliente_codigo=cliente_codigo
+            )
+            
+            if exito_log:
+                logger.info("✅ Error registrado en log CSV")
+            else:
+                logger.warning("⚠️ Error registrando en log CSV")
+                
+        except Exception as e:
+            logger.warning(f"⚠️ Error registrando en log CSV: {e}")
+        
+        # Log específico para operadores (MANTENER)
         logger.error("=" * 80)
         logger.error("🚨 VIAJE REQUIERE ATENCIÓN MANUAL")
         logger.error(f"📋 PREFACTURA: {prefactura}")
@@ -79,7 +111,7 @@ class GMTransportAutomation:
         logger.error("🔧 ACCIÓN REQUERIDA: Revisar y completar manualmente en GM Transport")
         logger.error("=" * 80)
         
-        # Guardar en archivo temporal
+        # Guardar en archivo temporal (MANTENER para compatibilidad)
         try:
             error_file = "errores_viajes.log"
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -98,50 +130,55 @@ class GMTransportAutomation:
             'detalle': detalle
         }
     
-    def registrar_determinante_faltante_mysql(self, determinante_faltante):
+    def registrar_determinante_faltante_csv(self, determinante_faltante):
         """
-        NUEVA FUNCIÓN: Registra específicamente determinantes faltantes en MySQL
+        FUNCIÓN SIMPLIFICADA: Registra determinantes faltantes SOLO en CSV
         """
         try:
-            from .mysql_simple import registrar_viaje_fallido
-            
+            # Registrar en log CSV unificado
             prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
             fecha_viaje = self.datos_viaje.get('fecha', '')
             placa_tractor = self.datos_viaje.get('placa_tractor', '')
             placa_remolque = self.datos_viaje.get('placa_remolque', '')
+            importe = self.datos_viaje.get('importe', '')
+            cliente_codigo = self.datos_viaje.get('cliente_codigo', '')
             
             # Motivo específico para determinantes faltantes
             motivo_fallo = f"Determinante {determinante_faltante} no encontrada en clave_ruta_base.csv"
             
-            # Registrar en MySQL
-            exito_mysql = registrar_viaje_fallido(
+            # Registrar en log CSV
+            exito_log = log_viaje_fallido(
                 prefactura=prefactura,
-                fecha_viaje=fecha_viaje, 
                 motivo_fallo=motivo_fallo,
+                determinante=determinante_faltante,
+                fecha_viaje=fecha_viaje,
                 placa_tractor=placa_tractor,
-                placa_remolque=placa_remolque
+                placa_remolque=placa_remolque,
+                importe=importe,
+                cliente_codigo=cliente_codigo
             )
             
-            if exito_mysql:
-                logger.error("🚨 DETERMINANTE FALTANTE REGISTRADA EN MySQL:")
+            if exito_log:
+                logger.error("🚨 DETERMINANTE FALTANTE REGISTRADA EN LOG CSV:")
                 logger.error(f"   📋 Prefactura: {prefactura}")
                 logger.error(f"   🎯 Determinante faltante: {determinante_faltante}")
                 logger.error(f"   🚛 Placas: {placa_tractor} / {placa_remolque}")
-                logger.error(f"   💾 Estado: Registrado en base de datos")
+                logger.error(f"   💾 Estado: Registrado en log CSV")
                 logger.error("   🔧 ACCIÓN: Agregar determinante a clave_ruta_base.csv")
+                logger.error("   🔄 MySQL se actualizará automáticamente desde CSV")
                 return True
             else:
-                logger.warning("⚠️ MySQL no disponible - registrado en archivo fallback")
+                logger.warning("⚠️ Error registrando en log CSV")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error registrando determinante faltante en MySQL: {e}")
+            logger.error(f"❌ Error registrando determinante faltante: {e}")
             return False
     
     def obtener_ruta_y_base(self, determinante):
         """
-        FUNCIÓN MODIFICADA: Obtiene la ruta GM y base origen desde el CSV
-        Ahora retorna estado específico para determinantes faltantes
+        Obtiene la ruta GM y base origen desde el CSV
+        Retorna estado específico para determinantes faltantes
         """
         csv_path = 'modules/clave_ruta_base.csv'
         
@@ -170,7 +207,7 @@ class GMTransportAutomation:
                         logger.info(f"✅ ENCONTRADO: determinante {determinante} -> ruta {row['ruta_gm']}, base {row['base_origen']}")
                         return row['ruta_gm'], row['base_origen'], "ENCONTRADO"
                 
-                # NUEVO: Si llegamos aquí, la determinante NO existe
+                # Si llegamos aquí, la determinante NO existe
                 logger.error("🚨 DETERMINANTE NO ENCONTRADA EN LISTA")
                 logger.error(f"🎯 Determinante buscada: {determinante}")
                 logger.error(f"📋 Determinantes disponibles: {determinantes_disponibles}")
@@ -529,7 +566,7 @@ class GMTransportAutomation:
     
     def fill_viaje_form(self):
         """
-        FUNCIÓN PRINCIPAL MODIFICADA: Maneja determinantes faltantes
+        FUNCIÓN PRINCIPAL SIMPLIFICADA: Solo registra en CSV
         """
         try:
             logger.info("🚀 Iniciando llenado de formulario de viaje")
@@ -594,19 +631,19 @@ class GMTransportAutomation:
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo hacer clic en campo de ruta: {e}")
             
-            # 🚨 NUEVA LÓGICA: Obtener y validar determinante
+            # Obtener y validar determinante
             logger.info("🗺️ Obteniendo ruta GM...")
             ruta_gm, base_origen, estado_determinante = self.obtener_ruta_y_base(clave_determinante)
             
-            # 🚨 MANEJO CRÍTICO: Determinante no encontrada
+            # MANEJO CRÍTICO: Determinante no encontrada
             if estado_determinante == "DETERMINANTE_NO_ENCONTRADA":
                 logger.error("🚨 DETERMINANTE NO ENCONTRADA - REGISTRANDO ERROR Y TERMINANDO VIAJE")
                 
-                # Registrar específicamente en MySQL
-                if self.registrar_determinante_faltante_mysql(clave_determinante):
-                    logger.error("✅ Error registrado exitosamente en MySQL")
+                # SIMPLIFICADO: Solo registrar en CSV
+                if self.registrar_determinante_faltante_csv(clave_determinante):
+                    logger.error("✅ Error registrado exitosamente en log CSV")
                 else:
-                    logger.error("❌ Error registrado en archivo fallback")
+                    logger.error("❌ Error registrando en log CSV")
                 
                 # Registrar también en el sistema de errores local
                 self.registrar_error_viaje(
@@ -615,18 +652,18 @@ class GMTransportAutomation:
                 )
                 
                 logger.error("🔄 RETORNANDO FALSE - El sistema continuará con el siguiente viaje")
-                return False  # ← IMPORTANTE: Retorna False para que continúe con siguiente viaje
+                return False
             
-            # 🚨 OTROS ERRORES DE DETERMINANTE
+            # OTROS ERRORES DE DETERMINANTE
             elif estado_determinante in ["ARCHIVO_CSV_NO_EXISTE", "ERROR_LECTURA_CSV"]:
                 logger.error(f"🚨 ERROR CRÍTICO EN DETERMINANTES: {estado_determinante}")
                 self.registrar_error_viaje(
                     estado_determinante,
                     f"Error técnico con archivo clave_ruta_base.csv"
                 )
-                return False  # ← También continúa con siguiente viaje
+                return False
             
-            # ✅ DETERMINANTE ENCONTRADA - CONTINUAR NORMALMENTE
+            # DETERMINANTE ENCONTRADA - CONTINUAR NORMALMENTE
             elif estado_determinante == "ENCONTRADO":
                 logger.info(f"✅ Determinante válida: {clave_determinante} -> Ruta: {ruta_gm}, Base: {base_origen}")
                 
@@ -673,7 +710,7 @@ class GMTransportAutomation:
                     logger.error("❌ VIAJE CANCELADO: Error en selección de tractor")
                     return False
             
-            # **FLUJO**: Usar gm_facturacion1 para la parte inicial
+            # FLUJO: Usar gm_facturacion1 para la parte inicial
             logger.info("💰 Ejecutando facturación inicial...")
             try:
                 resultado_facturacion = ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
@@ -684,7 +721,7 @@ class GMTransportAutomation:
             except Exception as e:
                 logger.warning(f"⚠️ Error en facturación inicial: {e} - continuando...")
             
-            # **FLUJO**: Procesar Salida
+            # FLUJO: Procesar Salida
             logger.info("🚛 Ejecutando proceso de SALIDA...")
             try:
                 resultado_salida = procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True)
@@ -697,7 +734,7 @@ class GMTransportAutomation:
                 logger.error(f"🔍 VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error crítico en salida")
                 return False
             
-            # **FLUJO**: Procesar Llegada y Facturación Final
+            # FLUJO: Procesar Llegada y Facturación Final
             logger.info("🛬 Ejecutando proceso de LLEGADA y FACTURACIÓN FINAL...")
             try:
                 resultado_llegada = procesar_llegada_factura(self.driver, self.datos_viaje)
@@ -712,6 +749,7 @@ class GMTransportAutomation:
             
             logger.info("🎉 Proceso completo de automatización GM Transport exitoso")
             logger.info(f"✅ VIAJE COMPLETADO: Prefactura {prefactura_valor} - Placa Tractor: {self.datos_viaje.get('placa_tractor')} - Placa Remolque: {self.datos_viaje.get('placa_remolque')}")
+            logger.info("🔄 Los datos se sincronizarán automáticamente con MySQL desde el CSV")
             return True
             
         except Exception as e:

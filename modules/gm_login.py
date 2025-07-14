@@ -10,8 +10,8 @@ import os
 
 # Credenciales y URL
 EMPRESA = "TSU9608131A7"
-USUARIO = "ERNESTOU"
-CONTRASENA = "eRN#$TO.#\"/2025"
+USUARIO = "ROBOT"
+CONTRASENA = "r0b4t2025ROB$"
 CRM_URL = "https://www.softwareparatransporte.com/GMTERPV8_WEB/ES/PAGE_CatUsuariosLoginAWP.awp"
 
 # Ruta al chromedriver y carpeta de perfil temporal

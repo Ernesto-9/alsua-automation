@@ -7,6 +7,9 @@ import time
 import csv
 import os
 import logging
+from datetime import datetime
+# SIMPLIFICADO: Solo importar sistema de log CSV
+from viajes_log import registrar_viaje_fallido as log_viaje_fallido
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -187,10 +190,8 @@ class GMSalidaAutomation:
     
     def manejar_operador_ocupado(self):
         """
-        Maneja el error de operador ocupado:
-        1. Hace clic en BTN_OK
-        2. Registra error en MySQL 
-        3. Cierra navegador
+        FUNCIÓN SIMPLIFICADA: Maneja el error de operador ocupado
+        SOLO registra en log CSV
         """
         try:
             logger.warning("🚨 MANEJANDO ERROR DE OPERADOR OCUPADO")
@@ -204,23 +205,44 @@ class GMSalidaAutomation:
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en BTN_OK: {e}")
             
-            # Paso 2: Registrar error en MySQL
+            # Paso 2: Preparar datos para registro
+            prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
+            fecha_viaje = self.datos_viaje.get('fecha', '')
+            placa_tractor = self.datos_viaje.get('placa_tractor', 'DESCONOCIDA')
+            placa_remolque = self.datos_viaje.get('placa_remolque', 'DESCONOCIDA')
+            determinante = self.datos_viaje.get('clave_determinante', 'DESCONOCIDO')
+            importe = self.datos_viaje.get('importe', '')
+            cliente_codigo = self.datos_viaje.get('cliente_codigo', '')
+            
+            motivo = f"Operador ocupado - Tractor {placa_tractor} no disponible"
+            
+            # SIMPLIFICADO: Registrar SOLO en log CSV
             try:
-                from modules.mysql_simple import registrar_viaje_fallido
+                exito_csv = log_viaje_fallido(
+                    prefactura=prefactura,
+                    motivo_fallo=motivo,
+                    determinante=determinante,
+                    fecha_viaje=fecha_viaje,
+                    placa_tractor=placa_tractor,
+                    placa_remolque=placa_remolque,
+                    importe=importe,
+                    cliente_codigo=cliente_codigo
+                )
                 
-                prefactura = self.datos_viaje.get('prefactura', '')
-                fecha_viaje = self.datos_viaje.get('fecha', '')
-                motivo = f"Operador ocupado - Tractor {self.datos_viaje.get('placa_tractor', 'DESCONOCIDO')} no disponible"
-                
-                exito_mysql = registrar_viaje_fallido(prefactura, fecha_viaje, motivo)
-                
-                if exito_mysql:
-                    logger.info("✅ Error registrado en MySQL exitosamente")
+                if exito_csv:
+                    logger.info("✅ Operador ocupado registrado en log CSV")
+                    logger.info("🚨 OPERADOR OCUPADO REGISTRADO:")
+                    logger.info(f"   📋 Prefactura: {prefactura}")
+                    logger.info(f"   🚛 Placa Tractor: {placa_tractor}")
+                    logger.info(f"   📊 Estatus en CSV: FALLIDO")
+                    logger.info(f"   🔍 Motivo: {motivo}")
+                    logger.info("   🔧 ACCIÓN: Revisar disponibilidad de operador")
+                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
                 else:
-                    logger.warning("⚠️ Error registrado en archivo fallback")
+                    logger.error("❌ Error registrando en log CSV")
                     
             except Exception as e:
-                logger.error(f"❌ Error registrando en MySQL: {e}")
+                logger.error(f"❌ Error registrando en log CSV: {e}")
             
             # Paso 3: Cerrar navegador
             try:
@@ -610,7 +632,8 @@ class GMSalidaAutomation:
             resultado = self.procesar_salida_viaje()
             
             if resultado == "OPERADOR_OCUPADO":
-                logger.warning("🚨 OPERADOR OCUPADO: Error registrado, navegador cerrado")
+                logger.warning("🚨 OPERADOR OCUPADO: Error registrado en CSV, navegador cerrado")
+                logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
                 return "OPERADOR_OCUPADO"
             elif resultado:
                 logger.info("✅ Proceso completo de salida completado exitosamente")
@@ -626,11 +649,11 @@ class GMSalidaAutomation:
 # Función principal para ser llamada desde otros módulos
 def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
     """
-    Función principal para procesar la salida del viaje CON MEJORAS ANTI-1000
+    FUNCIÓN SIMPLIFICADA: Procesar la salida del viaje CON REGISTRO SOLO EN CSV
     Retorna:
     - True: Éxito
     - False: Error que debe detener el proceso
-    - "OPERADOR_OCUPADO": Operador ocupado, error registrado, continuar con siguiente viaje
+    - "OPERADOR_OCUPADO": Operador ocupado, error registrado en CSV, continuar con siguiente viaje
     """
     try:
         automation = GMSalidaAutomation(driver, datos_viaje)
@@ -640,7 +663,8 @@ def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
         prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA') if datos_viaje else 'DESCONOCIDA'
         
         if resultado == "OPERADOR_OCUPADO":
-            logger.warning(f"🚨 VIAJE {prefactura}: Operador ocupado - error registrado en MySQL")
+            logger.warning(f"🚨 VIAJE {prefactura}: Operador ocupado - registrado en CSV")
+            logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
         elif resultado:
             logger.info(f"✅ VIAJE {prefactura} PROCESADO: Salida completada exitosamente")
         else:
