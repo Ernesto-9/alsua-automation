@@ -7,6 +7,8 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import time
 from datetime import datetime
 from .pdf_extractor import extraer_datos_automatico
+# SIMPLIFICADO: Solo importar sistema de log CSV
+from viajes_log import registrar_viaje_exitoso as log_viaje_exitoso
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -305,7 +307,7 @@ class ProcesadorLlegadaFactura:
             return False
     
     def _procesar_impresion_y_extraccion_automatica(self):
-        """NUEVA FUNCIÓN: Procesar impresión y extraer folio fiscal AUTOMÁTICAMENTE"""
+        """Procesar impresión y extraer folio fiscal AUTOMÁTICAMENTE"""
         try:
             logger.info("🖨️ Procesando impresión y extracción automática de datos...")
             
@@ -359,10 +361,10 @@ class ProcesadorLlegadaFactura:
                 else:
                     logger.warning("⚠️ No se pudo extraer VIAJEGM del PDF")
                 
-                # 🚀 NUEVO: REGISTRAR VIAJE EXITOSO COMPLETO EN MYSQL
-                logger.info("💾 Registrando viaje exitoso completo en MySQL...")
-                if not self._registrar_viaje_exitoso_completo():
-                    logger.warning("⚠️ Error registrando en MySQL - continuando proceso")
+                # SIMPLIFICADO: REGISTRAR VIAJE EXITOSO SOLO EN CSV
+                logger.info("💾 Registrando viaje exitoso en log CSV...")
+                if not self._registrar_viaje_exitoso_csv():
+                    logger.warning("⚠️ Error registrando en log CSV - continuando proceso")
                 
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en 'Imprimir' o extraer datos: {e}")
@@ -401,12 +403,12 @@ class ProcesadorLlegadaFactura:
             logger.error(f"❌ Error en proceso de impresión y extracción automática: {e}")
             return False
     
-    def _registrar_viaje_exitoso_completo(self):
+    def _registrar_viaje_exitoso_csv(self):
         """
-        🚀 NUEVA FUNCIÓN: Registra viaje exitoso con TODOS los datos disponibles en MySQL
+        FUNCIÓN SIMPLIFICADA: Registra viaje exitoso SOLO en log CSV
         """
         try:
-            logger.info("📊 Preparando registro completo de viaje exitoso...")
+            logger.info("📊 Registrando viaje exitoso en log CSV...")
             
             # Extraer TODOS los datos disponibles
             prefactura = self.datos_viaje.get('prefactura')
@@ -415,18 +417,21 @@ class ProcesadorLlegadaFactura:
             viajegm = self.datos_viaje.get('viajegm')
             placa_tractor = self.datos_viaje.get('placa_tractor')
             placa_remolque = self.datos_viaje.get('placa_remolque')
+            determinante = self.datos_viaje.get('clave_determinante')
+            importe = self.datos_viaje.get('importe')
+            cliente_codigo = self.datos_viaje.get('cliente_codigo')
             
             # Log de datos que se van a registrar
-            logger.info("📋 DATOS COMPLETOS PARA MYSQL:")
+            logger.info("📋 DATOS COMPLETOS PARA LOG CSV:")
             logger.info(f"   📋 Prefactura: {prefactura}")
             logger.info(f"   📅 Fecha: {fecha_viaje}")
             logger.info(f"   🆔 UUID: {uuid}")
             logger.info(f"   🚛 Viaje GM: {viajegm}")
             logger.info(f"   🚗 Placa Tractor: {placa_tractor}")
             logger.info(f"   🚚 Placa Remolque: {placa_remolque}")
-            logger.info(f"   💰 Importe: {self.datos_viaje.get('importe', 'No disponible')}")
-            logger.info(f"   👤 Cliente: {self.datos_viaje.get('cliente_codigo', 'No disponible')}")
-            logger.info(f"   🎯 Determinante: {self.datos_viaje.get('clave_determinante', 'No disponible')}")
+            logger.info(f"   🎯 Determinante: {determinante}")
+            logger.info(f"   💰 Importe: {importe}")
+            logger.info(f"   👤 Cliente: {cliente_codigo}")
             
             # Validar datos críticos
             if not prefactura:
@@ -437,41 +442,41 @@ class ProcesadorLlegadaFactura:
                 logger.error("❌ Error crítico: No hay fecha para registrar")
                 return False
             
-            # Importar y registrar en MySQL
+            # Registrar en log CSV unificado
             try:
-                from .mysql_simple import registrar_viaje_exitoso
-                
-                exito_mysql = registrar_viaje_exitoso(
+                exito_csv = log_viaje_exitoso(
                     prefactura=prefactura,
+                    determinante=determinante,
                     fecha_viaje=fecha_viaje,
+                    placa_tractor=placa_tractor,
+                    placa_remolque=placa_remolque,
                     uuid=uuid,
                     viajegm=viajegm,
-                    placa_tractor=placa_tractor,
-                    placa_remolque=placa_remolque
+                    importe=importe,
+                    cliente_codigo=cliente_codigo
                 )
                 
-                if exito_mysql:
-                    logger.info("🎉 VIAJE EXITOSO REGISTRADO COMPLETAMENTE EN MYSQL:")
+                if exito_csv:
+                    logger.info("✅ Viaje EXITOSO registrado en log CSV")
+                    logger.info("🎉 VIAJE COMPLETADO EXITOSAMENTE:")
                     logger.info(f"   ✅ Prefactura: {prefactura}")
                     logger.info(f"   ✅ Fecha: {fecha_viaje}")
                     logger.info(f"   ✅ UUID: {uuid or 'No extraído'}")
                     logger.info(f"   ✅ Viaje GM: {viajegm or 'No extraído'}")
                     logger.info(f"   ✅ Placas: {placa_tractor}/{placa_remolque}")
-                    logger.info("💾 Base de datos actualizada exitosamente")
+                    logger.info(f"   📊 Estatus en CSV: EXITOSO")
+                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
                     return True
                 else:
-                    logger.warning("⚠️ MySQL no disponible - registro guardado en archivo fallback")
+                    logger.error("❌ Error registrando en log CSV")
                     return False
                     
-            except ImportError as e:
-                logger.error(f"❌ Error importando mysql_simple: {e}")
-                return False
             except Exception as e:
-                logger.error(f"❌ Error registrando en MySQL: {e}")
+                logger.error(f"❌ Error registrando en log CSV: {e}")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Error general en registro MySQL: {e}")
+            logger.error(f"❌ Error general en registro CSV: {e}")
             return False
     
     def obtener_datos_extraidos(self):
@@ -483,14 +488,17 @@ class ProcesadorLlegadaFactura:
 
 
 def procesar_llegada_factura(driver, datos_viaje):
-    """Función principal para procesar llegada y facturación CON EXTRACCIÓN AUTOMÁTICA"""
+    """
+    FUNCIÓN SIMPLIFICADA: Procesar llegada y facturación CON REGISTRO SOLO EN CSV
+    """
     try:
-        logger.info("🚀 Iniciando ProcesadorLlegadaFactura CON EXTRACCIÓN AUTOMÁTICA...")
+        logger.info("🚀 Iniciando ProcesadorLlegadaFactura SIMPLIFICADO...")
         procesador = ProcesadorLlegadaFactura(driver, datos_viaje)
         resultado = procesador.procesar_llegada_y_factura()
         
         if resultado:
             logger.info("✅ Proceso de llegada y facturación completado exitosamente")
+            logger.info("🔄 Datos registrados en CSV - MySQL se sincronizará automáticamente")
             
             # Retornar también los datos extraídos
             datos_extraidos = procesador.obtener_datos_extraidos()

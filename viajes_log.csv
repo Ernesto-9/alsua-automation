@@ -1,0 +1,3 @@
+timestamp,prefactura,determinante,fecha_viaje,placa_tractor,placa_remolque,estatus,motivo_fallo,uuid,viajegm,importe,cliente_codigo
+2025-07-14 02:14:36,7996845,2899,15/01/2025,94BB1F,852YH6,EXITOSO,,12345678-1234-1234-1234-123456789012,COB-12345,310.75,040512
+2025-07-14 02:14:36,7996846,4792,15/01/2025,94BB1G,852YH7,FALLIDO,Placa 94BB1G no tiene operador asignado,,,285.50,040512

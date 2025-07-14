@@ -2,9 +2,8 @@
 """
 Sistema completo de automatización Alsua Transport
 Mail Reader → Parser → GM Automation
-VERSIÓN MEJORADA CON MANEJO ROBUSTO DE DRIVER CORRUPTO
-ACTUALIZADO: Sin registros MySQL duplicados (se maneja en gm_llegadayfactura2.py)
-NUEVO: Arreglo COM para funcionar con Flask
+VERSIÓN SIMPLIFICADA: Solo registra en CSV, MySQL se sincroniza automáticamente
+NUEVO: Solo usa viajes_log.csv como fuente única de registro
 """
 
 import os
@@ -14,10 +13,12 @@ import re
 import pickle
 from datetime import datetime, timedelta
 import win32com.client
-import pythoncom  # NUEVO: Para inicialización COM
+import pythoncom  # Para inicialización COM
 from modules.parser import parse_xls
 from modules.gm_login import login_to_gm
 from modules.gm_transport_general import GMTransportAutomation
+# SIMPLIFICADO: Solo importar sistema de log CSV
+from viajes_log import registrar_viaje_fallido as log_viaje_fallido
 
 # Configurar logging
 logging.basicConfig(
@@ -35,7 +36,7 @@ class AlsuaMailAutomation:
         # Usar ruta absoluta para evitar problemas de permisos
         self.carpeta_descarga = os.path.abspath("archivos_descargados")
         
-        # NUEVO: Archivos persistentes para tracking de duplicados
+        # SIMPLIFICADO: Solo archivos para tracking de duplicados
         self.archivo_procesados = "correos_procesados.pkl"
         self.archivo_viajes_creados = "viajes_creados.pkl"
         
@@ -44,9 +45,9 @@ class AlsuaMailAutomation:
         self.viajes_creados = self.cargar_viajes_creados()
         
         self.driver = None
-        self.driver_corrupto = False  # NUEVO: Flag para trackear driver corrupto
+        self.driver_corrupto = False  # Flag para trackear driver corrupto
         
-        # NUEVO: Control de inicialización COM
+        # Control de inicialización COM
         self.com_inicializado = False
         
         self._crear_carpeta_descarga()
@@ -82,14 +83,11 @@ class AlsuaMailAutomation:
             logger.info(f"📁 Carpeta fallback: {self.carpeta_descarga}")
     
     # ==========================================
-    # NUEVAS FUNCIONES COM PARA FLASK
+    # FUNCIONES COM PARA FLASK
     # ==========================================
     
     def inicializar_com(self):
-        """
-        NUEVA FUNCIÓN: Inicializa COM para el thread actual
-        Necesario cuando se ejecuta desde Flask
-        """
+        """Inicializa COM para el thread actual"""
         try:
             if not self.com_inicializado:
                 logger.info("🔧 Inicializando COM para thread actual...")
@@ -102,9 +100,7 @@ class AlsuaMailAutomation:
             return False
     
     def limpiar_com(self):
-        """
-        NUEVA FUNCIÓN: Limpia COM al finalizar
-        """
+        """Limpia COM al finalizar"""
         try:
             if self.com_inicializado:
                 logger.info("🧹 Limpiando inicialización COM...")
@@ -273,42 +269,56 @@ class AlsuaMailAutomation:
         except Exception as e:
             logger.warning(f"⚠️ Error limpiando archivos: {e}")
     
-    def registrar_viaje_para_revision_manual(self, datos_viaje, tipo_error):
-        """Registra un viaje válido que falló para revisión manual urgente"""
+    def registrar_viaje_para_revision_manual_csv(self, datos_viaje, tipo_error):
+        """
+        FUNCIÓN SIMPLIFICADA: Registra un viaje válido que falló SOLO en CSV
+        """
         try:
-            # Archivo especial para viajes que NECESITAN revisión manual
-            archivo_revision = "viajes_requieren_revision.log"
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
+            # SIMPLIFICADO: Registrar directamente en CSV sin archivo separado
             prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
+            determinante = datos_viaje.get('clave_determinante', 'DESCONOCIDO')
+            fecha_viaje = datos_viaje.get('fecha', '')
             placa_tractor = datos_viaje.get('placa_tractor', 'DESCONOCIDA')
             placa_remolque = datos_viaje.get('placa_remolque', 'DESCONOCIDA')
-            determinante = datos_viaje.get('clave_determinante', 'DESCONOCIDO')
             importe = datos_viaje.get('importe', '0')
+            cliente_codigo = datos_viaje.get('cliente_codigo', '')
             
-            # Log crítico para operadores
-            logger.error("🚨" * 20)
-            logger.error("🚨 VIAJE VACIO VÁLIDO REQUIERE REVISIÓN MANUAL")
-            logger.error(f"🚨 PREFACTURA: {prefactura}")
-            logger.error(f"🚨 PLACA TRACTOR: {placa_tractor}")
-            logger.error(f"🚨 PLACA REMOLQUE: {placa_remolque}")
-            logger.error(f"🚨 DETERMINANTE: {determinante}")
-            logger.error(f"🚨 IMPORTE: ${importe}")
-            logger.error(f"🚨 ERROR: {tipo_error}")
-            logger.error("🚨 ACCIÓN: Procesar manualmente en GM Transport")
-            logger.error("🚨" * 20)
+            # Motivo específico para revisión manual
+            motivo_fallo = f"REVISIÓN MANUAL REQUERIDA - {tipo_error}"
             
-            # Guardar en archivo especial
-            with open(archivo_revision, 'a', encoding='utf-8') as f:
-                f.write(f"{timestamp}|URGENTE|{prefactura}|{placa_tractor}|{placa_remolque}|{determinante}|{importe}|{tipo_error}\n")
+            # Registrar en CSV
+            exito_csv = log_viaje_fallido(
+                prefactura=prefactura,
+                motivo_fallo=motivo_fallo,
+                determinante=determinante,
+                fecha_viaje=fecha_viaje,
+                placa_tractor=placa_tractor,
+                placa_remolque=placa_remolque,
+                importe=importe,
+                cliente_codigo=cliente_codigo
+            )
             
-            logger.error(f"📝 Viaje registrado en: {archivo_revision}")
-            
+            if exito_csv:
+                logger.error("🚨 VIAJE VACIO VÁLIDO REGISTRADO PARA REVISIÓN MANUAL:")
+                logger.error(f"   📋 Prefactura: {prefactura}")
+                logger.error(f"   🎯 Determinante: {determinante}")
+                logger.error(f"   🚛 Placas: {placa_tractor} / {placa_remolque}")
+                logger.error(f"   💰 Importe: ${importe}")
+                logger.error(f"   ❌ Error: {tipo_error}")
+                logger.error("   🔧 ACCIÓN: Procesar manualmente en GM Transport")
+                logger.error("   📊 Registrado en CSV con estatus FALLIDO")
+                logger.error("🔄 MySQL se actualizará automáticamente desde CSV")
+                return True
+            else:
+                logger.error("❌ Error registrando viaje para revisión en CSV")
+                return False
+                
         except Exception as e:
             logger.error(f"❌ Error registrando viaje para revisión: {e}")
+            return False
     
     # ==========================================
-    # NUEVAS FUNCIONES PARA MANEJO DE DRIVER
+    # FUNCIONES PARA MANEJO DE DRIVER
     # ==========================================
     
     def verificar_driver_valido(self):
@@ -385,7 +395,7 @@ class AlsuaMailAutomation:
         return self.inicializar_driver_nuevo()
     
     # ==========================================
-    # FUNCIONES PRINCIPALES MODIFICADAS
+    # FUNCIONES PRINCIPALES SIMPLIFICADAS
     # ==========================================
     
     def extraer_prefactura_del_asunto(self, asunto):
@@ -441,7 +451,9 @@ class AlsuaMailAutomation:
             return datetime.now().strftime("%d/%m/%Y")
     
     def procesar_correo_individual(self, mensaje):
-        """Procesa un correo individual - MANEJO INTELIGENTE DE ERRORES Y DRIVER"""
+        """
+        FUNCIÓN SIMPLIFICADA: Procesa un correo individual con registro SOLO en CSV
+        """
         try:
             # ===== VERIFICACIÓN ANTI-DUPLICADOS =====
             if self.ya_fue_procesado_correo(mensaje):
@@ -562,8 +574,9 @@ class AlsuaMailAutomation:
                 
                 if resultado_gm == "OPERADOR_OCUPADO":
                     # 🚨 OPERADOR OCUPADO - MARCAR CORREO COMO LEÍDO PARA EVITAR CICLO
-                    logger.warning("🚨 OPERADOR OCUPADO: Error registrado en MySQL")
+                    logger.warning("🚨 OPERADOR OCUPADO: Error registrado en CSV")
                     logger.info("📧 MARCANDO correo como leído para evitar reprocesamiento en bucle")
+                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
                     
                     # MARCAR como procesado para evitar ciclo infinito
                     self.marcar_correo_procesado(mensaje, "ERROR_OPERADOR_OCUPADO")
@@ -592,10 +605,10 @@ class AlsuaMailAutomation:
                     return "DRIVER_CORRUPTO"
                     
                 elif resultado_gm:
-                    # ✅ ÉXITO COMPLETO - EL REGISTRO MySQL YA SE HIZO EN gm_llegadayfactura2.py
+                    # ✅ ÉXITO COMPLETO - EL REGISTRO SE HIZO EN CSV
                     logger.info("🎉 VIAJE EXITOSO COMPLETADO")
-                    logger.info("💾 Registro MySQL ya realizado en gm_llegadayfactura2.py")
-                    logger.info("📊 Datos completos (UUID, Viaje GM, placas) ya en base de datos")
+                    logger.info("📊 Datos completos (UUID, Viaje GM, placas) registrados en CSV")
+                    logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
                     
                     self.marcar_correo_procesado(mensaje, "COMPLETADO")
                     self.marcar_viaje_creado(resultado, "COMPLETADO")
@@ -604,19 +617,12 @@ class AlsuaMailAutomation:
                     logger.info(f"🗑️ Archivo limpiado: {ruta_local}")
                     return True
                 else:
-                    # ❌ FALLO EN GM - REGISTRAR EN MYSQL
-                    try:
-                        from modules.mysql_simple import registrar_viaje_fallido
-                        motivo_fallo = "Error general en automatización GM Transport"
-                        registrar_viaje_fallido(resultado['prefactura'], resultado['fecha'], motivo_fallo)
-                    except Exception as e:
-                        logger.warning(f"⚠️ Error registrando viaje fallido en MySQL: {e}")
-                    
+                    # ❌ FALLO EN GM - REGISTRAR EN CSV
                     logger.error("❌ VIAJE VACIO VÁLIDO FALLÓ EN GM TRANSPORT")
                     logger.error("🚨 REQUIERE REVISIÓN MANUAL URGENTE")
                     
-                    # REGISTRAR PARA REVISIÓN MANUAL
-                    self.registrar_viaje_para_revision_manual(resultado, "ERROR_GM_AUTOMATION")
+                    # SIMPLIFICADO: REGISTRAR PARA REVISIÓN MANUAL EN CSV
+                    self.registrar_viaje_para_revision_manual_csv(resultado, "ERROR_GM_AUTOMATION")
                     
                     # Conservar archivo para revisión
                     logger.error(f"📋 Archivo conservado para revisión: {ruta_local}")
@@ -645,7 +651,10 @@ class AlsuaMailAutomation:
         return False
     
     def ejecutar_automatizacion_gm(self, datos_viaje):
-        """Ejecuta la automatización completa de GM Transport - CON MANEJO ROBUSTO DE DRIVER"""
+        """
+        FUNCIÓN SIMPLIFICADA: Ejecuta la automatización completa de GM Transport
+        Todos los registros se hacen en CSV, MySQL se sincroniza automáticamente
+        """
         try:
             logger.info("🤖 Iniciando automatización GM Transport...")
             
@@ -668,7 +677,8 @@ class AlsuaMailAutomation:
                 if resultado == "OPERADOR_OCUPADO":
                     # El navegador ya fue cerrado en gm_salida.py
                     logger.warning("🚨 Operador ocupado detectado")
-                    logger.info("📝 Error ya registrado en MySQL")
+                    logger.info("📝 Error ya registrado en CSV")
+                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
                     # Marcar driver como corrupto para forzar nuevo login
                     self.driver = None
                     self.driver_corrupto = True
@@ -676,7 +686,8 @@ class AlsuaMailAutomation:
                     
                 elif resultado:
                     logger.info("🎉 Automatización GM completada exitosamente")
-                    logger.info("💾 Registro MySQL completo ya realizado en gm_llegadayfactura2.py")
+                    logger.info("📊 Datos completos registrados en CSV")
+                    logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
                     # Driver sigue siendo válido
                     return True
                 else:
@@ -713,10 +724,10 @@ class AlsuaMailAutomation:
     
     def revisar_correos_nuevos(self, modo_test=False):
         """
-        FUNCIÓN MODIFICADA: Revisa correos nuevos en Outlook CON INICIALIZACIÓN COM
+        FUNCIÓN SIMPLIFICADA: Revisa correos nuevos en Outlook con registro solo en CSV
         """
         try:
-            # 🔧 NUEVO: INICIALIZAR COM PARA FLASK
+            # INICIALIZAR COM PARA FLASK
             if not self.inicializar_com():
                 logger.error("❌ No se pudo inicializar COM - aborting")
                 return False
@@ -746,7 +757,7 @@ class AlsuaMailAutomation:
             correos_saltados = 0
             operadores_ocupados = 0
             drivers_corruptos = 0
-            reintentos_pendientes = 0  # NUEVO CONTADOR
+            reintentos_pendientes = 0
             
             logger.info(f"📊 Correos no leídos encontrados: {correos_totales}")
             logger.info(f"📊 Correos ya procesados en memoria: {len(self.correos_procesados)}")
@@ -768,7 +779,8 @@ class AlsuaMailAutomation:
                     
                     if resultado_procesamiento == "OPERADOR_OCUPADO":
                         operadores_ocupados += 1
-                        logger.warning(f"🚨 Viaje {prefactura} con operador ocupado - registrado en MySQL")
+                        logger.warning(f"🚨 Viaje {prefactura} con operador ocupado - registrado en CSV")
+                        logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
                         
                         # PAUSA EN MODO TEST
                         if modo_test:
@@ -790,7 +802,8 @@ class AlsuaMailAutomation:
                     elif resultado_procesamiento:
                         correos_procesados += 1
                         logger.info(f"✅ Viaje {prefactura} completado exitosamente")
-                        logger.info("💾 Todos los datos (UUID, Viaje GM, placas) registrados en MySQL")
+                        logger.info("📊 Todos los datos registrados en CSV")
+                        logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
                         
                         # PAUSA EN MODO TEST
                         if modo_test:
@@ -831,10 +844,11 @@ class AlsuaMailAutomation:
             logger.info(f"   🔧 Drivers corruptos: {drivers_corruptos}")
             logger.info(f"   🔄 Reintentos pendientes: {reintentos_pendientes}")
             logger.info(f"   💾 Total en tracking: correos={len(self.correos_procesados)}, viajes={len(self.viajes_creados)}")
-            logger.info("💾 IMPORTANTE: Registros MySQL completos se realizan en gm_llegadayfactura2.py")
+            logger.info("📊 IMPORTANTE: Todos los registros están en CSV")
+            logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
             
             if operadores_ocupados > 0:
-                logger.info("📝 Los errores de operador ocupado fueron registrados en MySQL")
+                logger.info("📝 Los errores de operador ocupado fueron registrados en CSV")
                 logger.info("🔧 Estos viajes requieren revisión manual")
             
             if drivers_corruptos > 0:
@@ -848,23 +862,24 @@ class AlsuaMailAutomation:
             logger.error(f"❌ Error al revisar correos: {e}")
             return False
         finally:
-            # 🔧 NUEVO: LIMPIAR COM AL FINALIZAR
+            # LIMPIAR COM AL FINALIZAR
             self.limpiar_com()
     
     def ejecutar_bucle_continuo(self, intervalo_minutos=5):
-        """Ejecuta el sistema en bucle continuo"""
-        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v3.0")
+        """FUNCIÓN SIMPLIFICADA: Ejecuta el sistema en bucle continuo con registro solo en CSV"""
+        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v4.0 SIMPLIFICADO")
         logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS ACTIVADA")
-        logger.info("🚨 MANEJO DE OPERADOR OCUPADO CON MYSQL")
+        logger.info("📊 REGISTRO UNIFICADO EN CSV")
+        logger.info("🔄 SINCRONIZACIÓN AUTOMÁTICA CON MySQL")
         logger.info("🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO")
-        logger.info("💾 REGISTRO MySQL COMPLETO EN gm_llegadayfactura2.py")
-        logger.info("🌐 COMPATIBLE CON FLASK Y THREADING")  # NUEVO
+        logger.info("🌐 COMPATIBLE CON FLASK Y THREADING")
         logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
         logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
         logger.info("🎯 Procesando solo viajes tipo VACIO")
         logger.info("🤖 Automatización GM completa habilitada")
         logger.info("📊 Datos completos: UUID, Viaje GM, placas, fecha, prefactura")
         logger.info("🔧 Errores marcados para revisión manual")
+        logger.info("💾 CSV → mysql_simple.py → MySQL (automático)")
         logger.info("=" * 70)
         
         try:
@@ -901,23 +916,17 @@ class AlsuaMailAutomation:
                 except:
                     pass
             
-            # 🔧 NUEVO: LIMPIAR COM AL FINALIZAR
+            # LIMPIAR COM AL FINALIZAR
             self.limpiar_com()
             
-            # CERRAR CONEXIÓN MYSQL AL FINALIZAR
-            try:
-                from modules.mysql_simple import cerrar_conexion
-                cerrar_conexion()
-                logger.info("✅ Conexión MySQL cerrada")
-            except Exception as e:
-                logger.warning(f"⚠️ Error cerrando MySQL: {e}")
-                    
             logger.info("👋 Sistema de automatización finalizado")
     
     def ejecutar_revision_unica(self):
-        """Ejecuta una sola revisión de correos (para pruebas) - CON PAUSA MANUAL DESPUÉS DE CADA VIAJE"""
+        """FUNCIÓN SIMPLIFICADA: Ejecuta una sola revisión de correos (para pruebas)"""
         logger.info("🧪 Ejecutando revisión única de correos...")
         logger.info("⏸️ MODO TEST: Se pausará después de cada viaje esperando tu confirmación")
+        logger.info("📊 Todos los registros se harán en CSV")
+        logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
         
         resultado = self.revisar_correos_nuevos(modo_test=True)
         
@@ -932,11 +941,12 @@ class AlsuaMailAutomation:
         return resultado
     
     def mostrar_estadisticas(self):
-        """Muestra estadísticas del sistema"""
-        logger.info("📊 ESTADÍSTICAS DEL SISTEMA:")
+        """FUNCIÓN SIMPLIFICADA: Muestra estadísticas del sistema"""
+        logger.info("📊 ESTADÍSTICAS DEL SISTEMA SIMPLIFICADO:")
         logger.info(f"   📧 Correos procesados: {len(self.correos_procesados)}")
         logger.info(f"   🚛 Viajes creados: {len(self.viajes_creados)}")
-        logger.info("   💾 Registro MySQL: COMPLETO en gm_llegadayfactura2.py")
+        logger.info("   📊 Registro principal: viajes_log.csv")
+        logger.info("   🔄 Sincronización MySQL: Automática")
         
         # Mostrar últimos procesados
         if self.correos_procesados:
@@ -953,14 +963,14 @@ def main():
     
     print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║              ALSUA TRANSPORT - SISTEMA COMPLETO v3.0        ║
-    ║                  Mail Reader + GM Automation                ║
-    ║                  🛡️ PROTECCIÓN ANTI-DUPLICADOS               ║
-    ║                  🚨 MANEJO DE OPERADOR OCUPADO              ║
-    ║                  🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO        ║
-    ║                  💾 REGISTRO MySQL COMPLETO                 ║
-    ║                  📊 UUID + Viaje GM + Placas               ║
-    ║                  🌐 COMPATIBLE CON FLASK                    ║
+    ║           ALSUA TRANSPORT - SISTEMA SIMPLIFICADO v4.0       ║
+    ║               Mail Reader + GM Automation                    ║
+    ║               🛡️ PROTECCIÓN ANTI-DUPLICADOS                  ║
+    ║               📊 REGISTRO UNIFICADO EN CSV                   ║
+    ║               🔄 SINCRONIZACIÓN AUTOMÁTICA MySQL             ║
+    ║               🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO           ║
+    ║               💾 CSV → mysql_simple.py → MySQL               ║
+    ║               🌐 COMPATIBLE CON FLASK                        ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
