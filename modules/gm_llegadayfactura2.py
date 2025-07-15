@@ -405,23 +405,68 @@ class ProcesadorLlegadaFactura:
     
     def _registrar_viaje_exitoso_csv(self):
         """
-        FUNCIÓN SIMPLIFICADA: Registra viaje exitoso SOLO en log CSV
+        FUNCIÓN SIMPLIFICADA CON LOGGING DETALLADO: Registra viaje exitoso SOLO en CSV
         """
         try:
-            logger.info("📊 Registrando viaje exitoso en log CSV...")
+            logger.info("💾 Registrando viaje exitoso en log CSV...")
             
-            # Extraer TODOS los datos disponibles
+            # ===== LOGGING DETALLADO DE DATOS DISPONIBLES =====
+            logger.info("🔍 DIAGNÓSTICO DETALLADO DE DATOS:")
+            logger.info(f"   📊 self.datos_viaje completo: {self.datos_viaje}")
+            logger.info(f"   📊 Tipo de self.datos_viaje: {type(self.datos_viaje)}")
+            logger.info(f"   📊 Claves disponibles: {list(self.datos_viaje.keys()) if self.datos_viaje else 'NONE'}")
+            
+            # Extraer TODOS los datos disponibles con logging individual
             prefactura = self.datos_viaje.get('prefactura')
-            fecha_viaje = self.datos_viaje.get('fecha')
-            uuid = self.datos_viaje.get('uuid')
-            viajegm = self.datos_viaje.get('viajegm')
-            placa_tractor = self.datos_viaje.get('placa_tractor')
-            placa_remolque = self.datos_viaje.get('placa_remolque')
-            determinante = self.datos_viaje.get('clave_determinante')
-            importe = self.datos_viaje.get('importe')
-            cliente_codigo = self.datos_viaje.get('cliente_codigo')
+            logger.info(f"   📋 Prefactura extraída: '{prefactura}' (tipo: {type(prefactura)})")
             
-            # Log de datos que se van a registrar
+            fecha_viaje = self.datos_viaje.get('fecha')
+            logger.info(f"   📅 Fecha extraída: '{fecha_viaje}' (tipo: {type(fecha_viaje)})")
+            
+            uuid = self.datos_viaje.get('uuid')
+            logger.info(f"   🆔 UUID extraído: '{uuid}' (tipo: {type(uuid)})")
+            
+            viajegm = self.datos_viaje.get('viajegm')
+            logger.info(f"   🚛 ViajeGM extraído: '{viajegm}' (tipo: {type(viajegm)})")
+            
+            placa_tractor = self.datos_viaje.get('placa_tractor')
+            logger.info(f"   🚗 Placa Tractor extraída: '{placa_tractor}' (tipo: {type(placa_tractor)})")
+            
+            placa_remolque = self.datos_viaje.get('placa_remolque')
+            logger.info(f"   🚚 Placa Remolque extraída: '{placa_remolque}' (tipo: {type(placa_remolque)})")
+            
+            determinante = self.datos_viaje.get('clave_determinante')
+            logger.info(f"   🎯 Determinante extraída: '{determinante}' (tipo: {type(determinante)})")
+            
+            importe = self.datos_viaje.get('importe')
+            logger.info(f"   💰 Importe extraído: '{importe}' (tipo: {type(importe)})")
+            
+            cliente_codigo = self.datos_viaje.get('cliente_codigo')
+            logger.info(f"   👤 Cliente extraído: '{cliente_codigo}' (tipo: {type(cliente_codigo)})")
+            
+            # ===== VALIDACIONES CON LOGGING DETALLADO =====
+            logger.info("🔍 INICIANDO VALIDACIONES:")
+            
+            # Validación de prefactura
+            logger.info(f"🔍 Validando prefactura: '{prefactura}'")
+            if not prefactura:
+                logger.error("❌ Error crítico: No hay prefactura para registrar")
+                logger.error(f"   🔍 Valor exacto: {repr(prefactura)}")
+                logger.error(f"   🔍 Evaluación bool: {bool(prefactura)}")
+                return False
+            logger.info("✅ Prefactura válida")
+                
+            # Validación de fecha
+            logger.info(f"🔍 Validando fecha_viaje: '{fecha_viaje}'")
+            if not fecha_viaje:
+                logger.error("❌ Error crítico: No hay fecha para registrar")
+                logger.error(f"   🔍 Valor exacto: {repr(fecha_viaje)}")
+                logger.error(f"   🔍 Evaluación bool: {bool(fecha_viaje)}")
+                return False
+            logger.info("✅ Fecha válida")
+            
+            # ===== INTENTO DE REGISTRO CON LOGGING DETALLADO =====
+            logger.info("🚀 INICIANDO REGISTRO EN CSV:")
             logger.info("📋 DATOS COMPLETOS PARA LOG CSV:")
             logger.info(f"   📋 Prefactura: {prefactura}")
             logger.info(f"   📅 Fecha: {fecha_viaje}")
@@ -433,17 +478,10 @@ class ProcesadorLlegadaFactura:
             logger.info(f"   💰 Importe: {importe}")
             logger.info(f"   👤 Cliente: {cliente_codigo}")
             
-            # Validar datos críticos
-            if not prefactura:
-                logger.error("❌ Error crítico: No hay prefactura para registrar")
-                return False
-                
-            if not fecha_viaje:
-                logger.error("❌ Error crítico: No hay fecha para registrar")
-                return False
-            
             # Registrar en log CSV unificado
             try:
+                logger.info("🔄 Llamando a log_viaje_exitoso()...")
+                
                 exito_csv = log_viaje_exitoso(
                     prefactura=prefactura,
                     determinante=determinante,
@@ -455,6 +493,8 @@ class ProcesadorLlegadaFactura:
                     importe=importe,
                     cliente_codigo=cliente_codigo
                 )
+                
+                logger.info(f"📊 Resultado de log_viaje_exitoso(): {exito_csv}")
                 
                 if exito_csv:
                     logger.info("✅ Viaje EXITOSO registrado en log CSV")
@@ -469,14 +509,23 @@ class ProcesadorLlegadaFactura:
                     return True
                 else:
                     logger.error("❌ Error registrando en log CSV")
+                    logger.error("🔍 La función log_viaje_exitoso() retornó False")
                     return False
                     
             except Exception as e:
                 logger.error(f"❌ Error registrando en log CSV: {e}")
+                logger.error(f"🔍 Tipo de error: {type(e).__name__}")
+                logger.error(f"🔍 Detalles del error: {str(e)}")
+                import traceback
+                logger.error(f"🔍 Traceback completo:\n{traceback.format_exc()}")
                 return False
                 
         except Exception as e:
             logger.error(f"❌ Error general en registro CSV: {e}")
+            logger.error(f"🔍 Tipo de error: {type(e).__name__}")
+            logger.error(f"🔍 Detalles del error: {str(e)}")
+            import traceback
+            logger.error(f"🔍 Traceback completo:\n{traceback.format_exc()}")
             return False
     
     def obtener_datos_extraidos(self):
