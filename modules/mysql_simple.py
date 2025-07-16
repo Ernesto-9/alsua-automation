@@ -3,6 +3,7 @@
 Handler MySQL MODIFICADO para leer desde viajes_log.csv
 NUEVO FLUJO: CSV → MySQL (fuente única de verdad es el CSV)
 LIMPIO: Sin archivos de fallback - todo va al CSV unificado
+ACTUALIZADO: Campos completos UUID, VIAJEGM, erroresrobot, estatusr, USUARIO
 """
 
 import mysql.connector
@@ -182,6 +183,7 @@ class MySQLSyncFromCSV:
     def procesar_registro_exitoso(self, registro):
         """
         Procesa un registro EXITOSO del CSV hacia MySQL
+        ACTUALIZADO: Incluye UUID, VIAJEGM, estatusr, USUARIO
         
         Args:
             registro: Dict con datos del registro CSV
@@ -201,29 +203,37 @@ class MySQLSyncFromCSV:
             # Verificar que la prefactura existe en la BD
             if not self.verificar_prefactura_existe(prefactura):
                 logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD - no se puede actualizar")
-                # YA NO GUARDAMOS EN FALLBACK - solo loggeamos la advertencia
                 logger.warning(f"💡 Considera agregar prefactura {prefactura} manualmente a la BD")
                 return False
             
             cursor = self.connection.cursor()
             
-            # Query UPDATE para completar los datos faltantes
+            # Query UPDATE para completar TODOS los datos de viaje exitoso
             query = """
                 UPDATE acumuladoprefactura 
-                SET UUID = %s, VIAJEGM = %s, estatusr = 'EXITOSO', USUARIO = 'ROBOT'
+                SET UUID = %s, VIAJEGM = %s, estatusr = %s, USUARIO = %s
                 WHERE NOPREFACTURA = %s
             """
             
-            valores = (uuid, viajegm, prefactura)
-            cursor.execute(query, valores)
+            valores = (uuid, viajegm, 'EXITOSO', 'ROBOT', prefactura)
             
+            logger.info(f"🔄 Ejecutando query para viaje EXITOSO:")
+            logger.info(f"   📋 NOPREFACTURA: {prefactura}")
+            logger.info(f"   🆔 UUID: {uuid}")
+            logger.info(f"   🚛 VIAJEGM: {viajegm}")
+            logger.info(f"   📊 estatusr: EXITOSO")
+            logger.info(f"   👤 USUARIO: ROBOT")
+            
+            cursor.execute(query, valores)
             filas_afectadas = cursor.rowcount
             
             if filas_afectadas > 0:
-                logger.info(f"✅ Viaje EXITOSO sincronizado en MySQL:")
+                logger.info(f"✅ Viaje EXITOSO sincronizado completamente en MySQL:")
                 logger.info(f"   📋 NOPREFACTURA: {prefactura}")
                 logger.info(f"   🆔 UUID: {uuid}")
                 logger.info(f"   🚛 VIAJEGM: {viajegm}")
+                logger.info(f"   📊 estatusr: EXITOSO")
+                logger.info(f"   👤 USUARIO: ROBOT")
                 
                 # Actualizar placas si están disponibles
                 placa_tractor = registro.get('placa_tractor')
@@ -248,6 +258,7 @@ class MySQLSyncFromCSV:
     def procesar_registro_fallido(self, registro):
         """
         Procesa un registro FALLIDO del CSV hacia MySQL
+        ACTUALIZADO: Incluye erroresrobot, estatusr, USUARIO
         
         Args:
             registro: Dict con datos del registro CSV
@@ -266,27 +277,35 @@ class MySQLSyncFromCSV:
             # Verificar que la prefactura existe en la BD
             if not self.verificar_prefactura_existe(prefactura):
                 logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD")
-                # YA NO GUARDAMOS EN FALLBACK - solo loggeamos la advertencia
                 logger.warning(f"💡 Considera agregar prefactura {prefactura} manualmente a la BD")
                 return False
             
             cursor = self.connection.cursor()
             
-            # Query UPDATE para marcar como fallido
+            # Query UPDATE para marcar como fallido con TODOS los campos requeridos
             query = """
                 UPDATE acumuladoprefactura 
-                SET estatusr = 'FALLIDO', erroresrobot = %s
+                SET erroresrobot = %s, estatusr = %s, USUARIO = %s
                 WHERE NOPREFACTURA = %s
             """
             
-            cursor.execute(query, (motivo_fallo, prefactura))
+            valores = (motivo_fallo, 'FALLIDO', 'ROBOT', prefactura)
             
+            logger.info(f"🔄 Ejecutando query para viaje FALLIDO:")
+            logger.info(f"   📋 NOPREFACTURA: {prefactura}")
+            logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
+            logger.info(f"   📊 estatusr: FALLIDO")
+            logger.info(f"   👤 USUARIO: ROBOT")
+            
+            cursor.execute(query, valores)
             filas_afectadas = cursor.rowcount
             
             if filas_afectadas > 0:
-                logger.info(f"✅ Viaje FALLIDO sincronizado en MySQL:")
+                logger.info(f"✅ Viaje FALLIDO sincronizado completamente en MySQL:")
                 logger.info(f"   📋 NOPREFACTURA: {prefactura}")
                 logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
+                logger.info(f"   📊 estatusr: FALLIDO")
+                logger.info(f"   👤 USUARIO: ROBOT")
                 
                 # Actualizar placas si están disponibles
                 placa_tractor = registro.get('placa_tractor')
@@ -467,7 +486,7 @@ def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor
 
 # Script de prueba
 if __name__ == "__main__":
-    print("🧪 Probando sincronización CSV → MySQL...")
+    print("🧪 Probando sincronización CSV → MySQL con campos completos...")
     
     # Mostrar estadísticas actuales
     print("\n📊 Estadísticas actuales:")
@@ -484,3 +503,4 @@ if __name__ == "__main__":
         print(f"   {key}: {value}")
     
     print("\n✅ Prueba completada")
+    print("🔍 Verificar MySQL: UUID, VIAJEGM, erroresrobot, estatusr, USUARIO")
