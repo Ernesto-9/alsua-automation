@@ -1,30 +1,40 @@
 #!/usr/bin/env python3
 """
 Sistema completo de automatización Alsua Transport
-Mail Reader → Parser → GM Automation
-VERSIÓN LIMPIA: Solo usa viajes_log.csv para TODO (anti-duplicados + registros)
-SIN archivos .pkl, SIN alsua_automation.log
+Mail Reader → Cola JSON → GM Automation
+VERSIÓN MEJORADA: Cola persistente JSON, reintentos selectivos, proceso GM completo
+MANTIENE: Todas las funcionalidades del sistema actual que funcionan
 """
 
 import os
 import time
 import logging
 import re
+import sys
 from datetime import datetime, timedelta
 import win32com.client
 import pythoncom  # Para inicialización COM
 from modules.parser import parse_xls
 from modules.gm_login import login_to_gm
 from modules.gm_transport_general import GMTransportAutomation
-# SIMPLIFICADO: Solo importar sistema de log CSV
+# Usar tu sistema de cola existente
+from cola_viajes import (
+    agregar_viaje_a_cola, 
+    obtener_siguiente_viaje_cola,
+    marcar_viaje_exitoso_cola,
+    marcar_viaje_fallido_cola,
+    registrar_error_reintentable_cola,
+    obtener_estadisticas_cola
+)
+# Usar tu sistema de logs existente
 from viajes_log import registrar_viaje_fallido as log_viaje_fallido, viajes_log
 
-# Configurar logging LIMPIO: Solo consola, SIN archivo
+# Configurar logging LIMPIO: Solo consola
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.StreamHandler()  # Solo consola, NO archivo
+        logging.StreamHandler()  # Solo consola
     ]
 )
 logger = logging.getLogger(__name__)
@@ -35,7 +45,6 @@ class AlsuaMailAutomation:
         self.carpeta_descarga = os.path.abspath("archivos_descargados")
         
         self.driver = None
-        self.driver_corrupto = False  # Flag para trackear driver corrupto
         
         # Control de inicialización COM
         self.com_inicializado = False
@@ -104,37 +113,8 @@ class AlsuaMailAutomation:
     # FUNCIONES ANTI-DUPLICADOS USANDO CSV
     # ==========================================
     
-    def generar_id_unico_correo(self, mensaje):
-        """Genera un ID único para el correo basado en múltiples factores"""
-        try:
-            # Usar múltiples elementos para crear ID único
-            asunto = mensaje.Subject or ""
-            remitente = mensaje.SenderEmailAddress or ""
-            fecha_recibido = str(mensaje.ReceivedTime)
-            
-            # Extraer prefactura del asunto
-            prefactura = self.extraer_prefactura_del_asunto(asunto)
-            
-            # Crear ID compuesto más robusto
-            fecha_corta = fecha_recibido.split()[0] if fecha_recibido else "sin_fecha"
-            id_correo = f"{prefactura}_{fecha_corta}_{abs(hash(asunto + remitente)) % 10000}"
-            return id_correo
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error generando ID de correo: {e}")
-            return f"unknown_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    
-    def generar_id_unico_viaje(self, datos_viaje):
-        """Genera un ID único para el viaje"""
-        prefactura = datos_viaje.get('prefactura', 'SIN_PREFACTURA')
-        fecha = datos_viaje.get('fecha', 'SIN_FECHA')
-        placa_tractor = datos_viaje.get('placa_tractor', 'SIN_TRACTOR')
-        determinante = datos_viaje.get('clave_determinante', 'SIN_DETERMINANTE')
-        
-        return f"{prefactura}_{fecha}_{placa_tractor}_{determinante}"
-    
     def ya_fue_procesado_correo_csv(self, mensaje):
-        """NUEVO: Verifica anti-duplicados usando solo el CSV"""
+        """Verifica anti-duplicados usando solo el CSV"""
         try:
             prefactura = self.extraer_prefactura_del_asunto(mensaje.Subject or "")
             if not prefactura:
@@ -155,157 +135,8 @@ class AlsuaMailAutomation:
             logger.warning(f"⚠️ Error verificando duplicados en CSV: {e}")
             return False
     
-    def ya_fue_creado_viaje_csv(self, datos_viaje):
-        """NUEVO: Verifica si este viaje ya fue creado usando solo el CSV"""
-        try:
-            prefactura = datos_viaje.get('prefactura')
-            determinante = datos_viaje.get('clave_determinante')
-            
-            if not prefactura:
-                return False
-            
-            # Buscar en el CSV
-            viaje_existente = viajes_log.verificar_viaje_existe(prefactura, determinante)
-            
-            if viaje_existente:
-                logger.info(f"🚛 Viaje ya creado (encontrado en CSV): {prefactura}")
-                logger.info(f"   📊 Estatus en CSV: {viaje_existente.get('estatus')}")
-                logger.info(f"   📅 Timestamp: {viaje_existente.get('timestamp')}")
-                return True
-            
-            return False
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error verificando viaje en CSV: {e}")
-            return False
-    
-    def registrar_viaje_para_revision_manual_csv(self, datos_viaje, tipo_error):
-        """
-        FUNCIÓN SIMPLIFICADA: Registra un viaje válido que falló SOLO en CSV
-        """
-        try:
-            # SIMPLIFICADO: Registrar directamente en CSV sin archivo separado
-            prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
-            determinante = datos_viaje.get('clave_determinante', 'DESCONOCIDO')
-            fecha_viaje = datos_viaje.get('fecha', '')
-            placa_tractor = datos_viaje.get('placa_tractor', 'DESCONOCIDA')
-            placa_remolque = datos_viaje.get('placa_remolque', 'DESCONOCIDA')
-            importe = datos_viaje.get('importe', '0')
-            cliente_codigo = datos_viaje.get('cliente_codigo', '')
-            
-            # Motivo específico para revisión manual
-            motivo_fallo = f"REVISIÓN MANUAL REQUERIDA - {tipo_error}"
-            
-            # Registrar en CSV
-            exito_csv = log_viaje_fallido(
-                prefactura=prefactura,
-                motivo_fallo=motivo_fallo,
-                determinante=determinante,
-                fecha_viaje=fecha_viaje,
-                placa_tractor=placa_tractor,
-                placa_remolque=placa_remolque,
-                importe=importe,
-                cliente_codigo=cliente_codigo
-            )
-            
-            if exito_csv:
-                logger.error("🚨 VIAJE VACIO VÁLIDO REGISTRADO PARA REVISIÓN MANUAL:")
-                logger.error(f"   📋 Prefactura: {prefactura}")
-                logger.error(f"   🎯 Determinante: {determinante}")
-                logger.error(f"   🚛 Placas: {placa_tractor} / {placa_remolque}")
-                logger.error(f"   💰 Importe: ${importe}")
-                logger.error(f"   ❌ Error: {tipo_error}")
-                logger.error("   🔧 ACCIÓN: Procesar manualmente en GM Transport")
-                logger.error("   📊 Registrado en CSV con estatus FALLIDO")
-                logger.error("🔄 MySQL se actualizará automáticamente desde CSV")
-                return True
-            else:
-                logger.error("❌ Error registrando viaje para revisión en CSV")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Error registrando viaje para revisión: {e}")
-            return False
-    
     # ==========================================
-    # FUNCIONES PARA MANEJO DE DRIVER
-    # ==========================================
-    
-    def verificar_driver_valido(self):
-        """Verifica si el driver actual sigue siendo válido"""
-        if not self.driver or self.driver_corrupto:
-            return False
-            
-        try:
-            # Intentar una operación simple para verificar que el driver funciona
-            current_url = self.driver.current_url
-            title = self.driver.title
-            
-            # Verificar que estamos en una página válida de GM Transport
-            if "softwareparatransporte.com" in current_url:
-                logger.info(f"✅ Driver válido - URL: {current_url[:80]}...")
-                return True
-            else:
-                logger.warning(f"⚠️ Driver en página incorrecta: {current_url}")
-                return False
-                
-        except Exception as e:
-            logger.warning(f"⚠️ Driver inválido detectado: {e}")
-            self.driver_corrupto = True
-            return False
-    
-    def cerrar_driver_corrupto(self):
-        """Cierra y limpia el driver corrupto"""
-        try:
-            if self.driver:
-                logger.info("🗑️ Cerrando driver corrupto...")
-                self.driver.quit()
-                time.sleep(2)  # Esperar a que se cierre completamente
-                logger.info("✅ Driver corrupto cerrado")
-        except Exception as e:
-            logger.warning(f"⚠️ Error cerrando driver corrupto: {e}")
-        finally:
-            self.driver = None
-            self.driver_corrupto = False
-    
-    def inicializar_driver_nuevo(self):
-        """Inicializa un nuevo driver con login"""
-        try:
-            logger.info("🔄 Inicializando nuevo driver...")
-            
-            # Asegurar que no hay driver anterior
-            if self.driver:
-                self.cerrar_driver_corrupto()
-            
-            # Crear nuevo driver con login
-            self.driver = login_to_gm()
-            
-            if self.driver:
-                self.driver_corrupto = False
-                logger.info("✅ Nuevo driver inicializado exitosamente")
-                return True
-            else:
-                logger.error("❌ Error en login GM")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Error crítico inicializando driver: {e}")
-            self.driver = None
-            self.driver_corrupto = True
-            return False
-    
-    def obtener_driver_valido(self):
-        """Obtiene un driver válido, creando uno nuevo si es necesario"""
-        # Si el driver actual es válido, usarlo
-        if self.verificar_driver_valido():
-            return True
-        
-        # Si no es válido, crear uno nuevo
-        logger.info("🔄 Driver no válido, creando uno nuevo...")
-        return self.inicializar_driver_nuevo()
-    
-    # ==========================================
-    # FUNCIONES PRINCIPALES SIMPLIFICADAS
+    # FUNCIONES SIMPLIFICADAS DE EXTRACCIÓN
     # ==========================================
     
     def extraer_prefactura_del_asunto(self, asunto):
@@ -360,60 +191,60 @@ class AlsuaMailAutomation:
             logger.error(f"❌ Error al convertir fecha: {e}")
             return datetime.now().strftime("%d/%m/%Y")
     
-    def procesar_correo_individual(self, mensaje):
+    # ==========================================
+    # FUNCIONES DE EXTRACCIÓN DE CORREOS
+    # ==========================================
+    
+    def extraer_datos_de_correo(self, mensaje):
         """
-        FUNCIÓN LIMPIA: Procesa un correo individual usando solo CSV para anti-duplicados
+        Extrae datos del correo y valida si es un viaje VACIO
+        NO procesa el viaje, solo extrae datos
         """
         try:
-            # ===== VERIFICACIÓN ANTI-DUPLICADOS USANDO CSV =====
+            # Verificación anti-duplicados
             if self.ya_fue_procesado_correo_csv(mensaje):
                 logger.info("⏭️ Saltando correo ya procesado (encontrado en CSV)")
                 mensaje.UnRead = False
-                return False
+                return None
             
             asunto = mensaje.Subject or ""
             remitente = mensaje.SenderEmailAddress or ""
             fecha_recibido = mensaje.ReceivedTime
             
-            # ===== FILTROS BÁSICOS (marcar como leído si no pasan) =====
+            # Filtros básicos
             if not remitente or "PreFacturacionTransportes@walmart.com" not in remitente:
-                return False
+                return None
                 
             if "cancelado" in asunto.lower() or "no-reply" in remitente.lower():
-                # Estos no son viajes válidos - marcar como leído
                 mensaje.UnRead = False
-                return False
+                return None
                 
             if not "prefactura" in asunto.lower():
-                # No es un correo de prefactura - marcar como leído
                 mensaje.UnRead = False
-                return False
+                return None
             
             adjuntos = mensaje.Attachments
             if adjuntos.Count == 0:
-                # No tiene archivos - marcar como leído
                 mensaje.UnRead = False
-                return False
+                return None
             
             logger.info(f"📩 Procesando correo NUEVO: {asunto}")
             
-            # ===== EXTRAER DATOS CRÍTICOS =====
+            # Extraer datos críticos
             prefactura = self.extraer_prefactura_del_asunto(asunto)
             clave_determinante = self.extraer_clave_determinante(asunto)
             
             if not prefactura:
                 logger.warning(f"⚠️ No se pudo extraer prefactura del asunto: {asunto}")
-                # ERROR TÉCNICO - marcar como leído para evitar bucle
                 mensaje.UnRead = False
-                return False
+                return None
                 
             if not clave_determinante:
                 logger.warning(f"⚠️ No se pudo extraer clave determinante del asunto: {asunto}")
-                # ERROR TÉCNICO - marcar como leído para evitar bucle
                 mensaje.UnRead = False
-                return False
+                return None
             
-            # ===== PROCESAR ARCHIVOS ADJUNTOS =====
+            # Procesar archivos adjuntos
             for i in range(1, adjuntos.Count + 1):
                 archivo = adjuntos.Item(i)
                 nombre = archivo.FileName
@@ -426,17 +257,16 @@ class AlsuaMailAutomation:
                 nombre_unico = f"{timestamp}_{nombre}"
                 ruta_local = os.path.join(self.carpeta_descarga, nombre_unico)
                 
-                # ===== DESCARGAR ARCHIVO =====
+                # Descargar archivo
                 try:
                     archivo.SaveAsFile(ruta_local)
                     logger.info(f"📥 Archivo descargado: {ruta_local}")
                 except Exception as e:
                     logger.error(f"❌ Error al descargar archivo {nombre}: {e}")
-                    # ERROR TÉCNICO - marcar como leído
                     mensaje.UnRead = False
                     continue
                 
-                # ===== PARSEAR ARCHIVO =====
+                # Parsear archivo usando tu parser existente
                 resultado = parse_xls(ruta_local, determinante_from_asunto=clave_determinante)
                 
                 if "error" in resultado:
@@ -447,25 +277,18 @@ class AlsuaMailAutomation:
                     if "no es tipo VACIO" in resultado['error']:
                         logger.info("📄 Correo válido pero viaje no es tipo VACIO - marcando como leído")
                         mensaje.UnRead = False
-                        return False
+                        return None
                     else:
                         # ERROR TÉCNICO (archivo corrupto, etc) - marcar como leído
                         mensaje.UnRead = False
                         continue
                 
-                # ===== COMPLETAR DATOS =====
+                # Completar datos
                 resultado["prefactura"] = prefactura
                 resultado["fecha"] = self.convertir_fecha_formato(resultado.get("fecha"))
+                resultado["archivo_descargado"] = ruta_local
                 
-                # ===== VERIFICAR DUPLICADOS USANDO CSV =====
-                if self.ya_fue_creado_viaje_csv(resultado):
-                    logger.info("⏭️ Saltando viaje ya creado (encontrado en CSV)")
-                    mensaje.UnRead = False
-                    os.remove(ruta_local)
-                    return False
-                
-                # ===== VIAJE VACIO VÁLIDO DETECTADO =====
-                logger.info("✅ Viaje VACIO válido encontrado:")
+                logger.info("✅ Viaje VACIO válido extraído:")
                 logger.info(f"   📋 Prefactura: {resultado['prefactura']}")
                 logger.info(f"   📅 Fecha: {resultado['fecha']}")
                 logger.info(f"   🚛 Placa Tractor: {resultado['placa_tractor']}")
@@ -473,69 +296,12 @@ class AlsuaMailAutomation:
                 logger.info(f"   🎯 Determinante: {resultado['clave_determinante']}")
                 logger.info(f"   💰 Importe: ${resultado['importe']}")
                 
-                # ===== EJECUTAR AUTOMATIZACIÓN GM =====
-                resultado_gm = self.ejecutar_automatizacion_gm(resultado)
+                return resultado
                 
-                if resultado_gm == "OPERADOR_OCUPADO":
-                    # 🚨 OPERADOR OCUPADO - MARCAR CORREO COMO LEÍDO PARA EVITAR CICLO
-                    logger.warning("🚨 OPERADOR OCUPADO: Error registrado en CSV")
-                    logger.info("📧 MARCANDO correo como leído para evitar reprocesamiento en bucle")
-                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
-                    
-                    # Marcar como leído
-                    mensaje.UnRead = False
-                    
-                    # Limpiar archivo Excel
-                    os.remove(ruta_local)
-                    logger.info(f"🗑️ Archivo limpiado: {ruta_local}")
-                    
-                    return "OPERADOR_OCUPADO"
-                    
-                elif resultado_gm == "DRIVER_CORRUPTO":
-                    # 🚨 DRIVER CORRUPTO - NO MARCAR COMO PROCESADO PARA PERMITIR REINTENTO
-                    logger.error("🚨 DRIVER CORRUPTO: Fallo en navegación GM Transport")
-                    logger.info("🔄 NO marcando correo como procesado - se reintentará en próximo ciclo")
-                    logger.info("📧 Correo permanecerá como no leído para reintento automático")
-                    
-                    # NO marcar como leído - mantener como no leído
-                    
-                    # Limpiar archivo Excel ya que se volverá a descargar
-                    os.remove(ruta_local)
-                    logger.info(f"🗑️ Archivo limpiado para reintento: {ruta_local}")
-                    
-                    return "DRIVER_CORRUPTO"
-                    
-                elif resultado_gm:
-                    # ✅ ÉXITO COMPLETO - EL REGISTRO SE HIZO EN CSV
-                    logger.info("🎉 VIAJE EXITOSO COMPLETADO")
-                    logger.info("📊 Datos completos (UUID, Viaje GM, placas) registrados en CSV")
-                    logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
-                    
-                    mensaje.UnRead = False
-                    os.remove(ruta_local)
-                    logger.info(f"🗑️ Archivo limpiado: {ruta_local}")
-                    return True
-                else:
-                    # ❌ FALLO EN GM - REGISTRAR EN CSV
-                    logger.error("❌ VIAJE VACIO VÁLIDO FALLÓ EN GM TRANSPORT")
-                    logger.error("🚨 REQUIERE REVISIÓN MANUAL URGENTE")
-                    
-                    # SIMPLIFICADO: REGISTRAR PARA REVISIÓN MANUAL EN CSV
-                    self.registrar_viaje_para_revision_manual_csv(resultado, "ERROR_GM_AUTOMATION")
-                    
-                    # Conservar archivo para revisión
-                    logger.error(f"📋 Archivo conservado para revisión: {ruta_local}")
-                    
-                    # Marcar como leído para evitar bucle infinito
-                    mensaje.UnRead = False
-                    
-                    return False
-                    
         except KeyboardInterrupt:
             # El usuario detuvo manualmente - no marcar como leído
             logger.info("⚠️ Interrupción manual - no marcando correo como leído")
             raise
-            
         except Exception as e:
             logger.error(f"❌ Error inesperado al procesar correo: {e}")
             # ERROR TÉCNICO INESPERADO - marcar como leído para evitar bucle
@@ -543,115 +309,39 @@ class AlsuaMailAutomation:
                 mensaje.UnRead = False
             except:
                 pass
-            return False
+            return None
             
-        return False
+        return None
     
-    def ejecutar_automatizacion_gm(self, datos_viaje):
+    def revisar_y_extraer_correos(self):
         """
-        FUNCIÓN SIMPLIFICADA: Ejecuta la automatización completa de GM Transport
-        Todos los registros se hacen en CSV, MySQL se sincroniza automáticamente
-        """
-        try:
-            logger.info("🤖 Iniciando automatización GM Transport...")
-            
-            # PASO 1: VERIFICAR/OBTENER DRIVER VÁLIDO
-            if not self.obtener_driver_valido():
-                logger.error("❌ No se pudo obtener driver válido para GM Transport")
-                # Marcar como corrupto para forzar reinicio en próximo intento
-                self.driver_corrupto = True
-                return "DRIVER_CORRUPTO"
-            
-            # PASO 2: CREAR INSTANCIA DE AUTOMATIZACIÓN
-            try:
-                automation = GMTransportAutomation(self.driver)
-                automation.datos_viaje = datos_viaje
-                
-                # PASO 3: EJECUTAR PROCESO COMPLETO CON MANEJO DE ERRORES
-                logger.info("🚀 Ejecutando proceso completo de GM Transport...")
-                resultado = automation.fill_viaje_form()
-                
-                if resultado == "OPERADOR_OCUPADO":
-                    # El navegador ya fue cerrado en gm_salida.py
-                    logger.warning("🚨 Operador ocupado detectado")
-                    logger.info("📝 Error ya registrado en CSV")
-                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
-                    # Marcar driver como corrupto para forzar nuevo login
-                    self.driver = None
-                    self.driver_corrupto = True
-                    return "OPERADOR_OCUPADO"
-                    
-                elif resultado:
-                    logger.info("🎉 Automatización GM completada exitosamente")
-                    logger.info("📊 Datos completos registrados en CSV")
-                    logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
-                    # Driver sigue siendo válido
-                    return True
-                else:
-                    logger.error("❌ Error en automatización GM")
-                    # Verificar si el driver sigue siendo válido después del error
-                    if not self.verificar_driver_valido():
-                        logger.warning("⚠️ Driver corrupto después del error")
-                        self.cerrar_driver_corrupto()
-                        return "DRIVER_CORRUPTO"
-                    return False
-                    
-            except Exception as automation_error:
-                logger.error(f"❌ Error durante automatización: {automation_error}")
-                
-                # Verificar si el error fue por driver corrupto
-                if any(keyword in str(automation_error).lower() for keyword in 
-                       ['invalid session', 'chrome not reachable', 'no such window', 'session deleted']):
-                    logger.error("🚨 Error detectado como driver corrupto")
-                    self.cerrar_driver_corrupto()
-                    return "DRIVER_CORRUPTO"
-                else:
-                    # Error general - verificar si driver sigue válido
-                    if not self.verificar_driver_valido():
-                        logger.warning("⚠️ Driver corrupto después del error general")
-                        self.cerrar_driver_corrupto()
-                        return "DRIVER_CORRUPTO"
-                    return False
-                
-        except Exception as e:
-            logger.error(f"❌ Error general en automatización GM: {e}")
-            # En caso de error general, asumir que el driver está corrupto
-            self.cerrar_driver_corrupto()
-            return "DRIVER_CORRUPTO"
-    
-    def revisar_correos_nuevos(self, modo_test=False):
-        """
-        FUNCIÓN LIMPIA: Revisa correos nuevos usando solo CSV para anti-duplicados
+        Revisa correos y extrae viajes válidos para agregar a la cola
+        NO procesa viajes, solo los agrega a la cola
         """
         try:
             # INICIALIZAR COM PARA FLASK
             if not self.inicializar_com():
-                logger.error("❌ No se pudo inicializar COM - aborting")
+                logger.error("❌ No se pudo inicializar COM")
                 return False
             
-            logger.info("📬 Revisando correos nuevos...")
-            if modo_test:
-                logger.info("🧪 MODO TEST: Pausará después de cada viaje para inspección")
+            logger.info("📬 Revisando correos para extraer viajes...")
             
-            # Conectar a Outlook CON COM INICIALIZADO
+            # Conectar a Outlook
             try:
                 outlook = win32com.client.Dispatch("Outlook.Application").GetNamespace("MAPI")
-                inbox = outlook.GetDefaultFolder(6)  # Bandeja de entrada
+                inbox = outlook.GetDefaultFolder(6)
                 logger.info("✅ Conexión a Outlook establecida exitosamente")
             except Exception as e:
                 logger.error(f"❌ Error conectando a Outlook: {e}")
                 return False
             
-            # Obtener solo correos no leídos, más recientes primero
+            # Obtener correos no leídos, más recientes primero
             mensajes = inbox.Items.Restrict("[UnRead] = True")
             mensajes.Sort("[ReceivedTime]", True)
             
-            correos_procesados = 0
             correos_totales = mensajes.Count
+            viajes_extraidos = 0
             correos_saltados = 0
-            operadores_ocupados = 0
-            drivers_corruptos = 0
-            reintentos_pendientes = 0
             
             logger.info(f"📊 Correos no leídos encontrados: {correos_totales}")
             
@@ -674,183 +364,541 @@ class AlsuaMailAutomation:
                     asunto = mensaje.Subject or ""
                     prefactura = self.extraer_prefactura_del_asunto(asunto)
                     
-                    logger.info(f"🚀 Procesando viaje: {prefactura}")
-                    resultado_procesamiento = self.procesar_correo_individual(mensaje)
+                    logger.info(f"🚀 Extrayendo viaje: {prefactura}")
+                    datos_viaje = self.extraer_datos_de_correo(mensaje)
                     
-                    if resultado_procesamiento == "OPERADOR_OCUPADO":
-                        operadores_ocupados += 1
-                        logger.warning(f"🚨 Viaje {prefactura} con operador ocupado - registrado en CSV")
-                        logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
-                        
-                        # PAUSA EN MODO TEST
-                        if modo_test:
-                            input(f"🚨 OPERADOR OCUPADO en viaje {prefactura}. Presiona ENTER para continuar...")
-                        else:
-                            time.sleep(3)
+                    if datos_viaje:
+                        # Agregar a cola usando tu sistema existente
+                        if agregar_viaje_a_cola(datos_viaje):
+                            viajes_extraidos += 1
+                            logger.info(f"➕ Viaje agregado a cola: {datos_viaje['prefactura']}")
                             
-                    elif resultado_procesamiento == "DRIVER_CORRUPTO":
-                        drivers_corruptos += 1
-                        reintentos_pendientes += 1
-                        logger.error(f"🚨 Viaje {prefactura} con driver corrupto - se reintentará automáticamente")
-                        
-                        # PAUSA EN MODO TEST
-                        if modo_test:
-                            input(f"🔧 DRIVER CORRUPTO en viaje {prefactura}. NO marcado como procesado - se reintentará. Presiona ENTER para continuar...")
+                            # Marcar correo como leído solo después de agregar a cola exitosamente
+                            mensaje.UnRead = False
                         else:
-                            time.sleep(5)
-                            
-                    elif resultado_procesamiento:
-                        correos_procesados += 1
-                        logger.info(f"✅ Viaje {prefactura} completado exitosamente")
-                        logger.info("📊 Todos los datos registrados en CSV")
-                        logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
-                        
-                        # PAUSA EN MODO TEST
-                        if modo_test:
-                            input(f"✅ VIAJE EXITOSO {prefactura}. Presiona ENTER para continuar...")
-                        else:
-                            time.sleep(2)
+                            logger.warning(f"⚠️ No se pudo agregar viaje a cola: {datos_viaje.get('prefactura')}")
+                            # No marcar como leído si no se pudo agregar a cola
                     else:
                         correos_saltados += 1
-                        
-                        # PAUSA EN MODO TEST SOLO SI ES UN ERROR QUE REQUIERE ATENCIÓN
-                        if modo_test and "ERROR_GM_AUTOMATION" in str(resultado_procesamiento):
-                            input(f"❌ ERROR EN VIAJE {prefactura} - requiere revisión manual. Presiona ENTER para continuar...")
-                        
-                    # Limitar procesamiento para evitar sobrecarga (excepto en modo test)
-                    if not modo_test and correos_procesados >= 3:
-                        logger.info("⚠️ Límite de procesamiento alcanzado, esperando siguiente ciclo")
-                        break
-                    
-                    # Si hay muchos errores de driver, parar para evitar bucle (excepto en modo test)
-                    if not modo_test and drivers_corruptos >= 2:
-                        logger.warning("🚨 Múltiples errores de driver detectados - pausando ciclo")
-                        break
                         
                 except Exception as e:
                     logger.error(f"❌ Error procesando mensaje individual: {e}")
                     correos_saltados += 1
-                    
-                    # PAUSA EN MODO TEST PARA ERRORES INESPERADOS
-                    if modo_test:
-                        input(f"❌ ERROR INESPERADO procesando correo. Presiona ENTER para continuar...")
                     continue
             
-            logger.info(f"✅ Ciclo completado:")
-            logger.info(f"   📧 Total correos revisados: {correos_totales}")
-            logger.info(f"   ✅ Correos procesados: {correos_procesados}")
+            logger.info(f"✅ Extracción completada:")
+            logger.info(f"   📧 Correos revisados: {correos_totales}")
+            logger.info(f"   ➕ Viajes extraídos: {viajes_extraidos}")
             logger.info(f"   ⏭️ Correos saltados: {correos_saltados}")
-            logger.info(f"   🚨 Operadores ocupados: {operadores_ocupados}")
-            logger.info(f"   🔧 Drivers corruptos: {drivers_corruptos}")
-            logger.info(f"   🔄 Reintentos pendientes: {reintentos_pendientes}")
-            logger.info("📊 IMPORTANTE: Todos los registros están en CSV ÚNICAMENTE")
-            logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
             
-            if operadores_ocupados > 0:
-                logger.info("📝 Los errores de operador ocupado fueron registrados en CSV")
-                logger.info("🔧 Estos viajes requieren revisión manual")
-            
-            if drivers_corruptos > 0:
-                logger.warning("🚨 Errores de driver corrupto detectados")
-                logger.warning("🔄 Estos correos NO fueron marcados como procesados - se reintentarán automáticamente")
-                logger.warning("💡 Si persisten, considera verificar la configuración del navegador")
-            
-            return True
+            return viajes_extraidos > 0
             
         except Exception as e:
-            logger.error(f"❌ Error al revisar correos: {e}")
+            logger.error(f"❌ Error revisando correos: {e}")
             return False
         finally:
-            # LIMPIAR COM AL FINALIZAR
             self.limpiar_com()
     
-    def ejecutar_bucle_continuo(self, intervalo_minutos=5):
-        """FUNCIÓN LIMPIA: Ejecuta el sistema en bucle continuo usando solo CSV"""
-        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v5.0 LIMPIO")
-        logger.info("🛡️ PROTECCIÓN ANTI-DUPLICADOS USANDO SOLO CSV")
-        logger.info("📊 REGISTRO UNIFICADO EN CSV ÚNICAMENTE")
-        logger.info("🔄 SINCRONIZACIÓN AUTOMÁTICA CON MySQL")
-        logger.info("🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO")
-        logger.info("🌐 COMPATIBLE CON FLASK Y THREADING")
-        logger.info("🚫 SIN archivos .pkl")
-        logger.info("🚫 SIN alsua_automation.log")
-        logger.info("✅ SOLO viajes_log.csv")
-        logger.info(f"⏰ Revisión cada {intervalo_minutos} minutos")
-        logger.info("📧 Filtrando correos de PreFacturacionTransportes@walmart.com")
-        logger.info("🎯 Procesando solo viajes tipo VACIO")
-        logger.info("🤖 Automatización GM completa habilitada")
-        logger.info("📊 Datos completos: UUID, Viaje GM, placas, fecha, prefactura")
-        logger.info("🔧 Errores marcados para revisión manual")
-        logger.info("💾 CSV → mysql_simple.py → MySQL (automático)")
+    # ==========================================
+    # FUNCIONES DE PROCESAMIENTO DE COLA
+    # ==========================================
+    
+    def crear_driver_nuevo(self):
+        """Crea un nuevo driver con login"""
+        try:
+            logger.info("🔄 Creando nuevo driver...")
+            
+            # Limpiar driver anterior si existe
+            if self.driver:
+                try:
+                    self.driver.quit()
+                    time.sleep(2)
+                except:
+                    pass
+                finally:
+                    self.driver = None
+            
+            # Crear nuevo driver con login usando tu módulo existente
+            self.driver = login_to_gm()
+            
+            if self.driver:
+                logger.info("✅ Nuevo driver creado exitosamente")
+                return True
+            else:
+                logger.error("❌ Error en login GM")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error crítico creando driver: {e}")
+            self.driver = None
+            return False
+    
+    def detectar_tipo_error(self, error):
+        """
+        Detecta el tipo de error - SOLO 2 TIPOS SON REINTENTABLES
+        
+        Returns:
+            str: 'LOGIN_LIMIT', 'DRIVER_CORRUPTO', 'VIAJE_FALLIDO'
+        """
+        error_str = str(error).lower()
+        
+        # ERRORES REINTENTABLES:
+        
+        # 1. Errores de límite de usuarios (reintenta en 15 min)
+        if any(keyword in error_str for keyword in ['limit', 'limite', 'usuarios', 'user limit', 'maximum', 'conexiones']):
+            return 'LOGIN_LIMIT'
+        
+        # 2. Errores de driver corrupto (reintenta inmediatamente)
+        if any(keyword in error_str for keyword in ['invalid session', 'chrome not reachable', 'no such window', 'session deleted', 'connection refused']):
+            return 'DRIVER_CORRUPTO'
+        
+        # TODOS LOS DEMÁS SON FALLIDOS (no reintenta):
+        # - Operador ocupado
+        # - Determinante no encontrada  
+        # - Placa sin operador
+        # - Errores de módulos específicos
+        # - Cualquier otro error de datos/proceso
+        return 'VIAJE_FALLIDO'
+    
+    def procesar_viaje_individual(self, viaje_registro):
+        """
+        Procesa un solo viaje de la cola usando TU SISTEMA GM COMPLETO
+        
+        Returns:
+            tuple: (resultado, modulo_error) donde:
+            - resultado: 'EXITOSO', 'VIAJE_FALLIDO', 'LOGIN_LIMIT', 'DRIVER_CORRUPTO'
+            - modulo_error: módulo específico donde falló (para logging)
+        """
+        try:
+            viaje_id = viaje_registro.get('id')
+            datos_viaje = viaje_registro.get('datos_viaje', {})
+            prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
+            
+            logger.info(f"🚀 Procesando viaje: {prefactura}")
+            
+            # PASO 1: Crear/verificar driver
+            if not self.driver:
+                logger.info("🔄 No hay driver, creando nuevo...")
+                if not self.crear_driver_nuevo():
+                    return 'LOGIN_LIMIT', 'gm_login'  # Error de login
+            
+            # PASO 2: Verificar que driver sigue válido
+            try:
+                current_url = self.driver.current_url
+                if "softwareparatransporte.com" not in current_url:
+                    logger.warning("⚠️ Driver en página incorrecta, recreando...")
+                    if not self.crear_driver_nuevo():
+                        return 'LOGIN_LIMIT', 'gm_login'
+            except Exception as e:
+                logger.warning(f"⚠️ Driver corrupto detectado: {e}")
+                if not self.crear_driver_nuevo():
+                    return 'DRIVER_CORRUPTO', 'selenium_driver'
+            
+            # PASO 3: Ejecutar automatización GM COMPLETA usando tu sistema existente
+            try:
+                # MANTENER INTEGRACIÓN COMPLETA CON TU SISTEMA ACTUAL
+                automation = GMTransportAutomation(self.driver)
+                automation.datos_viaje = datos_viaje
+                
+                # Esta función YA orquesta todo tu proceso completo:
+                # - Facturación inicial (gm_facturacion1.py)
+                # - Salida del viaje (gm_salida.py) 
+                # - Llegada y facturación final (gm_llegadayfactura2.py)
+                # - Extracción automática de PDF (pdf_extractor.py)
+                # - Registro en CSV (viajes_log.py)
+                # - Sincronización MySQL (mysql_simple.py)
+                resultado = automation.fill_viaje_form()
+                
+                if resultado == "OPERADOR_OCUPADO":
+                    logger.warning(f"🚨 Operador ocupado: {prefactura}")
+                    # El navegador ya fue cerrado en gm_salida.py
+                    self.driver = None
+                    # OPERADOR_OCUPADO ahora es VIAJE_FALLIDO (no reintenta)
+                    return 'VIAJE_FALLIDO', 'gm_salida'
+                    
+                elif resultado:
+                    logger.info(f"✅ Viaje completado exitosamente: {prefactura}")
+                    logger.info("📊 Datos completos (UUID, Viaje GM, placas) registrados automáticamente")
+                    logger.info("🔄 MySQL sincronizado automáticamente desde CSV")
+                    
+                    # Limpiar archivo Excel
+                    archivo_descargado = datos_viaje.get('archivo_descargado')
+                    if archivo_descargado and os.path.exists(archivo_descargado):
+                        os.remove(archivo_descargado)
+                        logger.info(f"🗑️ Archivo limpiado: {os.path.basename(archivo_descargado)}")
+                    
+                    return 'EXITOSO', ''
+                else:
+                    logger.error(f"❌ Error en automatización GM: {prefactura}")
+                    return 'VIAJE_FALLIDO', 'gm_transport_general'
+                    
+            except Exception as automation_error:
+                logger.error(f"❌ Error durante automatización: {automation_error}")
+                
+                # Detectar tipo de error
+                tipo_error = self.detectar_tipo_error(automation_error)
+                
+                if tipo_error == 'LOGIN_LIMIT':
+                    return 'LOGIN_LIMIT', 'gm_login'
+                elif tipo_error == 'DRIVER_CORRUPTO':
+                    # Driver corrupto - limpiar y reintentará inmediatamente
+                    try:
+                        self.driver.quit()
+                    except:
+                        pass
+                    finally:
+                        self.driver = None
+                    return 'DRIVER_CORRUPTO', 'selenium_driver'
+                else:
+                    # Error de viaje - determinar módulo específico del error
+                    modulo_error = self.determinar_modulo_error(automation_error)
+                    return 'VIAJE_FALLIDO', modulo_error
+                
+        except Exception as e:
+            logger.error(f"❌ Error general procesando viaje: {e}")
+            return 'VIAJE_FALLIDO', 'sistema_general'
+    
+    def determinar_modulo_error(self, error):
+        """
+        Determina en qué módulo específico ocurrió el error para mejor debugging
+        
+        Returns:
+            str: nombre del módulo donde falló
+        """
+        error_str = str(error).lower()
+        
+        # Mapear errores a módulos específicos
+        if any(keyword in error_str for keyword in ['determinante', 'ruta_gm', 'base_origen']):
+            return 'gm_transport_general'
+        elif any(keyword in error_str for keyword in ['placa_tractor', 'placa_remolque', 'operador']):
+            return 'gm_transport_general'
+        elif any(keyword in error_str for keyword in ['facturacion', 'importe', 'total']):
+            return 'gm_facturacion1'
+        elif any(keyword in error_str for keyword in ['salida', 'status', 'en_ruta']):
+            return 'gm_salida'
+        elif any(keyword in error_str for keyword in ['llegada', 'terminado', 'autorizar', 'facturar']):
+            return 'gm_llegadayfactura2'
+        elif any(keyword in error_str for keyword in ['pdf', 'uuid', 'viajegm', 'folio']):
+            return 'pdf_extractor'
+        elif any(keyword in error_str for keyword in ['navigate', 'viaje', 'crear']):
+            return 'navigate_to_create_viaje'
+        else:
+            return 'modulo_desconocido'
+    
+    def procesar_cola_viajes(self):
+        """
+        FUNCIÓN PRINCIPAL: Procesa todos los viajes en la cola
+        FLUJO CONTINUO CON TIEMPOS ESPECÍFICOS
+        """
+        try:
+            logger.info("🚀 Iniciando procesamiento de cola de viajes...")
+            
+            while True:
+                # Obtener siguiente viaje usando tu sistema de cola existente
+                viaje_registro = obtener_siguiente_viaje_cola()
+                
+                if not viaje_registro:
+                    logger.info("✅ No hay más viajes en cola")
+                    break
+                
+                viaje_id = viaje_registro.get('id')
+                datos_viaje = viaje_registro.get('datos_viaje', {})
+                prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
+                
+                # Procesar viaje usando tu sistema GM completo
+                resultado, modulo_error = self.procesar_viaje_individual(viaje_registro)
+                
+                if resultado == 'EXITOSO':
+                    # ✅ VIAJE EXITOSO → Remover de cola → Esperar 1 min
+                    marcar_viaje_exitoso_cola(viaje_id)
+                    logger.info(f"✅ Viaje {prefactura} completado y removido de cola")
+                    
+                    # ESPERAR 1 MINUTO antes del siguiente viaje
+                    logger.info("⏳ Esperando 1 minuto antes del siguiente viaje...")
+                    time.sleep(60)
+                    
+                elif resultado == 'LOGIN_LIMIT':
+                    # 🚨 ERROR DE LOGIN → Mantener en cola → Esperar 15 min
+                    registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
+                    logger.warning(f"🚨 Límite de usuarios - {prefactura} reintentará en 15 minutos")
+                    
+                    # ESPERAR 15 MINUTOS
+                    logger.info("⏳ Esperando 15 minutos por límite de usuarios...")
+                    time.sleep(15 * 60)
+                    
+                elif resultado == 'DRIVER_CORRUPTO':
+                    # 🔧 DRIVER CORRUPTO → Mantener en cola → Reintentar inmediatamente
+                    registrar_error_reintentable_cola(viaje_id, 'DRIVER_CORRUPTO', f'Driver corrupto en {modulo_error}')
+                    logger.warning(f"🔧 Driver corrupto - {prefactura} reintentará inmediatamente")
+                    # NO ESPERA - reintenta inmediatamente
+                    
+                else:  # VIAJE_FALLIDO
+                    # ❌ ERROR DEL VIAJE → Remover de cola → Esperar 30 seg
+                    motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
+                    marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
+                    logger.error(f"❌ {prefactura} FALLÓ EN: {modulo_error} - removido de cola")
+                    
+                    # ESPERAR 30 SEGUNDOS después de fallo
+                    logger.info("⏳ Esperando 30 segundos después de viaje fallido...")
+                    time.sleep(30)
+            
+        except KeyboardInterrupt:
+            logger.info("⚠️ Interrupción manual del procesamiento")
+        except Exception as e:
+            logger.error(f"❌ Error en procesamiento de cola: {e}")
+        finally:
+            # Limpiar driver al finalizar
+            if self.driver:
+                try:
+                    self.driver.quit()
+                except:
+                    pass
+                finally:
+                    self.driver = None
+    
+    # ==========================================
+    # FUNCIONES PRINCIPALES DEL SISTEMA
+    # ==========================================
+    
+    def mostrar_estadisticas_inicio(self):
+        """Muestra estadísticas al iniciar el sistema"""
+        logger.info("📊 Estado inicial del sistema:")
+        
+        # Estadísticas de cola usando tu sistema existente
+        try:
+            stats_cola = obtener_estadisticas_cola()
+            logger.info(f"   📋 Viajes en cola: {stats_cola.get('total_viajes', 0)}")
+            logger.info(f"   ⏳ Pendientes: {stats_cola.get('pendientes', 0)}")
+            logger.info(f"   🔄 Procesando: {stats_cola.get('procesando', 0)}")
+            
+            if stats_cola.get('viajes_con_errores', 0) > 0:
+                logger.info(f"   ⚠️ Con errores: {stats_cola.get('viajes_con_errores', 0)}")
+        except Exception as e:
+            logger.warning(f"⚠️ Error obteniendo estadísticas de cola: {e}")
+    
+    def ejecutar_bucle_continuo(self, mostrar_debug=False):
+        """
+        SISTEMA CONTINUO: Flujo perpetuo con cola persistente
+        SIN intervalos fijos - Procesamiento inmediato
+        """
+        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v6.0 CONTINUO")
+        logger.info("🔄 FLUJO CONTINUO CON COLA PERSISTENTE:")
+        logger.info("   📬 Revisar correos → 🎯 Viaje VACIO → ➕ Cola → 🚛 Procesar")
+        logger.info("   ✅ Exitoso: 1 min → 🔄")
+        logger.info("   ❌ Fallido: 30 seg → 🔄")  
+        logger.info("   🚨 Login: 15 min → 🔄")
+        logger.info("   🔧 Driver: Inmediato → 🔄")
+        logger.info("🛡️ ROBUSTEZ MÁXIMA:")
+        logger.info("   ✅ MANTIENE todo tu sistema actual")
+        logger.info("   ✅ Proceso GM completo (facturación → salida → llegada)")
+        logger.info("   ✅ Extracción automática PDF (UUID + Viaje GM)")
+        logger.info("   ✅ Registro unificado CSV + MySQL")
+        logger.info("   ✅ Solo 2 errores reintentables (LOGIN_LIMIT, DRIVER_CORRUPTO)")
+        logger.info("   ✅ Todos los demás → FALLIDO con módulo específico")
+        logger.info("🌐 Compatible con Flask - SIN input manual")
+        logger.info("🚫 SIN intervalos de 5 minutos innecesarios")
         logger.info("=" * 70)
         
+        # Mostrar estadísticas iniciales
+        self.mostrar_estadisticas_inicio()
+        
         try:
+            contador_ciclos = 0
             while True:
                 try:
-                    self.revisar_correos_nuevos(modo_test=False)
+                    contador_ciclos += 1
+                    if mostrar_debug:
+                        logger.info(f"🔄 Ciclo #{contador_ciclos}")
                     
-                    logger.info(f"😴 Esperando {intervalo_minutos} minutos hasta próxima revisión...")
-                    time.sleep(intervalo_minutos * 60)
+                    # PASO 1: Revisar correos y extraer viajes VACIO
+                    if mostrar_debug:
+                        logger.info("📬 Revisando correos nuevos...")
+                    
+                    viajes_encontrados = self.revisar_y_extraer_correos()
+                    
+                    if viajes_encontrados:
+                        logger.info("✅ Nuevos viajes VACIO encontrados y agregados a cola")
+                    
+                    # PASO 2: Procesar cola de viajes (uno por uno)
+                    if mostrar_debug:
+                        logger.info("🚛 Procesando cola de viajes...")
+                    
+                    # Obtener UN viaje de la cola
+                    viaje_registro = obtener_siguiente_viaje_cola()
+                    
+                    if viaje_registro:
+                        viaje_id = viaje_registro.get('id')
+                        datos_viaje = viaje_registro.get('datos_viaje', {})
+                        prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
+                        
+                        logger.info(f"🎯 Procesando viaje de cola: {prefactura}")
+                        
+                        # Procesar viaje usando tu sistema GM completo
+                        resultado, modulo_error = self.procesar_viaje_individual(viaje_registro)
+                        
+                        if resultado == 'EXITOSO':
+                            # ✅ EXITOSO → Remover de cola → Esperar 1 min → Continuar
+                            marcar_viaje_exitoso_cola(viaje_id)
+                            logger.info(f"✅ Viaje {prefactura} COMPLETADO - removido de cola")
+                            logger.info("⏳ Esperando 1 minuto antes de continuar...")
+                            time.sleep(60)
+                            
+                        elif resultado == 'LOGIN_LIMIT':
+                            # 🚨 LOGIN_LIMIT → Mantener en cola → Esperar 15 min → Continuar
+                            registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
+                            logger.warning(f"🚨 LOGIN LÍMITE - {prefactura} reintentará en 15 minutos")
+                            logger.info("⏳ Esperando 15 minutos por límite de usuarios...")
+                            time.sleep(15 * 60)
+                            
+                        elif resultado == 'DRIVER_CORRUPTO':
+                            # 🔧 DRIVER_CORRUPTO → Mantener en cola → Continuar inmediatamente
+                            registrar_error_reintentable_cola(viaje_id, 'DRIVER_CORRUPTO', f'Driver corrupto en {modulo_error}')
+                            logger.warning(f"🔧 DRIVER CORRUPTO - {prefactura} reintentará inmediatamente")
+                            # NO ESPERA - continúa inmediatamente
+                            
+                        else:  # VIAJE_FALLIDO
+                            # ❌ FALLIDO → Remover de cola → Esperar 30 seg → Continuar
+                            motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
+                            marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
+                            logger.error(f"❌ {prefactura} FALLÓ EN: {modulo_error} - removido de cola")
+                            logger.info("⏳ Esperando 30 segundos después de viaje fallido...")
+                            time.sleep(30)
+                    
+                    else:
+                        # No hay viajes en cola - continuar inmediatamente revisando correos
+                        if mostrar_debug:
+                            logger.info("ℹ️ Cola vacía - continuando revisión de correos")
+                        # Sin espera - continúa inmediatamente el bucle
+                    
+                    # PASO 3: Mostrar estadísticas periódicamente
+                    if contador_ciclos % 10 == 0:  # Cada 10 ciclos
+                        try:
+                            stats = obtener_estadisticas_cola()
+                            if stats.get('total_viajes', 0) > 0:
+                                logger.info(f"📊 Cola actual: {stats.get('pendientes', 0)} pendientes, {stats.get('procesando', 0)} procesando")
+                        except:
+                            pass
+                    
+                    # SIN ESPERAS INNECESARIAS - continúa inmediatamente al siguiente ciclo
                     
                 except KeyboardInterrupt:
                     logger.info("⚠️ Interrupción manual detectada")
                     break
                     
                 except Exception as e:
-                    logger.error(f"❌ Error en ciclo: {e}")
-                    # Cerrar driver corrupto en caso de error grave
-                    if self.driver:
-                        try:
-                            self.cerrar_driver_corrupto()
-                        except:
-                            pass
-                    logger.info(f"🔄 Reintentando en {intervalo_minutos} minutos...")
-                    time.sleep(intervalo_minutos * 60)
+                    logger.error(f"❌ Error en ciclo continuo: {e}")
+                    logger.info("🔄 Continuando con siguiente ciclo en 30 segundos...")
+                    time.sleep(30)  # Espera solo en caso de error
                     
         except KeyboardInterrupt:
             logger.info("🛑 Sistema detenido por usuario")
             
         finally:
-            # Cerrar driver si existe
+            # Limpiar driver si existe
             if self.driver:
                 try:
-                    self.cerrar_driver_corrupto()
+                    self.driver.quit()
                 except:
                     pass
             
-            # LIMPIAR COM AL FINALIZAR
+            # Limpiar COM
             self.limpiar_com()
             
             logger.info("👋 Sistema de automatización finalizado")
     
     def ejecutar_revision_unica(self):
-        """FUNCIÓN LIMPIA: Ejecuta una sola revisión de correos (para pruebas)"""
-        logger.info("🧪 Ejecutando revisión única de correos...")
-        logger.info("⏸️ MODO TEST: Se pausará después de cada viaje esperando tu confirmación")
-        logger.info("📊 Todos los registros se harán SOLO en CSV")
-        logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
+        """Ejecuta una sola revisión completa (para pruebas y debugging)"""
+        logger.info("🧪 Ejecutando revisión única...")
+        logger.info("🔄 MODO TEST: Solo algunos ciclos para inspección")
+        logger.info("✅ MANTIENE TODO TU SISTEMA ACTUAL")
         
-        resultado = self.revisar_correos_nuevos(modo_test=True)
+        # Mostrar estadísticas iniciales
+        self.mostrar_estadisticas_inicio()
         
-        if self.driver:
-            logger.info("🔍 MODO DEBUG: El navegador permanecerá abierto para inspección final...")
-            input("🟢 Presiona ENTER para cerrar el navegador y finalizar la sesión de prueba...")
-            try:
-                self.cerrar_driver_corrupto()
-            except:
-                pass
+        try:
+            # Ejecutar solo algunos ciclos para prueba
+            ciclos_max = 5
+            logger.info(f"🔄 Ejecutando máximo {ciclos_max} ciclos de prueba...")
+            
+            for ciclo in range(ciclos_max):
+                logger.info(f"🧪 Ciclo de prueba {ciclo + 1}/{ciclos_max}")
                 
-        return resultado
+                # Revisar correos
+                viajes_encontrados = self.revisar_y_extraer_correos()
+                
+                if viajes_encontrados:
+                    logger.info("✅ Nuevos viajes encontrados en modo test")
+                
+                # Procesar UN viaje si hay
+                viaje_registro = obtener_siguiente_viaje_cola()
+                
+                if viaje_registro:
+                    prefactura = viaje_registro.get('datos_viaje', {}).get('prefactura', 'DESCONOCIDA')
+                    logger.info(f"🎯 MODO TEST: Procesando viaje {prefactura}")
+                    
+                    resultado, modulo_error = self.procesar_viaje_individual(viaje_registro)
+                    logger.info(f"📊 Resultado test: {resultado} en {modulo_error}")
+                    
+                    # Manejar resultado igual que en modo producción
+                    viaje_id = viaje_registro.get('id')
+                    if resultado == 'EXITOSO':
+                        marcar_viaje_exitoso_cola(viaje_id)
+                        logger.info("✅ Viaje test completado")
+                        break  # Salir después de 1 éxito en modo test
+                    elif resultado in ['LOGIN_LIMIT', 'DRIVER_CORRUPTO']:
+                        registrar_error_reintentable_cola(viaje_id, resultado, f'Error test en {modulo_error}')
+                        logger.warning(f"⚠️ Error reintentable en test: {resultado}")
+                    else:
+                        marcar_viaje_fallido_cola(viaje_id, modulo_error, f"Test falló en {modulo_error}")
+                        logger.error(f"❌ Viaje test falló en: {modulo_error}")
+                        break  # Salir después de 1 fallo en modo test
+                else:
+                    logger.info("ℹ️ No hay viajes en cola para test")
+                
+                # Pausa corta entre ciclos de test
+                if ciclo < ciclos_max - 1:
+                    logger.info("⏳ Pausa entre ciclos de test...")
+                    time.sleep(10)
+            
+            # Mostrar estadísticas finales
+            try:
+                stats = obtener_estadisticas_cola()
+                logger.info("📊 Estadísticas finales del test:")
+                logger.info(f"   📋 Total viajes: {stats.get('total_viajes', 0)}")
+                logger.info(f"   ⏳ Pendientes: {stats.get('pendientes', 0)}")
+                logger.info(f"   🔄 Procesando: {stats.get('procesando', 0)}")
+            except Exception as e:
+                logger.warning(f"⚠️ Error obteniendo estadísticas finales: {e}")
+            
+            logger.info("✅ Revisión única de test completada")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error en revisión única: {e}")
+            return False
+        finally:
+            # Limpiar driver
+            if self.driver:
+                try:
+                    self.driver.quit()
+                except:
+                    pass
+            
+            self.limpiar_com()
     
     def mostrar_estadisticas(self):
-        """FUNCIÓN LIMPIA: Muestra estadísticas del sistema usando solo CSV"""
-        logger.info("📊 ESTADÍSTICAS DEL SISTEMA LIMPIO:")
-        logger.info("   🚫 NO usa archivos .pkl")
-        logger.info("   🚫 NO usa alsua_automation.log")
-        logger.info("   ✅ SOLO usa viajes_log.csv")
-        logger.info("   🔄 Sincronización MySQL: Automática")
+        """Muestra estadísticas del sistema usando solo CSV"""
+        logger.info("📊 ESTADÍSTICAS DEL SISTEMA MEJORADO v6.0:")
+        logger.info("   🔄 Sistema de cola persistente JSON")
+        logger.info("   🛡️ Reintentos selectivos inteligentes")
+        logger.info("   ✅ MANTIENE TODO TU SISTEMA ACTUAL:")
+        logger.info("       • Proceso GM completo")
+        logger.info("       • Extracción automática PDF")
+        logger.info("       • Registro CSV + MySQL")
+        logger.info("       • Compatibilidad Flask")
+        logger.info("   🌐 Arranque automático para interfaz web")
         
-        # Mostrar estadísticas del CSV
+        # Mostrar estadísticas del CSV usando tu sistema existente
         try:
             stats = viajes_log.obtener_estadisticas()
             logger.info(f"   📊 Total viajes en CSV: {stats['total_viajes']}")
@@ -860,24 +908,30 @@ class AlsuaMailAutomation:
                 logger.info(f"   📅 Último viaje: {stats['ultimo_viaje']}")
         except Exception as e:
             logger.warning(f"⚠️ Error obteniendo estadísticas CSV: {e}")
+        
+        # Mostrar estadísticas de la cola usando tu sistema existente
+        try:
+            stats_cola = obtener_estadisticas_cola()
+            logger.info(f"   📋 Viajes en cola: {stats_cola.get('total_viajes', 0)}")
+            logger.info(f"   ⏳ Pendientes: {stats_cola.get('pendientes', 0)}")
+            logger.info(f"   🔄 Procesando: {stats_cola.get('procesando', 0)}")
+        except Exception as e:
+            logger.warning(f"⚠️ Error obteniendo estadísticas de cola: {e}")
 
 def main():
-    """Función principal"""
-    import sys
-    
+    """Función principal - ARRANQUE AUTOMÁTICO CONTINUO"""
     print("""
     ╔══════════════════════════════════════════════════════════════╗
-    ║           ALSUA TRANSPORT - SISTEMA LIMPIO v5.0             ║
-    ║               Mail Reader + GM Automation                    ║
-    ║               🛡️ PROTECCIÓN ANTI-DUPLICADOS                  ║
-    ║               📊 REGISTRO UNIFICADO EN CSV ÚNICAMENTE        ║
-    ║               🔄 SINCRONIZACIÓN AUTOMÁTICA MySQL             ║
-    ║               🔧 MANEJO ROBUSTO DE DRIVER CORRUPTO           ║
-    ║               🚫 SIN archivos .pkl                           ║
-    ║               🚫 SIN alsua_automation.log                    ║
-    ║               ✅ SOLO viajes_log.csv                         ║
-    ║               💾 CSV → mysql_simple.py → MySQL               ║
-    ║               🌐 COMPATIBLE CON FLASK                        ║
+    ║         ALSUA TRANSPORT - SISTEMA v6.0 CONTINUO             ║
+    ║               🔄 FLUJO CONTINUO CON COLA PERSISTENTE         ║
+    ║               🛡️ ROBUSTEZ MÁXIMA                             ║
+    ║               ✅ MANTIENE TODO TU SISTEMA ACTUAL             ║
+    ║               📊 Proceso GM completo conservado              ║
+    ║               🎯 Extracción automática PDF                   ║
+    ║               💾 Registro CSV + MySQL                        ║
+    ║               🌐 Compatible con Flask                        ║
+    ║               🚫 SIN intervalos de 5 minutos                 ║
+    ║               🚫 SIN input manual requerido                  ║
     ╚══════════════════════════════════════════════════════════════╝
     """)
     
@@ -886,17 +940,21 @@ def main():
     # Mostrar estadísticas iniciales
     sistema.mostrar_estadisticas()
     
+    # ARRANQUE AUTOMÁTICO continuo
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
-        # Modo prueba: una sola ejecución
+        # Modo prueba: revisión única con debugging
+        logger.info("🧪 MODO PRUEBA: Ejecutando revisión de test...")
         sistema.ejecutar_revision_unica()
     else:
-        # Modo producción: bucle continuo
-        try:
-            intervalo = int(input("⏰ Intervalo en minutos (default 5): ") or "5")
-        except ValueError:
-            intervalo = 5
-            
-        sistema.ejecutar_bucle_continuo(intervalo)
+        # Modo producción: flujo continuo sin intervalos
+        logger.info("🚀 MODO PRODUCCIÓN: Iniciando flujo continuo")
+        logger.info("🔄 PROCESAMIENTO PERPETUO:")
+        logger.info("   📬 Revisar correos → 🎯 Viaje VACIO → ➕ Cola → 🚛 Procesar → 🔄")
+        logger.info("   ✅ Sin intervalos fijos innecesarios")
+        logger.info("   ✅ Máxima robustez con cola persistente")
+        logger.info("   ✅ Solo 2 errores reintentables")
+        logger.info("🌐 Compatible con interfaz web Flask")
+        sistema.ejecutar_bucle_continuo(mostrar_debug=False)
 
 if __name__ == "__main__":
     main()
