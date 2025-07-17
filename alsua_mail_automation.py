@@ -313,9 +313,9 @@ class AlsuaMailAutomation:
             
         return None
     
-    def revisar_y_extraer_correos(self):
+    def revisar_y_extraer_correos(self, limite_viajes=3):
         """
-        Revisa correos y extrae viajes válidos para agregar a la cola
+        VERSIÓN LIMITADA: Extrae máximo N viajes para evitar acumulación
         NO procesa viajes, solo los agrega a la cola
         """
         try:
@@ -324,7 +324,7 @@ class AlsuaMailAutomation:
                 logger.error("❌ No se pudo inicializar COM")
                 return False
             
-            logger.info("📬 Revisando correos para extraer viajes...")
+            logger.info(f"📬 Revisando correos (máximo {limite_viajes} viajes)...")
             
             # Conectar a Outlook
             try:
@@ -345,15 +345,12 @@ class AlsuaMailAutomation:
             
             logger.info(f"📊 Correos no leídos encontrados: {correos_totales}")
             
-            # Obtener estadísticas del CSV para mostrar estado actual
-            try:
-                stats_csv = viajes_log.obtener_estadisticas()
-                logger.info(f"📊 Estado actual CSV: {stats_csv['total_viajes']} viajes total")
-                logger.info(f"📊 Exitosos: {stats_csv['exitosos']}, Fallidos: {stats_csv['fallidos']}")
-            except:
-                logger.info("📊 Estado CSV: No disponible")
-            
+            # LÍMITE DE EXTRACCIÓN para evitar acumulación
             for mensaje in mensajes:
+                if viajes_extraidos >= limite_viajes:
+                    logger.info(f"🛑 Límite alcanzado: {limite_viajes} viajes extraídos")
+                    break
+                    
                 try:
                     # Verificación rápida para saltear correos obvios
                     remitente = mensaje.SenderEmailAddress or ""
@@ -678,25 +675,14 @@ class AlsuaMailAutomation:
     
     def ejecutar_bucle_continuo(self, mostrar_debug=False):
         """
-        SISTEMA CONTINUO: Flujo perpetuo con cola persistente
-        SIN intervalos fijos - Procesamiento inmediato
+        🔥 SISTEMA CORREGIDO: PROCESA COLA PRIMERO → Después busca correos
+        FLUJO CORREGIDO: Procesar existentes → Solo si cola vacía buscar nuevos
         """
-        logger.info("🚀 Iniciando sistema de automatización Alsua Transport v6.0 CONTINUO")
-        logger.info("🔄 FLUJO CONTINUO CON COLA PERSISTENTE:")
-        logger.info("   📬 Revisar correos → 🎯 Viaje VACIO → ➕ Cola → 🚛 Procesar")
-        logger.info("   ✅ Exitoso: 1 min → 🔄")
-        logger.info("   ❌ Fallido: 30 seg → 🔄")  
-        logger.info("   🚨 Login: 15 min → 🔄")
-        logger.info("   🔧 Driver: Inmediato → 🔄")
-        logger.info("🛡️ ROBUSTEZ MÁXIMA:")
-        logger.info("   ✅ MANTIENE todo tu sistema actual")
-        logger.info("   ✅ Proceso GM completo (facturación → salida → llegada)")
-        logger.info("   ✅ Extracción automática PDF (UUID + Viaje GM)")
-        logger.info("   ✅ Registro unificado CSV + MySQL")
-        logger.info("   ✅ Solo 2 errores reintentables (LOGIN_LIMIT, DRIVER_CORRUPTO)")
-        logger.info("   ✅ Todos los demás → FALLIDO con módulo específico")
-        logger.info("🌐 Compatible con Flask - SIN input manual")
-        logger.info("🚫 SIN intervalos de 5 minutos innecesarios")
+        logger.info("🚀 Iniciando sistema de automatización Alsua Transport CORREGIDO")
+        logger.info("✅ FLUJO CORREGIDO:")
+        logger.info("   🚛 PRIORIDAD 1: Procesar cola existente")
+        logger.info("   📬 PRIORIDAD 2: Si cola vacía → buscar nuevos correos")
+        logger.info("   🎯 RESULTADO: 1 viaje a la vez, sin acumulación")
         logger.info("=" * 70)
         
         # Mostrar estadísticas iniciales
@@ -710,28 +696,20 @@ class AlsuaMailAutomation:
                     if mostrar_debug:
                         logger.info(f"🔄 Ciclo #{contador_ciclos}")
                     
-                    # PASO 1: Revisar correos y extraer viajes VACIO
-                    if mostrar_debug:
-                        logger.info("📬 Revisando correos nuevos...")
+                    # ======================================================
+                    # 🔥 CAMBIO PRINCIPAL: PROCESAR COLA PRIMERO
+                    # ======================================================
                     
-                    viajes_encontrados = self.revisar_y_extraer_correos()
-                    
-                    if viajes_encontrados:
-                        logger.info("✅ Nuevos viajes VACIO encontrados y agregados a cola")
-                    
-                    # PASO 2: Procesar cola de viajes (uno por uno)
-                    if mostrar_debug:
-                        logger.info("🚛 Procesando cola de viajes...")
-                    
-                    # Obtener UN viaje de la cola
+                    # PASO 1: VERIFICAR Y PROCESAR COLA EXISTENTE
                     viaje_registro = obtener_siguiente_viaje_cola()
                     
                     if viaje_registro:
+                        # HAY VIAJES EN COLA → PROCESARLOS PRIMERO
                         viaje_id = viaje_registro.get('id')
                         datos_viaje = viaje_registro.get('datos_viaje', {})
                         prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
                         
-                        logger.info(f"🎯 Procesando viaje de cola: {prefactura}")
+                        logger.info(f"🎯 PROCESANDO VIAJE DE COLA: {prefactura}")
                         
                         # Procesar viaje usando tu sistema GM completo
                         resultado, modulo_error = self.procesar_viaje_individual(viaje_registro)
@@ -765,21 +743,32 @@ class AlsuaMailAutomation:
                             time.sleep(30)
                     
                     else:
-                        # No hay viajes en cola - continuar inmediatamente revisando correos
+                        # ======================================================
+                        # PASO 2: COLA VACÍA → BUSCAR NUEVOS CORREOS
+                        # ======================================================
                         if mostrar_debug:
-                            logger.info("ℹ️ Cola vacía - continuando revisión de correos")
-                        # Sin espera - continúa inmediatamente el bucle
+                            logger.info("📬 Cola vacía - buscando nuevos correos...")
+                        
+                        # Buscar MÁXIMO 3 viajes para evitar acumulación masiva
+                        viajes_encontrados = self.revisar_y_extraer_correos(limite_viajes=3)
+                        
+                        if viajes_encontrados:
+                            logger.info("✅ Nuevos viajes VACIO encontrados y agregados a cola")
+                            # Continúa inmediatamente al siguiente ciclo para procesarlos
+                        else:
+                            if mostrar_debug:
+                                logger.info("ℹ️ No se encontraron nuevos viajes VACIO")
+                            # Pausa corta antes de revisar de nuevo
+                            time.sleep(10)
                     
                     # PASO 3: Mostrar estadísticas periódicamente
                     if contador_ciclos % 10 == 0:  # Cada 10 ciclos
                         try:
                             stats = obtener_estadisticas_cola()
                             if stats.get('total_viajes', 0) > 0:
-                                logger.info(f"📊 Cola actual: {stats.get('pendientes', 0)} pendientes, {stats.get('procesando', 0)} procesando")
+                                logger.info(f"📊 Cola actual: {stats.get('pendientes', 0)} pendientes")
                         except:
                             pass
-                    
-                    # SIN ESPERAS INNECESARIAS - continúa inmediatamente al siguiente ciclo
                     
                 except KeyboardInterrupt:
                     logger.info("⚠️ Interrupción manual detectada")
