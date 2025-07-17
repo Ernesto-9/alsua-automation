@@ -471,6 +471,11 @@ class AlsuaMailAutomation:
             datos_viaje = viaje_registro.get('datos_viaje', {})
             prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
             
+            # VERIFICACIÓN ANTI-DUPLICADOS - Double check antes de procesar
+            if viajes_log.verificar_viaje_existe(prefactura):
+                logger.warning(f"⚠️ DUPLICADO DETECTADO: {prefactura} ya fue procesado - saltando")
+                return 'EXITOSO', 'duplicado_detectado'
+            
             logger.info(f"🚀 Procesando viaje: {prefactura}")
             
             # PASO 1: Crear/verificar driver
