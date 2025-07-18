@@ -616,17 +616,11 @@ class GMTransportAutomation:
             if estado_determinante == "DETERMINANTE_NO_ENCONTRADA":
                 logger.error("🚨 DETERMINANTE NO ENCONTRADA - REGISTRANDO ERROR Y TERMINANDO VIAJE")
                 
-                # SIMPLIFICADO: Solo registrar en CSV
+                # ARREGLO: Solo registrar UNA VEZ usando la función más corta
                 if self.registrar_determinante_faltante_csv(clave_determinante):
                     logger.error("✅ Error registrado exitosamente en log CSV")
                 else:
                     logger.error("❌ Error registrando en log CSV")
-                
-                # Registrar también en el sistema de errores local
-                self.registrar_error_viaje(
-                    "DETERMINANTE_NO_ENCONTRADA", 
-                    f"Determinante {clave_determinante} no existe en clave_ruta_base.csv - Debe agregarse manualmente"
-                )
                 
                 logger.error("🔄 RETORNANDO FALSE - El sistema continuará con el siguiente viaje")
                 return False

@@ -2,8 +2,6 @@
 """
 Sistema completo de automatización Alsua Transport
 Mail Reader → Cola JSON → GM Automation
-VERSIÓN MEJORADA: Cola persistente JSON, reintentos selectivos, proceso GM completo
-MANTIENE: Todas las funcionalidades del sistema actual que funcionan
 """
 
 import os
@@ -459,7 +457,7 @@ class AlsuaMailAutomation:
     
     def procesar_viaje_individual(self, viaje_registro):
         """
-        Procesa un solo viaje de la cola usando TU SISTEMA GM COMPLETO
+        Procesa un solo viaje de la cola usando el sistema GM completo
         
         Returns:
             tuple: (resultado, modulo_error) donde:
@@ -498,7 +496,6 @@ class AlsuaMailAutomation:
             
             # PASO 3: Ejecutar automatización GM COMPLETA usando tu sistema existente
             try:
-                # MANTENER INTEGRACIÓN COMPLETA CON TU SISTEMA ACTUAL
                 automation = GMTransportAutomation(self.driver)
                 automation.datos_viaje = datos_viaje
                 
@@ -680,11 +677,11 @@ class AlsuaMailAutomation:
     
     def ejecutar_bucle_continuo(self, mostrar_debug=False):
         """
-        🔥 SISTEMA CORREGIDO: PROCESA COLA PRIMERO → Después busca correos
-        FLUJO CORREGIDO: Procesar existentes → Solo si cola vacía buscar nuevos
+        Sistema de automatización continuo
+        FLUJO: Procesar cola primero → Después buscar correos
         """
-        logger.info("🚀 Iniciando sistema de automatización Alsua Transport CORREGIDO")
-        logger.info("✅ FLUJO CORREGIDO:")
+        logger.info("🚀 Iniciando sistema de automatización Alsua Transport")
+        logger.info("✅ FLUJO:")
         logger.info("   🚛 PRIORIDAD 1: Procesar cola existente")
         logger.info("   📬 PRIORIDAD 2: Si cola vacía → buscar nuevos correos")
         logger.info("   🎯 RESULTADO: 1 viaje a la vez, sin acumulación")
@@ -700,10 +697,6 @@ class AlsuaMailAutomation:
                     contador_ciclos += 1
                     if mostrar_debug:
                         logger.info(f"🔄 Ciclo #{contador_ciclos}")
-                    
-                    # ======================================================
-                    # 🔥 CAMBIO PRINCIPAL: PROCESAR COLA PRIMERO
-                    # ======================================================
                     
                     # PASO 1: VERIFICAR Y PROCESAR COLA EXISTENTE
                     viaje_registro = obtener_siguiente_viaje_cola()
@@ -748,9 +741,7 @@ class AlsuaMailAutomation:
                             time.sleep(30)
                     
                     else:
-                        # ======================================================
                         # PASO 2: COLA VACÍA → BUSCAR NUEVOS CORREOS
-                        # ======================================================
                         if mostrar_debug:
                             logger.info("📬 Cola vacía - buscando nuevos correos...")
                         
@@ -804,7 +795,6 @@ class AlsuaMailAutomation:
         """Ejecuta una sola revisión completa (para pruebas y debugging)"""
         logger.info("🧪 Ejecutando revisión única...")
         logger.info("🔄 MODO TEST: Solo algunos ciclos para inspección")
-        logger.info("✅ MANTIENE TODO TU SISTEMA ACTUAL")
         
         # Mostrar estadísticas iniciales
         self.mostrar_estadisticas_inicio()
@@ -881,18 +871,16 @@ class AlsuaMailAutomation:
             self.limpiar_com()
     
     def mostrar_estadisticas(self):
-        """Muestra estadísticas del sistema usando solo CSV"""
-        logger.info("📊 ESTADÍSTICAS DEL SISTEMA MEJORADO v6.0:")
+        """Muestra estadísticas del sistema"""
+        logger.info("📊 ESTADÍSTICAS DEL SISTEMA:")
         logger.info("   🔄 Sistema de cola persistente JSON")
         logger.info("   🛡️ Reintentos selectivos inteligentes")
-        logger.info("   ✅ MANTIENE TODO TU SISTEMA ACTUAL:")
-        logger.info("       • Proceso GM completo")
-        logger.info("       • Extracción automática PDF")
-        logger.info("       • Registro CSV + MySQL")
-        logger.info("       • Compatibilidad Flask")
-        logger.info("   🌐 Arranque automático para interfaz web")
+        logger.info("   🚀 Proceso GM completo automatizado")
+        logger.info("   📊 Extracción automática PDF")
+        logger.info("   💾 Registro CSV + MySQL")
+        logger.info("   🌐 Compatible con interfaz web")
         
-        # Mostrar estadísticas del CSV usando tu sistema existente
+        # Mostrar estadísticas del CSV
         try:
             stats = viajes_log.obtener_estadisticas()
             logger.info(f"   📊 Total viajes en CSV: {stats['total_viajes']}")
@@ -903,7 +891,7 @@ class AlsuaMailAutomation:
         except Exception as e:
             logger.warning(f"⚠️ Error obteniendo estadísticas CSV: {e}")
         
-        # Mostrar estadísticas de la cola usando tu sistema existente
+        # Mostrar estadísticas de la cola
         try:
             stats_cola = obtener_estadisticas_cola()
             logger.info(f"   📋 Viajes en cola: {stats_cola.get('total_viajes', 0)}")
@@ -914,20 +902,10 @@ class AlsuaMailAutomation:
 
 def main():
     """Función principal - ARRANQUE AUTOMÁTICO CONTINUO"""
-    print("""
-    ╔══════════════════════════════════════════════════════════════╗
-    ║         ALSUA TRANSPORT - SISTEMA v6.0 CONTINUO             ║
-    ║               🔄 FLUJO CONTINUO CON COLA PERSISTENTE         ║
-    ║               🛡️ ROBUSTEZ MÁXIMA                             ║
-    ║               ✅ MANTIENE TODO TU SISTEMA ACTUAL             ║
-    ║               📊 Proceso GM completo conservado              ║
-    ║               🎯 Extracción automática PDF                   ║
-    ║               💾 Registro CSV + MySQL                        ║
-    ║               🌐 Compatible con Flask                        ║
-    ║               🚫 SIN intervalos de 5 minutos                 ║
-    ║               🚫 SIN input manual requerido                  ║
-    ╚══════════════════════════════════════════════════════════════╝
-    """)
+    print("🚀 Sistema de Automatización Alsua Transport")
+    print("📊 Procesamiento automático de viajes de carga")
+    print("🔄 Flujo continuo con cola persistente")
+    print("=" * 50)
     
     sistema = AlsuaMailAutomation()
     
@@ -940,7 +918,7 @@ def main():
         logger.info("🧪 MODO PRUEBA: Ejecutando revisión de test...")
         sistema.ejecutar_revision_unica()
     else:
-        # Modo producción: flujo continuo sin intervalos
+        # Modo producción: flujo continuo
         logger.info("🚀 MODO PRODUCCIÓN: Iniciando flujo continuo")
         logger.info("🔄 PROCESAMIENTO PERPETUO:")
         logger.info("   📬 Revisar correos → 🎯 Viaje VACIO → ➕ Cola → 🚛 Procesar → 🔄")
