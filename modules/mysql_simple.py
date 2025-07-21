@@ -4,6 +4,7 @@ Handler MySQL MODIFICADO para leer desde viajes_log.csv
 NUEVO FLUJO: CSV → MySQL (fuente única de verdad es el CSV)
 LIMPIO: Sin archivos de fallback - todo va al CSV unificado
 ACTUALIZADO: Campos completos UUID, VIAJEGM, erroresrobot, estatusr, USUARIO
+MEJORADO: Estrategia UPSERT para resolver problemas de timing entre sistemas
 """
 
 import mysql.connector
@@ -153,37 +154,10 @@ class MySQLSyncFromCSV:
             logger.error(f"❌ Error leyendo CSV: {e}")
             return []
     
-    def verificar_prefactura_existe(self, prefactura):
-        """Verifica si una prefactura ya existe en la base de datos"""
-        try:
-            if not self.conectar():
-                return False
-                
-            cursor = self.connection.cursor()
-            
-            query = "SELECT COUNT(*) FROM acumuladoprefactura WHERE NOPREFACTURA = %s"
-            cursor.execute(query, (prefactura,))
-            
-            resultado = cursor.fetchone()
-            existe = resultado[0] > 0
-            
-            cursor.close()
-            
-            if existe:
-                logger.info(f"✅ Prefactura {prefactura} EXISTE en base de datos")
-            else:
-                logger.warning(f"⚠️ Prefactura {prefactura} NO EXISTE en base de datos")
-                
-            return existe
-            
-        except Error as e:
-            logger.error(f"❌ Error verificando prefactura: {e}")
-            return False
-    
     def procesar_registro_exitoso(self, registro):
         """
-        Procesa un registro EXITOSO del CSV hacia MySQL
-        ACTUALIZADO: Incluye UUID, VIAJEGM, estatusr, USUARIO
+        FUNCIÓN MEJORADA: Procesa un registro EXITOSO usando estrategia UPSERT
+        Resuelve problemas de timing - INSERT si no existe, UPDATE si existe
         
         Args:
             registro: Dict con datos del registro CSV
@@ -199,25 +173,26 @@ class MySQLSyncFromCSV:
             if not prefactura:
                 logger.error("❌ Registro sin prefactura, saltando")
                 return False
-            
-            # Verificar que la prefactura existe en la BD
-            if not self.verificar_prefactura_existe(prefactura):
-                logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD - no se puede actualizar")
-                logger.warning(f"💡 Considera agregar prefactura {prefactura} manualmente a la BD")
-                return False
-            
+                
             cursor = self.connection.cursor()
             
-            # Query UPDATE para completar TODOS los datos de viaje exitoso
+            # ESTRATEGIA UPSERT: INSERT ... ON DUPLICATE KEY UPDATE
+            # Si NOPREFACTURA no existe → INSERT
+            # Si NOPREFACTURA ya existe → UPDATE solo los campos del robot
             query = """
-                UPDATE acumuladoprefactura 
-                SET UUID = %s, VIAJEGM = %s, estatusr = %s, USUARIO = %s
-                WHERE NOPREFACTURA = %s
+                INSERT INTO acumuladoprefactura 
+                (NOPREFACTURA, UUID, VIAJEGM, estatusr, USUARIO) 
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                UUID = VALUES(UUID), 
+                VIAJEGM = VALUES(VIAJEGM), 
+                estatusr = VALUES(estatusr),
+                USUARIO = VALUES(USUARIO)
             """
             
-            valores = (uuid, viajegm, 'EXITOSO', 'ROBOT', prefactura)
+            valores = (prefactura, uuid, viajegm, 'EXITOSO', 'ROBOT')
             
-            logger.info(f"🔄 Ejecutando query para viaje EXITOSO:")
+            logger.info(f"🔄 Ejecutando UPSERT para viaje EXITOSO:")
             logger.info(f"   📋 NOPREFACTURA: {prefactura}")
             logger.info(f"   🆔 UUID: {uuid}")
             logger.info(f"   🚛 VIAJEGM: {viajegm}")
@@ -228,12 +203,13 @@ class MySQLSyncFromCSV:
             filas_afectadas = cursor.rowcount
             
             if filas_afectadas > 0:
-                logger.info(f"✅ Viaje EXITOSO sincronizado completamente en MySQL:")
+                logger.info(f"✅ Viaje EXITOSO procesado con UPSERT:")
                 logger.info(f"   📋 NOPREFACTURA: {prefactura}")
                 logger.info(f"   🆔 UUID: {uuid}")
                 logger.info(f"   🚛 VIAJEGM: {viajegm}")
                 logger.info(f"   📊 estatusr: EXITOSO")
                 logger.info(f"   👤 USUARIO: ROBOT")
+                logger.info(f"   🔄 Operación: {'INSERT' if filas_afectadas == 1 else 'UPDATE'}")
                 
                 # Actualizar placas si están disponibles
                 placa_tractor = registro.get('placa_tractor')
@@ -244,7 +220,7 @@ class MySQLSyncFromCSV:
                 cursor.close()
                 return True
             else:
-                logger.error(f"❌ No se actualizó ninguna fila para prefactura: {prefactura}")
+                logger.error(f"❌ No se procesó registro para prefactura: {prefactura}")
                 cursor.close()
                 return False
                 
@@ -257,8 +233,8 @@ class MySQLSyncFromCSV:
     
     def procesar_registro_fallido(self, registro):
         """
-        Procesa un registro FALLIDO del CSV hacia MySQL
-        ACTUALIZADO: Incluye erroresrobot, estatusr, USUARIO
+        FUNCIÓN MEJORADA: Procesa un registro FALLIDO usando estrategia UPSERT
+        Resuelve problemas de timing - INSERT si no existe, UPDATE si existe
         
         Args:
             registro: Dict con datos del registro CSV
@@ -273,25 +249,25 @@ class MySQLSyncFromCSV:
             if not prefactura:
                 logger.error("❌ Registro sin prefactura, saltando")
                 return False
-            
-            # Verificar que la prefactura existe en la BD
-            if not self.verificar_prefactura_existe(prefactura):
-                logger.warning(f"⚠️ Prefactura {prefactura} no existe en BD")
-                logger.warning(f"💡 Considera agregar prefactura {prefactura} manualmente a la BD")
-                return False
-            
+                
             cursor = self.connection.cursor()
             
-            # Query UPDATE para marcar como fallido con TODOS los campos requeridos
+            # ESTRATEGIA UPSERT: INSERT ... ON DUPLICATE KEY UPDATE
+            # Si NOPREFACTURA no existe → INSERT
+            # Si NOPREFACTURA ya existe → UPDATE solo los campos del robot
             query = """
-                UPDATE acumuladoprefactura 
-                SET erroresrobot = %s, estatusr = %s, USUARIO = %s
-                WHERE NOPREFACTURA = %s
+                INSERT INTO acumuladoprefactura 
+                (NOPREFACTURA, erroresrobot, estatusr, USUARIO) 
+                VALUES (%s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE 
+                erroresrobot = VALUES(erroresrobot), 
+                estatusr = VALUES(estatusr),
+                USUARIO = VALUES(USUARIO)
             """
             
-            valores = (motivo_fallo, 'FALLIDO', 'ROBOT', prefactura)
+            valores = (prefactura, motivo_fallo, 'FALLIDO', 'ROBOT')
             
-            logger.info(f"🔄 Ejecutando query para viaje FALLIDO:")
+            logger.info(f"🔄 Ejecutando UPSERT para viaje FALLIDO:")
             logger.info(f"   📋 NOPREFACTURA: {prefactura}")
             logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
             logger.info(f"   📊 estatusr: FALLIDO")
@@ -301,11 +277,12 @@ class MySQLSyncFromCSV:
             filas_afectadas = cursor.rowcount
             
             if filas_afectadas > 0:
-                logger.info(f"✅ Viaje FALLIDO sincronizado completamente en MySQL:")
+                logger.info(f"✅ Viaje FALLIDO procesado con UPSERT:")
                 logger.info(f"   📋 NOPREFACTURA: {prefactura}")
                 logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
                 logger.info(f"   📊 estatusr: FALLIDO")
                 logger.info(f"   👤 USUARIO: ROBOT")
+                logger.info(f"   🔄 Operación: {'INSERT' if filas_afectadas == 1 else 'UPDATE'}")
                 
                 # Actualizar placas si están disponibles
                 placa_tractor = registro.get('placa_tractor')
@@ -316,7 +293,7 @@ class MySQLSyncFromCSV:
                 cursor.close()
                 return True
             else:
-                logger.error(f"❌ No se actualizó ninguna fila para prefactura: {prefactura}")
+                logger.error(f"❌ No se procesó registro para prefactura: {prefactura}")
                 cursor.close()
                 return False
                 
@@ -360,7 +337,7 @@ class MySQLSyncFromCSV:
             Dict: Estadísticas de la sincronización
         """
         try:
-            logger.info("🔄 Iniciando sincronización CSV → MySQL")
+            logger.info("🔄 Iniciando sincronización CSV → MySQL con estrategia UPSERT")
             
             # Verificar que el CSV existe
             if not os.path.exists(self.archivo_csv):
@@ -415,11 +392,12 @@ class MySQLSyncFromCSV:
                     estadisticas['errores'] += 1
             
             # Log final de estadísticas
-            logger.info("📊 SINCRONIZACIÓN COMPLETADA:")
+            logger.info("📊 SINCRONIZACIÓN CON UPSERT COMPLETADA:")
             logger.info(f"   📋 Registros procesados: {estadisticas['procesados']}")
             logger.info(f"   ✅ Exitosos sincronizados: {estadisticas['exitosos']}")
             logger.info(f"   ❌ Fallidos sincronizados: {estadisticas['fallidos']}")
             logger.info(f"   🚨 Errores: {estadisticas['errores']}")
+            logger.info("   🎯 Problema de timing resuelto con estrategia UPSERT")
             
             return estadisticas
             
@@ -460,7 +438,7 @@ mysql_sync = MySQLSyncFromCSV()
 
 # Funciones de conveniencia (NUEVAS - reemplazan las antiguas)
 def sincronizar_csv_a_mysql():
-    """Función principal para sincronizar CSV a MySQL"""
+    """Función principal para sincronizar CSV a MySQL con estrategia UPSERT"""
     return mysql_sync.sincronizar_desde_csv()
 
 def obtener_estadisticas_mysql_sync():
@@ -486,7 +464,7 @@ def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor
 
 # Script de prueba
 if __name__ == "__main__":
-    print("🧪 Probando sincronización CSV → MySQL con campos completos...")
+    print("🧪 Probando sincronización CSV → MySQL con estrategia UPSERT...")
     
     # Mostrar estadísticas actuales
     print("\n📊 Estadísticas actuales:")
@@ -495,7 +473,7 @@ if __name__ == "__main__":
         print(f"   {key}: {value}")
     
     # Ejecutar sincronización
-    print("\n🔄 Ejecutando sincronización...")
+    print("\n🔄 Ejecutando sincronización con UPSERT...")
     resultado = sincronizar_csv_a_mysql()
     
     print("\n📋 Resultado de sincronización:")
