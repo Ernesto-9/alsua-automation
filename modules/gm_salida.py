@@ -72,17 +72,14 @@ class GMSalidaAutomation:
             bool: True si se insertó correctamente, False si falló
         """
         try:
-            logger.info(f"🎯 Llenando fecha ROBUSTA en {campo_id}: {fecha_valor}")
+            logger.info(f"🎯 Llenando fecha en {campo_id}: {fecha_valor}")
             
             # Intentar hasta 3 veces si hay problemas
             for intento in range(3):
-                logger.info(f"🔄 Intento {intento + 1}/3 para insertar fecha")
-                
                 # Paso 1: Localizar y hacer clic en el campo
                 campo = self.wait.until(EC.element_to_be_clickable((By.ID, campo_id)))
                 
                 # Paso 2: LIMPIEZA AGRESIVA
-                logger.info("🧹 Limpieza agresiva del campo...")
                 campo.click()
                 time.sleep(0.3)
                 
@@ -101,10 +98,8 @@ class GMSalidaAutomation:
                 
                 # Paso 3: Verificar que está limpio
                 valor_actual = campo.get_attribute("value")
-                logger.info(f"📋 Campo después de limpieza: '{valor_actual}'")
                 
                 if valor_actual and len(valor_actual) > 0:
-                    logger.warning(f"⚠️ Campo no está completamente limpio: '{valor_actual}'")
                     # Una limpieza final
                     campo.send_keys(Keys.HOME)
                     time.sleep(0.1)
@@ -113,7 +108,6 @@ class GMSalidaAutomation:
                         time.sleep(0.02)
                 
                 # Paso 4: INSERTAR FECHA LENTAMENTE
-                logger.info(f"⌨️ Insertando fecha: {fecha_valor}")
                 time.sleep(0.5)  # Pausa antes de escribir
                 
                 # Escribir carácter por carácter para evitar problemas
@@ -124,30 +118,24 @@ class GMSalidaAutomation:
                 # Paso 5: VALIDACIÓN INMEDIATA
                 time.sleep(0.5)  # Esperar que se procese
                 valor_final = campo.get_attribute("value")
-                logger.info(f"✅ Valor final en campo: '{valor_final}'")
                 
                 # Verificar que no tiene el problema del 1000
                 if "1000" in valor_final:
-                    logger.error(f"🚨 ERROR DETECTADO: Fecha con '1000': '{valor_final}'")
-                    logger.error("🔄 Reintentando limpieza e inserción...")
+                    logger.error(f"🚨 ERROR: Fecha con '1000' en intento {intento + 1}")
                     continue
                     
                 # Verificar longitud razonable (DD/MM/YYYY = 10 caracteres + posible hora)
                 if len(valor_final) > 20:
-                    logger.error(f"🚨 ERROR DETECTADO: Fecha muy larga: '{valor_final}' ({len(valor_final)} chars)")
-                    logger.error("🔄 Reintentando limpieza e inserción...")
+                    logger.error(f"🚨 ERROR: Fecha muy larga en intento {intento + 1}")
                     continue
                 
                 # Verificar que contiene la fecha esperada
                 if fecha_valor.replace("/", "") not in valor_final.replace("/", "").replace(" ", ""):
-                    logger.error(f"🚨 ERROR DETECTADO: Fecha no coincide")
-                    logger.error(f"   Esperado: {fecha_valor}")
-                    logger.error(f"   Obtenido: {valor_final}")
-                    logger.error("🔄 Reintentando...")
+                    logger.error(f"🚨 ERROR: Fecha no coincide en intento {intento + 1}")
                     continue
                 
                 # Si llegamos aquí, la fecha está correcta
-                logger.info(f"✅ Fecha insertada correctamente: '{valor_final}'")
+                logger.info(f"✅ Fecha insertada correctamente: {fecha_valor}")
                 
                 # Confirmar con ENTER
                 campo.send_keys(Keys.ENTER)
@@ -201,7 +189,6 @@ class GMSalidaAutomation:
                 btn_ok = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_OK")))
                 self.driver.execute_script("arguments[0].click();", btn_ok)
                 time.sleep(2)
-                logger.info("✅ BTN_OK clickeado")
             except Exception as e:
                 logger.error(f"❌ Error al hacer clic en BTN_OK: {e}")
             
@@ -230,14 +217,7 @@ class GMSalidaAutomation:
                 )
                 
                 if exito_csv:
-                    logger.info("✅ Operador ocupado registrado en log CSV")
-                    logger.info("🚨 OPERADOR OCUPADO REGISTRADO:")
-                    logger.info(f"   📋 Prefactura: {prefactura}")
-                    logger.info(f"   🚛 Placa Tractor: {placa_tractor}")
-                    logger.info(f"   📊 Estatus en CSV: FALLIDO")
-                    logger.info(f"   🔍 Motivo: {motivo}")
-                    logger.info("   🔧 ACCIÓN: Revisar disponibilidad de operador")
-                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
+                    logger.info(f"✅ Operador ocupado registrado: {prefactura} - {placa_tractor}")
                 else:
                     logger.error("❌ Error registrando en log CSV")
                     
@@ -246,9 +226,8 @@ class GMSalidaAutomation:
             
             # Paso 3: Cerrar navegador
             try:
-                logger.warning("🚨 CERRANDO NAVEGADOR por operador ocupado")
+                logger.warning("🚨 Cerrando navegador por operador ocupado")
                 self.driver.quit()
-                logger.info("✅ Navegador cerrado exitosamente")
             except Exception as e:
                 logger.warning(f"⚠️ Error cerrando navegador: {e}")
             
@@ -267,7 +246,6 @@ class GMSalidaAutomation:
             busqueda_link = self.wait.until(EC.element_to_be_clickable((By.ID, "LINK_BUSQUEDAGENERAL")))
             busqueda_link.click()
             time.sleep(2)
-            logger.info("✅ Configuración de Búsqueda General abierta")
             
             # Paso 2: DESMARCAR filtros que NO queremos
             filtros_a_desmarcar = ["_1_TABLE_BUSQUEDAGENERAL_1", "_2_TABLE_BUSQUEDAGENERAL_1"]
@@ -277,12 +255,9 @@ class GMSalidaAutomation:
                     checkbox = self.driver.find_element(By.ID, filtro_id)
                     if checkbox.is_selected():
                         self.driver.execute_script("arguments[0].click();", checkbox)
-                        logger.info(f"   ✅ DESMARCADO: {filtro_id}")
                         time.sleep(0.3)
-                    else:
-                        logger.info(f"   ℹ️ Ya desmarcado: {filtro_id}")
                 except Exception as e:
-                    logger.warning(f"   ⚠️ No se pudo desmarcar {filtro_id}: {e}")
+                    logger.warning(f"⚠️ No se pudo desmarcar filtro: {e}")
             
             # Paso 3: MARCAR filtros que SÍ queremos
             filtros_a_marcar = ["_5_TABLE_BUSQUEDAGENERAL_1", "_7_TABLE_BUSQUEDAGENERAL_1", "_8_TABLE_BUSQUEDAGENERAL_1"]
@@ -292,24 +267,20 @@ class GMSalidaAutomation:
                     checkbox = self.driver.find_element(By.ID, filtro_id)
                     if not checkbox.is_selected():
                         self.driver.execute_script("arguments[0].click();", checkbox)
-                        logger.info(f"   ✅ MARCADO: {filtro_id}")
                         time.sleep(0.3)
-                    else:
-                        logger.info(f"   ℹ️ Ya marcado: {filtro_id}")
                 except Exception as e:
-                    logger.warning(f"   ⚠️ No se pudo marcar {filtro_id}: {e}")
+                    logger.warning(f"⚠️ No se pudo marcar filtro: {e}")
             
             # Paso 4: Aplicar configuración
             try:
                 seleccionar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_SELECCIONARBUSQUEDAGENERAL")))
                 seleccionar_btn.click()
                 time.sleep(2)
-                logger.info("✅ Filtros aplicados con 'Seleccionar'")
+                logger.info("✅ Filtros configurados correctamente")
             except Exception as e:
-                logger.error(f"❌ Error al hacer clic en 'Seleccionar': {e}")
+                logger.error(f"❌ Error al aplicar filtros: {e}")
                 return False
             
-            logger.info("✅ Configuración de filtros completada")
             return True
             
         except Exception as e:
@@ -383,36 +354,15 @@ class GMSalidaAutomation:
     def seleccionar_viaje_de_tabla(self):
         """FUNCIÓN CON DEBUG: Selecciona el primer viaje de la tabla después del filtrado"""
         try:
-            logger.info("🔍 Buscando viajes en la tabla...")
+            logger.info("🔍 Seleccionando viaje de la tabla...")
             
             # Esperar más tiempo tras aplicar filtros
             time.sleep(3)
             
-            # DEBUG: Buscar elementos de viajes con múltiples selectores
-            logger.info("🔍 DEBUG: Probando diferentes selectores...")
-            
-            # Selector 1: TABLE_PROVIAJES
+            # Buscar elementos de viajes con múltiples selectores
             elementos_proviajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
-            logger.info(f"📊 Selector TABLE_PROVIAJES encontró: {len(elementos_proviajes)} elementos")
-            
-            # Selector 2: Filas de tabla genéricas
             filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
-            logger.info(f"📊 Selector filas de tabla encontró: {len(filas_tabla)} elementos")
-            
-            # Selector 3: Buscar elementos con texto "WALMART" o "WAL MART"
             elementos_walmart = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
-            logger.info(f"📊 Elementos con WALMART encontrados: {len(elementos_walmart)} elementos")
-            
-            # DEBUG: Mostrar algunos IDs de elementos encontrados
-            if elementos_proviajes:
-                logger.info("🔍 IDs de elementos TABLE_PROVIAJES:")
-                for i, elem in enumerate(elementos_proviajes[:3]):  # Mostrar máximo 3
-                    try:
-                        elem_id = elem.get_attribute('id')
-                        elem_text = elem.text[:50] if elem.text else "Sin texto"
-                        logger.info(f"   {i+1}: ID='{elem_id}' Texto='{elem_text}'")
-                    except:
-                        logger.info(f"   {i+1}: Error obteniendo info del elemento")
             
             # Decidir qué selector usar - PRIORIZAR WALMART
             elementos_a_usar = None
@@ -432,12 +382,9 @@ class GMSalidaAutomation:
                 selector_usado = "filas de tabla"
             else:
                 logger.error("❌ No se encontraron elementos válidos para seleccionar")
-                logger.error(f"   - WALMART: {len(elementos_walmart)} (MEJOR OPCIÓN)")
-                logger.error(f"   - TABLE_PROVIAJES: {len(elementos_proviajes)} (muchos elementos, incluye headers)")
-                logger.error(f"   - Filas tabla: {len(filas_tabla)} (muchas filas)")
                 return False
             
-            logger.info(f"✅ Usando selector: {selector_usado} con {len(elementos_a_usar)} elementos")
+            logger.info(f"✅ Usando selector: {selector_usado}")
             
             # Hacer clic en el primer elemento
             primer_elemento = elementos_a_usar[0]
@@ -448,7 +395,6 @@ class GMSalidaAutomation:
                 
                 # Hacer clic
                 self.driver.execute_script("arguments[0].click();", primer_elemento)
-                logger.info(f"✅ Primer elemento seleccionado automáticamente usando {selector_usado}")
                 
                 # Esperar más tiempo para que GM procese la selección
                 time.sleep(4)
@@ -459,24 +405,14 @@ class GMSalidaAutomation:
                         EC.presence_of_element_located((By.LINK_TEXT, "Salida"))
                     )
                     if salida_check.is_displayed():
-                        logger.info("✅ Viaje seleccionado correctamente - Link 'Salida' disponible")
+                        logger.info("✅ Viaje seleccionado correctamente")
                         return True
                     else:
-                        logger.error("❌ Link 'Salida' existe pero no es visible")
+                        logger.error("❌ Link 'Salida' no visible")
                         return False
                         
                 except Exception as e:
-                    logger.error(f"❌ Link 'Salida' no apareció después de 10 segundos: {e}")
-                    
-                    # DEBUG: Mostrar qué links están disponibles
-                    try:
-                        todos_links = self.driver.find_elements(By.TAG_NAME, "a")
-                        links_visibles = [link.text.strip() for link in todos_links 
-                                        if link.is_displayed() and link.text.strip()]
-                        logger.info(f"🔍 Links disponibles actualmente: {links_visibles[:10]}")
-                    except:
-                        pass
-                    
+                    logger.error(f"❌ Link 'Salida' no apareció: {e}")
                     return False
                     
             except Exception as e:
@@ -649,7 +585,7 @@ class GMSalidaAutomation:
 # Función principal para ser llamada desde otros módulos
 def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
     """
-    FUNCIÓN SIMPLIFICADA: Procesar la salida del viaje CON REGISTRO SOLO EN CSV
+    FUNCIÓN MEJORADA: Procesar la salida del viaje CON REGISTRO AUTOMÁTICO DE ERRORES
     Retorna:
     - True: Éxito
     - False: Error que debe detener el proceso
@@ -663,15 +599,50 @@ def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
         prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA') if datos_viaje else 'DESCONOCIDA'
         
         if resultado == "OPERADOR_OCUPADO":
+            # Ya se registró en manejar_operador_ocupado()
             logger.warning(f"🚨 VIAJE {prefactura}: Operador ocupado - registrado en CSV")
-            logger.info("🔄 MySQL se sincronizará automáticamente desde CSV")
         elif resultado:
             logger.info(f"✅ VIAJE {prefactura} PROCESADO: Salida completada exitosamente")
-        else:
+        else:  # resultado == False - CUALQUIER ERROR
             logger.error(f"❌ VIAJE {prefactura} FALLÓ: Error en proceso de salida")
+            
+            # NUEVO: Registrar error genérico en CSV para CUALQUIER fallo
+            if datos_viaje:
+                try:
+                    log_viaje_fallido(
+                        prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
+                        motivo_fallo="FALLO_EN_GM_SALIDA - Error en proceso de salida del viaje",
+                        determinante=datos_viaje.get('clave_determinante', ''),
+                        fecha_viaje=datos_viaje.get('fecha', ''),
+                        placa_tractor=datos_viaje.get('placa_tractor', ''),
+                        placa_remolque=datos_viaje.get('placa_remolque', ''),
+                        importe=datos_viaje.get('importe', ''),
+                        cliente_codigo=datos_viaje.get('cliente_codigo', '')
+                    )
+                    logger.info("✅ Error de GM_SALIDA registrado en CSV")
+                except Exception as log_error:
+                    logger.error(f"❌ Error registrando fallo en CSV: {log_error}")
             
         return resultado
         
     except Exception as e:
         logger.error(f"❌ Error en procesar_salida_viaje: {e}")
+        
+        # NUEVO: También registrar errores de excepción general
+        if datos_viaje:
+            try:
+                log_viaje_fallido(
+                    prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
+                    motivo_fallo=f"EXCEPCION_EN_GM_SALIDA - {str(e)}",
+                    determinante=datos_viaje.get('clave_determinante', ''),
+                    fecha_viaje=datos_viaje.get('fecha', ''),
+                    placa_tractor=datos_viaje.get('placa_tractor', ''),
+                    placa_remolque=datos_viaje.get('placa_remolque', ''),
+                    importe=datos_viaje.get('importe', ''),
+                    cliente_codigo=datos_viaje.get('cliente_codigo', '')
+                )
+                logger.info("✅ Excepción de GM_SALIDA registrada en CSV")
+            except Exception as log_error:
+                logger.error(f"❌ Error registrando excepción en CSV: {log_error}")
+        
         return False

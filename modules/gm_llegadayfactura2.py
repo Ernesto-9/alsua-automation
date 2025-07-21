@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 from .pdf_extractor import extraer_datos_automatico
 # SIMPLIFICADO: Solo importar sistema de log CSV
-from viajes_log import registrar_viaje_exitoso as log_viaje_exitoso
+from viajes_log import registrar_viaje_exitoso as log_viaje_exitoso, registrar_viaje_fallido as log_viaje_fallido
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -51,7 +51,7 @@ class ProcesadorLlegadaFactura:
     def _hacer_clic_llegada(self):
         """Hacer clic en el link de Llegada"""
         try:
-            logger.info("🛬 Buscando link 'Llegada'...")
+            logger.info("🛬 Procesando llegada...")
             
             # Buscar el link de Llegada
             llegada_link = self.wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Llegada")))
@@ -67,24 +67,20 @@ class ProcesadorLlegadaFactura:
     def _llenar_fecha_llegada_robusto(self, id_input, fecha_valor):
         """Método ROBUSTO para llenar fecha de llegada"""
         try:
-            logger.info(f"🎯 Llenando fecha en {id_input} con valor: {fecha_valor}")
+            logger.info(f"🎯 Llenando fecha en {id_input}: {fecha_valor}")
             
             campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
             
             # Verificar valor actual
             valor_actual = campo.get_attribute("value")
-            logger.info(f"📋 Valor actual en {id_input}: '{valor_actual}'")
             
             # DOBLE CLIC
-            logger.info(f"🖱️ Haciendo primer clic en {id_input}")
             campo.click()
             time.sleep(0.3)
-            logger.info(f"🖱️ Haciendo segundo clic en {id_input}")
             campo.click()
             time.sleep(0.2)
             
             # Limpiar campo completamente
-            logger.info(f"🧹 Limpiando campo {id_input}")
             campo.send_keys(Keys.HOME)
             for _ in range(15):
                 campo.send_keys(Keys.DELETE)
@@ -92,20 +88,17 @@ class ProcesadorLlegadaFactura:
             # Obtener hora actual si existe, sino usar hora por defecto
             if valor_actual and " " in valor_actual:
                 hora = valor_actual.split(" ")[1]
-                logger.info(f"🕒 Hora encontrada: {hora}")
             else:
                 hora = "14:00"
-                logger.info(f"🕒 Usando hora por defecto: {hora}")
                 
             # Insertar nueva fecha con hora
             nuevo_valor = f"{fecha_valor} {hora}"
-            logger.info(f"⌨️ Escribiendo en {id_input}: '{nuevo_valor}'")
             campo.send_keys(nuevo_valor)
             time.sleep(0.5)
             
             # Verificar que se insertó correctamente
             valor_final = campo.get_attribute("value")
-            logger.info(f"✅ Fecha final en {id_input}: '{valor_final}'")
+            logger.info(f"✅ Fecha insertada: {fecha_valor}")
             
             # Hacer ENTER para confirmar
             campo.send_keys(Keys.ENTER)
@@ -124,7 +117,6 @@ class ProcesadorLlegadaFactura:
             
             # Obtener fecha actual para la llegada
             fecha_llegada = datetime.now().strftime("%d/%m/%Y")
-            logger.info(f"📅 Fecha de llegada a usar: {fecha_llegada}")
             
             # Llenar fecha de llegada usando método robusto
             if not self._llenar_fecha_llegada_robusto("EDT_LLEGADA", fecha_llegada):
@@ -132,7 +124,6 @@ class ProcesadorLlegadaFactura:
                 return False
             
             # Esperar un momento para que GM procese la fecha
-            logger.info("⏳ Esperando que GM procese la fecha...")
             time.sleep(2)
             
             # Seleccionar status "TERMINADO" (valor 3)
@@ -141,12 +132,6 @@ class ProcesadorLlegadaFactura:
                 
                 status_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATESTATUSVIAJE"))))
                 
-                # Verificar opciones disponibles
-                opciones = status_select.options
-                logger.info(f"📋 Opciones de status disponibles:")
-                for opcion in opciones:
-                    logger.info(f"   - Valor: {opcion.get_attribute('value')}, Texto: {opcion.text}")
-                
                 # Seleccionar TERMINADO
                 status_select.select_by_value("3")  # TERMINADO
                 time.sleep(1)
@@ -154,7 +139,7 @@ class ProcesadorLlegadaFactura:
                 # VERIFICAR SELECCIÓN
                 status_select_verificacion = Select(self.driver.find_element(By.ID, "COMBO_CATESTATUSVIAJE"))
                 seleccionado = status_select_verificacion.first_selected_option
-                logger.info(f"✅ Status seleccionado: {seleccionado.text} (valor: {seleccionado.get_attribute('value')})")
+                logger.info(f"✅ Status seleccionado: {seleccionado.text}")
                 
             except Exception as e:
                 logger.error(f"❌ Error al seleccionar status TERMINADO: {e}")
@@ -199,7 +184,7 @@ class ProcesadorLlegadaFactura:
     def _autorizar(self):
         """Hacer clic en Autorizar y manejar confirmación"""
         try:
-            logger.info("🔓 Buscando botón 'Autorizar'...")
+            logger.info("🔓 Autorizando viaje...")
             
             autorizar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_AUTORIZAR")))
             
@@ -213,17 +198,14 @@ class ProcesadorLlegadaFactura:
             
             # Manejar posible alerta de confirmación del navegador
             try:
-                logger.info("🔍 Esperando posible alerta de confirmación...")
                 alert = WebDriverWait(self.driver, 3).until(EC.alert_is_present())
-                
                 alert_text = alert.text
                 logger.info(f"📋 Alerta detectada: '{alert_text}'")
-                
                 alert.accept()
                 logger.info("✅ Alerta de confirmación aceptada")
                 
             except TimeoutException:
-                logger.info("ℹ️ No se detectó alerta de confirmación")
+                pass
             except Exception as e:
                 logger.warning(f"⚠️ Error al manejar alerta: {e}")
             
@@ -233,7 +215,7 @@ class ProcesadorLlegadaFactura:
             # Verificar que apareció el botón "Facturar"
             try:
                 facturar_check = self.wait.until(EC.presence_of_element_located((By.ID, "BTN_FACTURAR")))
-                logger.info("✅ Viaje autorizado correctamente - Botón 'Facturar' disponible")
+                logger.info("✅ Viaje autorizado correctamente")
                 return True
             except:
                 logger.warning("⚠️ Botón 'Facturar' no apareció inmediatamente, continuando...")
@@ -309,7 +291,7 @@ class ProcesadorLlegadaFactura:
     def _procesar_impresion_y_extraccion_automatica(self):
         """Procesar impresión y extraer folio fiscal AUTOMÁTICAMENTE"""
         try:
-            logger.info("🖨️ Procesando impresión y extracción automática de datos...")
+            logger.info("🖨️ Procesando impresión y extracción automática...")
             
             # Hacer clic en "Regresar" si está disponible
             try:
@@ -324,10 +306,7 @@ class ProcesadorLlegadaFactura:
             try:
                 imprimir_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_IMPRIMIR")))
                 
-                logger.info("🚨" * 20)
                 logger.info("🚨 INICIANDO EXTRACCIÓN AUTOMÁTICA DE DATOS")
-                logger.info("🚨 Configurando descarga automática y extrayendo PDF...")
-                logger.info("🚨" * 20)
                 
                 # Configurar descarga automática antes de hacer clic
                 from .pdf_extractor import PDFExtractor
@@ -339,16 +318,13 @@ class ProcesadorLlegadaFactura:
                 logger.info("✅ Botón 'Imprimir' clickeado - Iniciando descarga automática")
                 
                 # Esperar y extraer datos automáticamente
-                logger.info("⏳ Esperando descarga del PDF...")
                 datos_extraidos = extraer_datos_automatico(self.driver, "pdfs_temporales", timeout=20)
                 
                 # Verificar extracción
                 uuid_extraido = datos_extraidos.get("uuid")
                 viajegm_extraido = datos_extraidos.get("viaje_gm")
                 
-                logger.info(f"✅ Datos extraídos automáticamente:")
-                logger.info(f"   🆔 UUID: {uuid_extraido}")
-                logger.info(f"   🚛 VIAJEGM: {viajegm_extraido}")
+                logger.info(f"✅ Datos extraídos: UUID={uuid_extraido}, VIAJEGM={viajegm_extraido}")
                 
                 # Guardar los datos extraídos en datos_viaje
                 if uuid_extraido:
@@ -405,83 +381,33 @@ class ProcesadorLlegadaFactura:
     
     def _registrar_viaje_exitoso_csv(self):
         """
-        FUNCIÓN SIMPLIFICADA CON LOGGING DETALLADO: Registra viaje exitoso SOLO en CSV
+        FUNCIÓN SIMPLIFICADA: Registra viaje exitoso SOLO en CSV
         """
         try:
-            logger.info("💾 Registrando viaje exitoso en log CSV...")
+            logger.info("💾 Registrando viaje exitoso en CSV...")
             
-            # ===== LOGGING DETALLADO DE DATOS DISPONIBLES =====
-            logger.info("🔍 DIAGNÓSTICO DETALLADO DE DATOS:")
-            logger.info(f"   📊 self.datos_viaje completo: {self.datos_viaje}")
-            logger.info(f"   📊 Tipo de self.datos_viaje: {type(self.datos_viaje)}")
-            logger.info(f"   📊 Claves disponibles: {list(self.datos_viaje.keys()) if self.datos_viaje else 'NONE'}")
-            
-            # Extraer TODOS los datos disponibles con logging individual
+            # Extraer datos básicos
             prefactura = self.datos_viaje.get('prefactura')
-            logger.info(f"   📋 Prefactura extraída: '{prefactura}' (tipo: {type(prefactura)})")
-            
             fecha_viaje = self.datos_viaje.get('fecha')
-            logger.info(f"   📅 Fecha extraída: '{fecha_viaje}' (tipo: {type(fecha_viaje)})")
-            
             uuid = self.datos_viaje.get('uuid')
-            logger.info(f"   🆔 UUID extraído: '{uuid}' (tipo: {type(uuid)})")
-            
             viajegm = self.datos_viaje.get('viajegm')
-            logger.info(f"   🚛 ViajeGM extraído: '{viajegm}' (tipo: {type(viajegm)})")
-            
             placa_tractor = self.datos_viaje.get('placa_tractor')
-            logger.info(f"   🚗 Placa Tractor extraída: '{placa_tractor}' (tipo: {type(placa_tractor)})")
-            
             placa_remolque = self.datos_viaje.get('placa_remolque')
-            logger.info(f"   🚚 Placa Remolque extraída: '{placa_remolque}' (tipo: {type(placa_remolque)})")
-            
             determinante = self.datos_viaje.get('clave_determinante')
-            logger.info(f"   🎯 Determinante extraída: '{determinante}' (tipo: {type(determinante)})")
-            
             importe = self.datos_viaje.get('importe')
-            logger.info(f"   💰 Importe extraído: '{importe}' (tipo: {type(importe)})")
-            
             cliente_codigo = self.datos_viaje.get('cliente_codigo')
-            logger.info(f"   👤 Cliente extraído: '{cliente_codigo}' (tipo: {type(cliente_codigo)})")
             
-            # ===== VALIDACIONES CON LOGGING DETALLADO =====
-            logger.info("🔍 INICIANDO VALIDACIONES:")
-            
-            # Validación de prefactura
-            logger.info(f"🔍 Validando prefactura: '{prefactura}'")
+            # Validaciones básicas
             if not prefactura:
                 logger.error("❌ Error crítico: No hay prefactura para registrar")
-                logger.error(f"   🔍 Valor exacto: {repr(prefactura)}")
-                logger.error(f"   🔍 Evaluación bool: {bool(prefactura)}")
                 return False
-            logger.info("✅ Prefactura válida")
                 
-            # Validación de fecha
-            logger.info(f"🔍 Validando fecha_viaje: '{fecha_viaje}'")
             if not fecha_viaje:
                 logger.error("❌ Error crítico: No hay fecha para registrar")
-                logger.error(f"   🔍 Valor exacto: {repr(fecha_viaje)}")
-                logger.error(f"   🔍 Evaluación bool: {bool(fecha_viaje)}")
                 return False
-            logger.info("✅ Fecha válida")
-            
-            # ===== INTENTO DE REGISTRO CON LOGGING DETALLADO =====
-            logger.info("🚀 INICIANDO REGISTRO EN CSV:")
-            logger.info("📋 DATOS COMPLETOS PARA LOG CSV:")
-            logger.info(f"   📋 Prefactura: {prefactura}")
-            logger.info(f"   📅 Fecha: {fecha_viaje}")
-            logger.info(f"   🆔 UUID: {uuid}")
-            logger.info(f"   🚛 Viaje GM: {viajegm}")
-            logger.info(f"   🚗 Placa Tractor: {placa_tractor}")
-            logger.info(f"   🚚 Placa Remolque: {placa_remolque}")
-            logger.info(f"   🎯 Determinante: {determinante}")
-            logger.info(f"   💰 Importe: {importe}")
-            logger.info(f"   👤 Cliente: {cliente_codigo}")
             
             # Registrar en log CSV unificado
             try:
-                logger.info("🔄 Llamando a log_viaje_exitoso()...")
-                
                 exito_csv = log_viaje_exitoso(
                     prefactura=prefactura,
                     determinante=determinante,
@@ -494,38 +420,21 @@ class ProcesadorLlegadaFactura:
                     cliente_codigo=cliente_codigo
                 )
                 
-                logger.info(f"📊 Resultado de log_viaje_exitoso(): {exito_csv}")
-                
                 if exito_csv:
-                    logger.info("✅ Viaje EXITOSO registrado en log CSV")
-                    logger.info("🎉 VIAJE COMPLETADO EXITOSAMENTE:")
-                    logger.info(f"   ✅ Prefactura: {prefactura}")
-                    logger.info(f"   ✅ Fecha: {fecha_viaje}")
-                    logger.info(f"   ✅ UUID: {uuid or 'No extraído'}")
-                    logger.info(f"   ✅ Viaje GM: {viajegm or 'No extraído'}")
-                    logger.info(f"   ✅ Placas: {placa_tractor}/{placa_remolque}")
-                    logger.info(f"   📊 Estatus en CSV: EXITOSO")
-                    logger.info("🔄 MySQL se actualizará automáticamente desde CSV")
+                    logger.info(f"✅ Viaje EXITOSO registrado: {prefactura}")
+                    logger.info(f"   🆔 UUID: {uuid or 'No extraído'}")
+                    logger.info(f"   🚛 Viaje GM: {viajegm or 'No extraído'}")
                     return True
                 else:
                     logger.error("❌ Error registrando en log CSV")
-                    logger.error("🔍 La función log_viaje_exitoso() retornó False")
                     return False
                     
             except Exception as e:
                 logger.error(f"❌ Error registrando en log CSV: {e}")
-                logger.error(f"🔍 Tipo de error: {type(e).__name__}")
-                logger.error(f"🔍 Detalles del error: {str(e)}")
-                import traceback
-                logger.error(f"🔍 Traceback completo:\n{traceback.format_exc()}")
                 return False
                 
         except Exception as e:
             logger.error(f"❌ Error general en registro CSV: {e}")
-            logger.error(f"🔍 Tipo de error: {type(e).__name__}")
-            logger.error(f"🔍 Detalles del error: {str(e)}")
-            import traceback
-            logger.error(f"🔍 Traceback completo:\n{traceback.format_exc()}")
             return False
     
     def obtener_datos_extraidos(self):
@@ -538,20 +447,20 @@ class ProcesadorLlegadaFactura:
 
 def procesar_llegada_factura(driver, datos_viaje):
     """
-    FUNCIÓN SIMPLIFICADA: Procesar llegada y facturación CON REGISTRO SOLO EN CSV
+    FUNCIÓN MEJORADA: Procesar llegada y facturación CON REGISTRO AUTOMÁTICO DE ERRORES
     """
     try:
-        logger.info("🚀 Iniciando ProcesadorLlegadaFactura SIMPLIFICADO...")
+        logger.info("🚀 Iniciando ProcesadorLlegadaFactura...")
         procesador = ProcesadorLlegadaFactura(driver, datos_viaje)
         resultado = procesador.procesar_llegada_y_factura()
         
+        prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA') if datos_viaje else 'DESCONOCIDA'
+        
         if resultado:
-            logger.info("✅ Proceso de llegada y facturación completado exitosamente")
-            logger.info("🔄 Datos registrados en CSV - MySQL se sincronizará automáticamente")
+            logger.info(f"✅ VIAJE {prefactura}: Llegada y facturación completada exitosamente")
             
             # Retornar también los datos extraídos
             datos_extraidos = procesador.obtener_datos_extraidos()
-            logger.info(f"📊 Datos extraídos: {datos_extraidos}")
             
             # Actualizar datos_viaje con la información extraída
             if datos_extraidos['uuid']:
@@ -559,13 +468,51 @@ def procesar_llegada_factura(driver, datos_viaje):
             if datos_extraidos['viajegm']:
                 datos_viaje['viajegm'] = datos_extraidos['viajegm']
                 
-        else:
-            logger.error("❌ Error en proceso de llegada y facturación")
+        else:  # resultado == False - CUALQUIER ERROR
+            logger.error(f"❌ VIAJE {prefactura} FALLÓ: Error en llegada y facturación")
+            
+            # NUEVO: Registrar error genérico en CSV para CUALQUIER fallo
+            if datos_viaje:
+                try:
+                    log_viaje_fallido(
+                        prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
+                        motivo_fallo="FALLO_EN_GM_LLEGADAYFACTURA2 - Error en proceso de llegada y facturación",
+                        determinante=datos_viaje.get('clave_determinante', ''),
+                        fecha_viaje=datos_viaje.get('fecha', ''),
+                        placa_tractor=datos_viaje.get('placa_tractor', ''),
+                        placa_remolque=datos_viaje.get('placa_remolque', ''),
+                        importe=datos_viaje.get('importe', ''),
+                        cliente_codigo=datos_viaje.get('cliente_codigo', '')
+                    )
+                    logger.info("✅ Error de GM_LLEGADAYFACTURA2 registrado en CSV")
+                except Exception as log_error:
+                    logger.error(f"❌ Error registrando fallo en CSV: {log_error}")
             
         return resultado
         
     except Exception as e:
         logger.error(f"❌ Error en procesar_llegada_factura: {e}")
+        
+        prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA') if datos_viaje else 'DESCONOCIDA'
+        logger.error(f"❌ VIAJE {prefactura} FALLÓ: Excepción en llegada y facturación")
+        
+        # NUEVO: También registrar errores de excepción general
+        if datos_viaje:
+            try:
+                log_viaje_fallido(
+                    prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
+                    motivo_fallo=f"EXCEPCION_EN_GM_LLEGADAYFACTURA2 - {str(e)}",
+                    determinante=datos_viaje.get('clave_determinante', ''),
+                    fecha_viaje=datos_viaje.get('fecha', ''),
+                    placa_tractor=datos_viaje.get('placa_tractor', ''),
+                    placa_remolque=datos_viaje.get('placa_remolque', ''),
+                    importe=datos_viaje.get('importe', ''),
+                    cliente_codigo=datos_viaje.get('cliente_codigo', '')
+                )
+                logger.info("✅ Excepción de GM_LLEGADAYFACTURA2 registrada en CSV")
+            except Exception as log_error:
+                logger.error(f"❌ Error registrando excepción en CSV: {log_error}")
+        
         return False
 
 # Ejemplo de uso
