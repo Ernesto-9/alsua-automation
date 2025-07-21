@@ -133,38 +133,38 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            query = """
-                INSERT INTO acumuladoprefactura 
-                (NOPREFACTURA, NUMERO, TOTALFACTURA2, TOTALFACTURA3, UUID, VIAJEGM, estatusr, USUARIO) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                UUID = VALUES(UUID), 
-                VIAJEGM = VALUES(VIAJEGM), 
-                estatusr = VALUES(estatusr),
-                USUARIO = VALUES(USUARIO)
+            # Estrategia: Intentar UPDATE primero
+            update_query = """
+                UPDATE acumuladoprefactura 
+                SET UUID = %s, VIAJEGM = %s, estatusr = %s, USUARIO = %s 
+                WHERE NOPREFACTURA = %s
             """
             
-            valores = (prefactura, '0', '0', '0', uuid, viajegm, 'EXITOSO', 'ROBOT')
-            
             logger.info(f"Procesando viaje exitoso: {prefactura}")
+            cursor.execute(update_query, (uuid, viajegm, 'EXITOSO', 'ROBOT', prefactura))
             
-            cursor.execute(query, valores)
-            filas_afectadas = cursor.rowcount
-            
-            if filas_afectadas > 0:
-                logger.info(f"Viaje EXITOSO: {prefactura} - UUID: {uuid} - VIAJEGM: {viajegm}")
-                
-                placa_tractor = registro.get('placa_tractor')
-                placa_remolque = registro.get('placa_remolque')
-                if placa_tractor or placa_remolque:
-                    self._actualizar_placas(cursor, prefactura, placa_tractor, placa_remolque)
-                
-                cursor.close()
-                return True
+            # Si no afectó filas, el registro no existe → hacer INSERT
+            if cursor.rowcount == 0:
+                insert_query = """
+                    INSERT INTO acumuladoprefactura 
+                    (NOPREFACTURA, NUMERO, TOTALFACTURA2, TOTALFACTURA3, TOTALENTREGAS, UUID, VIAJEGM, estatusr, USUARIO) 
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """
+                cursor.execute(insert_query, (prefactura, '0', '0', '0', 1, uuid, viajegm, 'EXITOSO', 'ROBOT'))
+                logger.info(f"Viaje EXITOSO creado: {prefactura}")
             else:
-                logger.error(f"No se procesó registro para prefactura: {prefactura}")
-                cursor.close()
-                return False
+                logger.info(f"Viaje EXITOSO actualizado: {prefactura}")
+            
+            logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm}")
+            
+            # Actualizar placas si están disponibles
+            placa_tractor = registro.get('placa_tractor')
+            placa_remolque = registro.get('placa_remolque')
+            if placa_tractor or placa_remolque:
+                self._actualizar_placas(cursor, prefactura, placa_tractor, placa_remolque)
+            
+            cursor.close()
+            return True
                 
         except Error as e:
             logger.error(f"Error MySQL procesando exitoso: {e}")
