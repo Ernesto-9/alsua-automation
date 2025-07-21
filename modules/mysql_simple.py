@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
 """
-Handler MySQL MODIFICADO para leer desde viajes_log.csv
-NUEVO FLUJO: CSV → MySQL (fuente única de verdad es el CSV)
-LIMPIO: Sin archivos de fallback - todo va al CSV unificado
-ACTUALIZADO: Campos completos UUID, VIAJEGM, erroresrobot, estatusr, USUARIO
-MEJORADO: Estrategia UPSERT para resolver problemas de timing entre sistemas
+Handler MySQL para sincronización desde viajes_log.csv
+Flujo: CSV → MySQL con estrategia UPSERT
 """
 
 import mysql.connector
@@ -15,11 +12,9 @@ import os
 from datetime import datetime
 from viajes_log import viajes_log
 
-# Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# DATOS REALES DE CONEXIÓN
 MYSQL_CONFIG = {
     'host': '104.251.211.6',
     'port': 3306,
@@ -33,106 +28,78 @@ MYSQL_CONFIG = {
 
 class MySQLSyncFromCSV:
     def __init__(self, archivo_csv="viajes_log.csv"):
-        """
-        Inicializa el sincronizador MySQL que lee desde CSV
-        
-        Args:
-            archivo_csv: Archivo CSV fuente de datos
-        """
         self.connection = None
         self.archivo_csv = os.path.abspath(archivo_csv)
-        self.archivo_procesados = "mysql_sync_procesados.txt"  # Archivo para trackear qué se procesó
+        self.archivo_procesados = "mysql_sync_procesados.txt"
         
     def conectar(self):
-        """Establecer conexión con MySQL"""
         try:
             if self.connection and self.connection.is_connected():
                 return True
                 
-            logger.info("🔌 Conectando a MySQL...")
-            logger.info(f"   Host: {MYSQL_CONFIG['host']}:{MYSQL_CONFIG['port']}")
-            logger.info(f"   Base de datos: {MYSQL_CONFIG['database']}")
-            logger.info(f"   Usuario: {MYSQL_CONFIG['user']}")
+            logger.info("Conectando a MySQL...")
                 
             self.connection = mysql.connector.connect(**MYSQL_CONFIG)
             
             if self.connection.is_connected():
-                # Obtener info del servidor
                 db_info = self.connection.get_server_info()
-                logger.info(f"✅ Conexión MySQL establecida exitosamente")
-                logger.info(f"   Versión del servidor: {db_info}")
+                logger.info("Conexión MySQL establecida")
                 return True
             else:
-                logger.error("❌ No se pudo establecer conexión MySQL")
+                logger.error("No se pudo conectar a MySQL")
                 return False
                 
         except Error as e:
-            logger.error(f"❌ Error conectando a MySQL: {e}")
-            logger.error(f"   Error Code: {e.errno}")
-            logger.error(f"   SQLSTATE: {e.sqlstate}")
+            logger.error(f"Error conectando a MySQL: {e}")
             self.connection = None
             return False
         except Exception as e:
-            logger.error(f"❌ Error general conectando a MySQL: {e}")
+            logger.error(f"Error general conectando a MySQL: {e}")
             self.connection = None
             return False
     
     def desconectar(self):
-        """Cerrar conexión MySQL"""
         try:
             if self.connection and self.connection.is_connected():
                 self.connection.close()
-                logger.info("✅ Conexión MySQL cerrada")
+                logger.info("Conexión MySQL cerrada")
         except Exception as e:
-            logger.warning(f"⚠️ Error cerrando conexión MySQL: {e}")
+            logger.warning(f"Error cerrando conexión MySQL: {e}")
     
     def cargar_registros_procesados(self):
-        """Carga la lista de registros ya procesados en MySQL"""
         try:
             if os.path.exists(self.archivo_procesados):
                 with open(self.archivo_procesados, 'r', encoding='utf-8') as f:
                     procesados = set(line.strip() for line in f.readlines())
-                logger.info(f"📁 Cargados {len(procesados)} registros ya procesados")
+                logger.info(f"Cargados {len(procesados)} registros procesados")
                 return procesados
             else:
-                logger.info("📁 No hay archivo de procesados - primer sync")
+                logger.info("No hay archivo de procesados - primer sync")
                 return set()
         except Exception as e:
-            logger.warning(f"⚠️ Error cargando procesados: {e}")
+            logger.warning(f"Error cargando procesados: {e}")
             return set()
     
     def marcar_como_procesado(self, registro_id):
-        """Marca un registro como ya procesado en MySQL"""
         try:
             with open(self.archivo_procesados, 'a', encoding='utf-8') as f:
                 f.write(f"{registro_id}\n")
         except Exception as e:
-            logger.warning(f"⚠️ Error marcando como procesado: {e}")
+            logger.warning(f"Error marcando como procesado: {e}")
     
     def generar_id_registro(self, row):
-        """Genera un ID único para cada registro del CSV"""
-        # Combinar campos únicos para crear ID
         prefactura = row.get('prefactura', '')
         timestamp = row.get('timestamp', '')
         estatus = row.get('estatus', '')
         return f"{prefactura}_{timestamp}_{estatus}".replace(' ', '_').replace(':', '-')
     
     def leer_registros_nuevos_del_csv(self):
-        """
-        Lee el CSV y retorna solo los registros que NO han sido procesados aún
-        
-        Returns:
-            List[Dict]: Lista de registros nuevos
-        """
         try:
             if not os.path.exists(self.archivo_csv):
-                logger.warning(f"⚠️ Archivo CSV no existe: {self.archivo_csv}")
+                logger.warning(f"Archivo CSV no existe: {self.archivo_csv}")
                 return []
             
-            # Cargar registros ya procesados
             procesados = self.cargar_registros_procesados()
-            
-            # Leer CSV completo
             registros_nuevos = []
             total_registros = 0
             
@@ -145,44 +112,31 @@ class MySQLSyncFromCSV:
                     
                     if registro_id not in procesados:
                         registros_nuevos.append(row)
-                        logger.info(f"📋 Nuevo registro: {row['prefactura']} - {row['estatus']}")
+                        logger.info(f"Nuevo registro: {row['prefactura']} - {row['estatus']}")
             
-            logger.info(f"📊 CSV leído: {total_registros} total, {len(registros_nuevos)} nuevos")
+            logger.info(f"CSV leído: {total_registros} total, {len(registros_nuevos)} nuevos")
             return registros_nuevos
             
         except Exception as e:
-            logger.error(f"❌ Error leyendo CSV: {e}")
+            logger.error(f"Error leyendo CSV: {e}")
             return []
     
     def procesar_registro_exitoso(self, registro):
-        """
-        FUNCIÓN MEJORADA: Procesa un registro EXITOSO usando estrategia UPSERT
-        Resuelve problemas de timing - INSERT si no existe, UPDATE si existe
-        
-        Args:
-            registro: Dict con datos del registro CSV
-            
-        Returns:
-            bool: True si se procesó correctamente
-        """
         try:
             prefactura = registro.get('prefactura')
             uuid = registro.get('uuid')
             viajegm = registro.get('viajegm')
             
             if not prefactura:
-                logger.error("❌ Registro sin prefactura, saltando")
+                logger.error("Registro sin prefactura, saltando")
                 return False
                 
             cursor = self.connection.cursor()
             
-            # ESTRATEGIA UPSERT: INSERT ... ON DUPLICATE KEY UPDATE
-            # Si NOPREFACTURA no existe → INSERT
-            # Si NOPREFACTURA ya existe → UPDATE solo los campos del robot
             query = """
                 INSERT INTO acumuladoprefactura 
-                (NOPREFACTURA, UUID, VIAJEGM, estatusr, USUARIO) 
-                VALUES (%s, %s, %s, %s, %s)
+                (NOPREFACTURA, NUMERO, TOTALFACTURA2, TOTALFACTURA3, UUID, VIAJEGM, estatusr, USUARIO) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
                 UUID = VALUES(UUID), 
                 VIAJEGM = VALUES(VIAJEGM), 
@@ -190,28 +144,16 @@ class MySQLSyncFromCSV:
                 USUARIO = VALUES(USUARIO)
             """
             
-            valores = (prefactura, uuid, viajegm, 'EXITOSO', 'ROBOT')
+            valores = (prefactura, '0', '0', '0', uuid, viajegm, 'EXITOSO', 'ROBOT')
             
-            logger.info(f"🔄 Ejecutando UPSERT para viaje EXITOSO:")
-            logger.info(f"   📋 NOPREFACTURA: {prefactura}")
-            logger.info(f"   🆔 UUID: {uuid}")
-            logger.info(f"   🚛 VIAJEGM: {viajegm}")
-            logger.info(f"   📊 estatusr: EXITOSO")
-            logger.info(f"   👤 USUARIO: ROBOT")
+            logger.info(f"Procesando viaje exitoso: {prefactura}")
             
             cursor.execute(query, valores)
             filas_afectadas = cursor.rowcount
             
             if filas_afectadas > 0:
-                logger.info(f"✅ Viaje EXITOSO procesado con UPSERT:")
-                logger.info(f"   📋 NOPREFACTURA: {prefactura}")
-                logger.info(f"   🆔 UUID: {uuid}")
-                logger.info(f"   🚛 VIAJEGM: {viajegm}")
-                logger.info(f"   📊 estatusr: EXITOSO")
-                logger.info(f"   👤 USUARIO: ROBOT")
-                logger.info(f"   🔄 Operación: {'INSERT' if filas_afectadas == 1 else 'UPDATE'}")
+                logger.info(f"Viaje EXITOSO: {prefactura} - UUID: {uuid} - VIAJEGM: {viajegm}")
                 
-                # Actualizar placas si están disponibles
                 placa_tractor = registro.get('placa_tractor')
                 placa_remolque = registro.get('placa_remolque')
                 if placa_tractor or placa_remolque:
@@ -220,71 +162,48 @@ class MySQLSyncFromCSV:
                 cursor.close()
                 return True
             else:
-                logger.error(f"❌ No se procesó registro para prefactura: {prefactura}")
+                logger.error(f"No se procesó registro para prefactura: {prefactura}")
                 cursor.close()
                 return False
                 
         except Error as e:
-            logger.error(f"❌ Error MySQL procesando exitoso: {e}")
+            logger.error(f"Error MySQL procesando exitoso: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ Error general procesando exitoso: {e}")
+            logger.error(f"Error general procesando exitoso: {e}")
             return False
     
     def procesar_registro_fallido(self, registro):
-        """
-        FUNCIÓN MEJORADA: Procesa un registro FALLIDO usando estrategia UPSERT
-        Resuelve problemas de timing - INSERT si no existe, UPDATE si existe
-        
-        Args:
-            registro: Dict con datos del registro CSV
-            
-        Returns:
-            bool: True si se procesó correctamente
-        """
         try:
             prefactura = registro.get('prefactura')
             motivo_fallo = registro.get('motivo_fallo')
             
             if not prefactura:
-                logger.error("❌ Registro sin prefactura, saltando")
+                logger.error("Registro sin prefactura, saltando")
                 return False
                 
             cursor = self.connection.cursor()
             
-            # ESTRATEGIA UPSERT: INSERT ... ON DUPLICATE KEY UPDATE
-            # Si NOPREFACTURA no existe → INSERT
-            # Si NOPREFACTURA ya existe → UPDATE solo los campos del robot
             query = """
                 INSERT INTO acumuladoprefactura 
-                (NOPREFACTURA, erroresrobot, estatusr, USUARIO) 
-                VALUES (%s, %s, %s, %s)
+                (NOPREFACTURA, NUMERO, TOTALFACTURA2, TOTALFACTURA3, erroresrobot, estatusr, USUARIO) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE 
                 erroresrobot = VALUES(erroresrobot), 
                 estatusr = VALUES(estatusr),
                 USUARIO = VALUES(USUARIO)
             """
             
-            valores = (prefactura, motivo_fallo, 'FALLIDO', 'ROBOT')
+            valores = (prefactura, '0', '0', '0', motivo_fallo, 'FALLIDO', 'ROBOT')
             
-            logger.info(f"🔄 Ejecutando UPSERT para viaje FALLIDO:")
-            logger.info(f"   📋 NOPREFACTURA: {prefactura}")
-            logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
-            logger.info(f"   📊 estatusr: FALLIDO")
-            logger.info(f"   👤 USUARIO: ROBOT")
+            logger.info(f"Procesando viaje fallido: {prefactura}")
             
             cursor.execute(query, valores)
             filas_afectadas = cursor.rowcount
             
             if filas_afectadas > 0:
-                logger.info(f"✅ Viaje FALLIDO procesado con UPSERT:")
-                logger.info(f"   📋 NOPREFACTURA: {prefactura}")
-                logger.info(f"   🤖 erroresrobot: {motivo_fallo}")
-                logger.info(f"   📊 estatusr: FALLIDO")
-                logger.info(f"   👤 USUARIO: ROBOT")
-                logger.info(f"   🔄 Operación: {'INSERT' if filas_afectadas == 1 else 'UPDATE'}")
+                logger.info(f"Viaje FALLIDO: {prefactura} - Error: {motivo_fallo}")
                 
-                # Actualizar placas si están disponibles
                 placa_tractor = registro.get('placa_tractor')
                 placa_remolque = registro.get('placa_remolque')
                 if placa_tractor or placa_remolque:
@@ -293,19 +212,18 @@ class MySQLSyncFromCSV:
                 cursor.close()
                 return True
             else:
-                logger.error(f"❌ No se procesó registro para prefactura: {prefactura}")
+                logger.error(f"No se procesó registro para prefactura: {prefactura}")
                 cursor.close()
                 return False
                 
         except Error as e:
-            logger.error(f"❌ Error MySQL procesando fallido: {e}")
+            logger.error(f"Error MySQL procesando fallido: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ Error general procesando fallido: {e}")
+            logger.error(f"Error general procesando fallido: {e}")
             return False
     
     def _actualizar_placas(self, cursor, prefactura, placa_tractor, placa_remolque):
-        """Función auxiliar para actualizar placas"""
         try:
             if placa_tractor or placa_remolque:
                 campos = []
@@ -324,39 +242,29 @@ class MySQLSyncFromCSV:
                     valores.append(prefactura)
                     
                     cursor.execute(query, valores)
-                    logger.info(f"✅ Placas actualizadas: Tractor={placa_tractor}, Remolque={placa_remolque}")
+                    logger.info(f"Placas actualizadas: Tractor={placa_tractor}, Remolque={placa_remolque}")
                     
         except Exception as e:
-            logger.warning(f"⚠️ Error actualizando placas: {e}")
+            logger.warning(f"Error actualizando placas: {e}")
     
     def sincronizar_desde_csv(self):
-        """
-        FUNCIÓN PRINCIPAL: Sincroniza todos los registros nuevos del CSV hacia MySQL
-        
-        Returns:
-            Dict: Estadísticas de la sincronización
-        """
         try:
-            logger.info("🔄 Iniciando sincronización CSV → MySQL con estrategia UPSERT")
+            logger.info("Iniciando sincronización CSV → MySQL")
             
-            # Verificar que el CSV existe
             if not os.path.exists(self.archivo_csv):
-                logger.warning(f"⚠️ CSV no existe: {self.archivo_csv}")
+                logger.warning(f"CSV no existe: {self.archivo_csv}")
                 return {'procesados': 0, 'exitosos': 0, 'fallidos': 0, 'errores': 0}
             
-            # Intentar conectar a MySQL
             if not self.conectar():
-                logger.error("❌ No se pudo conectar a MySQL - sincronización cancelada")
+                logger.error("No se pudo conectar a MySQL")
                 return {'procesados': 0, 'exitosos': 0, 'fallidos': 0, 'errores': 1}
             
-            # Leer registros nuevos del CSV
             registros_nuevos = self.leer_registros_nuevos_del_csv()
             
             if not registros_nuevos:
-                logger.info("ℹ️ No hay registros nuevos para sincronizar")
+                logger.info("No hay registros nuevos para sincronizar")
                 return {'procesados': 0, 'exitosos': 0, 'fallidos': 0, 'errores': 0}
             
-            # Procesar cada registro
             estadisticas = {'procesados': 0, 'exitosos': 0, 'fallidos': 0, 'errores': 0}
             
             for registro in registros_nuevos:
@@ -378,37 +286,33 @@ class MySQLSyncFromCSV:
                         else:
                             estadisticas['errores'] += 1
                     else:
-                        logger.warning(f"⚠️ Estatus desconocido '{estatus}' para prefactura {prefactura}")
+                        logger.warning(f"Estatus desconocido '{estatus}' para prefactura {prefactura}")
                         estadisticas['errores'] += 1
                         continue
                     
-                    # Marcar como procesado (incluso si falló, para evitar reintentarlo)
                     registro_id = self.generar_id_registro(registro)
                     self.marcar_como_procesado(registro_id)
                     estadisticas['procesados'] += 1
                     
                 except Exception as e:
-                    logger.error(f"❌ Error procesando registro {registro.get('prefactura', 'DESCONOCIDA')}: {e}")
+                    logger.error(f"Error procesando registro {registro.get('prefactura', 'DESCONOCIDA')}: {e}")
                     estadisticas['errores'] += 1
             
-            # Log final de estadísticas
-            logger.info("📊 SINCRONIZACIÓN CON UPSERT COMPLETADA:")
-            logger.info(f"   📋 Registros procesados: {estadisticas['procesados']}")
-            logger.info(f"   ✅ Exitosos sincronizados: {estadisticas['exitosos']}")
-            logger.info(f"   ❌ Fallidos sincronizados: {estadisticas['fallidos']}")
-            logger.info(f"   🚨 Errores: {estadisticas['errores']}")
-            logger.info("   🎯 Problema de timing resuelto con estrategia UPSERT")
+            logger.info("Sincronización completada:")
+            logger.info(f"  Procesados: {estadisticas['procesados']}")
+            logger.info(f"  Exitosos: {estadisticas['exitosos']}")
+            logger.info(f"  Fallidos: {estadisticas['fallidos']}")
+            logger.info(f"  Errores: {estadisticas['errores']}")
             
             return estadisticas
             
         except Exception as e:
-            logger.error(f"❌ Error general en sincronización: {e}")
+            logger.error(f"Error general en sincronización: {e}")
             return {'procesados': 0, 'exitosos': 0, 'fallidos': 0, 'errores': 1}
         finally:
             self.desconectar()
     
     def obtener_estadisticas_sync(self):
-        """Obtiene estadísticas de sincronización"""
         try:
             stats = {
                 'registros_procesados': 0,
@@ -417,12 +321,10 @@ class MySQLSyncFromCSV:
                 'ultimo_sync': 'Nunca'
             }
             
-            # Contar registros procesados
             if stats['archivo_procesados_existe']:
                 with open(self.archivo_procesados, 'r', encoding='utf-8') as f:
                     stats['registros_procesados'] = len(f.readlines())
             
-            # Último sync (fecha de modificación del archivo procesados)
             if stats['archivo_procesados_existe']:
                 timestamp = os.path.getmtime(self.archivo_procesados)
                 stats['ultimo_sync'] = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
@@ -430,55 +332,43 @@ class MySQLSyncFromCSV:
             return stats
             
         except Exception as e:
-            logger.error(f"❌ Error obteniendo estadísticas: {e}")
+            logger.error(f"Error obteniendo estadísticas: {e}")
             return {'error': str(e)}
 
-# Instancia global
 mysql_sync = MySQLSyncFromCSV()
 
-# Funciones de conveniencia (NUEVAS - reemplazan las antiguas)
 def sincronizar_csv_a_mysql():
-    """Función principal para sincronizar CSV a MySQL con estrategia UPSERT"""
     return mysql_sync.sincronizar_desde_csv()
 
 def obtener_estadisticas_mysql_sync():
-    """Obtiene estadísticas de sincronización"""
     return mysql_sync.obtener_estadisticas_sync()
 
 def cerrar_conexion():
-    """Cierra la conexión MySQL"""
     mysql_sync.desconectar()
 
-# FUNCIONES LEGACY (para compatibilidad temporal)
 def registrar_viaje_exitoso(prefactura, fecha_viaje, uuid=None, viajegm=None, placa_tractor=None, placa_remolque=None):
-    """FUNCIÓN LEGACY: Ahora redirige al sistema CSV"""
-    logger.warning("⚠️ Usando función legacy - considera usar viajes_log directamente")
+    logger.warning("Usando función legacy - considera usar viajes_log directamente")
     from viajes_log import registrar_viaje_exitoso as log_exitoso
     return log_exitoso(prefactura, None, fecha_viaje, placa_tractor, placa_remolque, uuid, viajegm)
 
 def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor=None, placa_remolque=None):
-    """FUNCIÓN LEGACY: Ahora redirige al sistema CSV"""
-    logger.warning("⚠️ Usando función legacy - considera usar viajes_log directamente")
+    logger.warning("Usando función legacy - considera usar viajes_log directamente")
     from viajes_log import registrar_viaje_fallido as log_fallido
     return log_fallido(prefactura, motivo_fallo, None, fecha_viaje, placa_tractor, placa_remolque)
 
-# Script de prueba
 if __name__ == "__main__":
-    print("🧪 Probando sincronización CSV → MySQL con estrategia UPSERT...")
+    print("Probando sincronización CSV → MySQL...")
     
-    # Mostrar estadísticas actuales
-    print("\n📊 Estadísticas actuales:")
+    print("\nEstadísticas actuales:")
     stats = obtener_estadisticas_mysql_sync()
     for key, value in stats.items():
         print(f"   {key}: {value}")
     
-    # Ejecutar sincronización
-    print("\n🔄 Ejecutando sincronización con UPSERT...")
+    print("\nEjecutando sincronización...")
     resultado = sincronizar_csv_a_mysql()
     
-    print("\n📋 Resultado de sincronización:")
+    print("\nResultado de sincronización:")
     for key, value in resultado.items():
         print(f"   {key}: {value}")
     
-    print("\n✅ Prueba completada")
-    print("🔍 Verificar MySQL: UUID, VIAJEGM, erroresrobot, estatusr, USUARIO")
+    print("\nPrueba completada")
