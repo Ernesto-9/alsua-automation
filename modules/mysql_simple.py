@@ -133,35 +133,18 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            # Estrategia: Intentar UPDATE primero
-            update_query = """
-                UPDATE acumuladoprefactura 
-                SET UUID = %s, VIAJEGM = %s, estatusr = %s, USUARIO = %s 
-                WHERE NOPREFACTURA = %s
+            # INSERT directo a tabla prefacturarobot
+            insert_query = """
+                INSERT INTO prefacturarobot 
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, estatus) 
+                VALUES (%s, %s, %s, %s, %s, %s)
             """
             
             logger.info(f"Procesando viaje exitoso: {prefactura}")
-            cursor.execute(update_query, (uuid, viajegm, 'EXITOSO', 'ROBOT', prefactura))
+            cursor.execute(insert_query, (prefactura, viajegm, '0', uuid, 'ROBOT', 'EXITOSO'))
             
-            # Si no afectó filas, el registro no existe → hacer INSERT
-            if cursor.rowcount == 0:
-                insert_query = """
-                    INSERT INTO acumuladoprefactura 
-                    (NOPREFACTURA, NUMERO, TOTALFACTURA2, TOTALFACTURA3, TOTALENTREGAS, UUID, VIAJEGM, estatusr, USUARIO) 
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """
-                cursor.execute(insert_query, (prefactura, '0', '0', '0', 1, uuid, viajegm, 'EXITOSO', 'ROBOT'))
-                logger.info(f"Viaje EXITOSO creado: {prefactura}")
-            else:
-                logger.info(f"Viaje EXITOSO actualizado: {prefactura}")
-            
+            logger.info(f"Viaje EXITOSO creado: {prefactura}")
             logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm}")
-            
-            # Actualizar placas si están disponibles
-            placa_tractor = registro.get('placa_tractor')
-            placa_remolque = registro.get('placa_remolque')
-            if placa_tractor or placa_remolque:
-                self._actualizar_placas(cursor, prefactura, placa_tractor, placa_remolque)
             
             cursor.close()
             return True
@@ -224,28 +207,8 @@ class MySQLSyncFromCSV:
             return False
     
     def _actualizar_placas(self, cursor, prefactura, placa_tractor, placa_remolque):
-        try:
-            if placa_tractor or placa_remolque:
-                campos = []
-                valores = []
-                
-                if placa_tractor:
-                    campos.append("PLACATRACTOR = %s")
-                    valores.append(placa_tractor)
-                    
-                if placa_remolque:
-                    campos.append("PLACAREMOLQUE = %s")
-                    valores.append(placa_remolque)
-                
-                if campos:
-                    query = f"UPDATE acumuladoprefactura SET {', '.join(campos)} WHERE NOPREFACTURA = %s"
-                    valores.append(prefactura)
-                    
-                    cursor.execute(query, valores)
-                    logger.info(f"Placas actualizadas: Tractor={placa_tractor}, Remolque={placa_remolque}")
-                    
-        except Exception as e:
-            logger.warning(f"Error actualizando placas: {e}")
+        # Función eliminada - la nueva tabla prefacturarobot no maneja placas
+        pass
     
     def sincronizar_desde_csv(self):
         try:
