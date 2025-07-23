@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Handler MySQL para sincronización desde viajes_log.csv
-Flujo: CSV → MySQL con estrategia UPSERT
+Flujo: CSV → MySQL con INSERT directo a tabla prefacturarobot
 """
 
 import mysql.connector
@@ -167,37 +167,21 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            query = """
-                INSERT INTO acumuladoprefactura 
-                (NOPREFACTURA, NUMERO, TOTALFACTURA2, TOTALFACTURA3, erroresrobot, estatusr, USUARIO) 
+            # INSERT directo a tabla prefacturarobot
+            insert_query = """
+                INSERT INTO prefacturarobot 
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot, estatus) 
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
-                ON DUPLICATE KEY UPDATE 
-                erroresrobot = VALUES(erroresrobot), 
-                estatusr = VALUES(estatusr),
-                USUARIO = VALUES(USUARIO)
             """
             
-            valores = (prefactura, '0', '0', '0', motivo_fallo, 'FALLIDO', 'ROBOT')
-            
             logger.info(f"Procesando viaje fallido: {prefactura}")
+            cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo, 'FALLIDO'))
             
-            cursor.execute(query, valores)
-            filas_afectadas = cursor.rowcount
+            logger.info(f"Viaje FALLIDO creado: {prefactura}")
+            logger.info(f"Error: {motivo_fallo}")
             
-            if filas_afectadas > 0:
-                logger.info(f"Viaje FALLIDO: {prefactura} - Error: {motivo_fallo}")
-                
-                placa_tractor = registro.get('placa_tractor')
-                placa_remolque = registro.get('placa_remolque')
-                if placa_tractor or placa_remolque:
-                    self._actualizar_placas(cursor, prefactura, placa_tractor, placa_remolque)
-                
-                cursor.close()
-                return True
-            else:
-                logger.error(f"No se procesó registro para prefactura: {prefactura}")
-                cursor.close()
-                return False
+            cursor.close()
+            return True
                 
         except Error as e:
             logger.error(f"Error MySQL procesando fallido: {e}")
@@ -205,10 +189,6 @@ class MySQLSyncFromCSV:
         except Exception as e:
             logger.error(f"Error general procesando fallido: {e}")
             return False
-    
-    def _actualizar_placas(self, cursor, prefactura, placa_tractor, placa_remolque):
-        # Función eliminada - la nueva tabla prefacturarobot no maneja placas
-        pass
     
     def sincronizar_desde_csv(self):
         try:
@@ -320,7 +300,7 @@ def registrar_viaje_fallido(prefactura, fecha_viaje, motivo_fallo, placa_tractor
     return log_fallido(prefactura, motivo_fallo, None, fecha_viaje, placa_tractor, placa_remolque)
 
 if __name__ == "__main__":
-    print("Probando sincronización CSV → MySQL...")
+    print("Probando sincronización CSV → MySQL con tabla prefacturarobot...")
     
     print("\nEstadísticas actuales:")
     stats = obtener_estadisticas_mysql_sync()
