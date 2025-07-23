@@ -133,15 +133,15 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            # INSERT directo a tabla prefacturarobot
+            # INSERT directo a tabla prefacturarobot (sin columna estatus)
             insert_query = """
                 INSERT INTO prefacturarobot 
-                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, estatus) 
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO) 
+                VALUES (%s, %s, %s, %s, %s)
             """
             
             logger.info(f"Procesando viaje exitoso: {prefactura}")
-            cursor.execute(insert_query, (prefactura, viajegm, '0', uuid, 'ROBOT', 'EXITOSO'))
+            cursor.execute(insert_query, (prefactura, viajegm, '0', uuid, 'ROBOT'))
             
             logger.info(f"Viaje EXITOSO creado: {prefactura}")
             logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm}")
@@ -167,15 +167,15 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            # INSERT directo a tabla prefacturarobot
+            # INSERT directo a tabla prefacturarobot (sin columna estatus)
             insert_query = """
                 INSERT INTO prefacturarobot 
-                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot, estatus) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot) 
+                VALUES (%s, %s, %s, %s, %s, %s)
             """
             
             logger.info(f"Procesando viaje fallido: {prefactura}")
-            cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo, 'FALLIDO'))
+            cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo))
             
             logger.info(f"Viaje FALLIDO creado: {prefactura}")
             logger.info(f"Error: {motivo_fallo}")
