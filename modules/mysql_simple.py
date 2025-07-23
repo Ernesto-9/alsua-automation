@@ -133,15 +133,15 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            # INSERT directo a tabla prefacturarobot (sin columna estatus)
+            # INSERT directo a tabla prefacturarobot (incluyendo erroresrobot vacío)
             insert_query = """
                 INSERT INTO prefacturarobot 
-                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO) 
-                VALUES (%s, %s, %s, %s, %s)
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot) 
+                VALUES (%s, %s, %s, %s, %s, %s)
             """
             
             logger.info(f"Procesando viaje exitoso: {prefactura}")
-            cursor.execute(insert_query, (prefactura, viajegm, '0', uuid, 'ROBOT'))
+            cursor.execute(insert_query, (prefactura, viajegm, '0', uuid, 'ROBOT', ''))
             
             logger.info(f"Viaje EXITOSO creado: {prefactura}")
             logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm}")
