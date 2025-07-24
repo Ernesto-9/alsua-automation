@@ -2,7 +2,7 @@
 """
 Módulo reutilizable para extracción de datos de PDFs
 Usado en múltiples automatizaciones de Alsua Transport
-ACTUALIZADO: Extrae UUID y Viaje GM automáticamente
+ACTUALIZADO: Extrae UUID, Viaje GM y Número de Factura automáticamente
 VERSIÓN MEJORADA: Intercepta URLs y extrae del DOM
 """
 
@@ -127,11 +127,11 @@ class PDFExtractor:
     
     def extraer_datos_del_dom(self, driver):
         """
-        NUEVO MÉTODO: Extrae UUID y Viaje GM directamente del DOM
+        NUEVO MÉTODO: Extrae UUID, Viaje GM y Número de Factura directamente del DOM
         Maneja específicamente PDFs embebidos en el CRM
         
         Returns:
-            dict: {"uuid": str, "viaje_gm": str} o valores None
+            dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} o valores None
         """
         try:
             logger.info("🔍 Extrayendo datos directamente del DOM...")
@@ -157,7 +157,6 @@ class PDFExtractor:
                             driver.switch_to.frame(frame)
                             
                             # Buscar en el visor de PDF de Chrome
-                            # El visor de Chrome renderiza el texto en elementos específicos
                             try:
                                 # Esperar que el PDF se cargue
                                 time.sleep(2)
@@ -185,9 +184,9 @@ class PDFExtractor:
                                 if pdf_text:
                                     logger.info(f"📋 Texto extraído del PDF embebido: {len(pdf_text)} caracteres")
                                     
-                                    # Buscar UUID y Viaje GM en el texto extraído
+                                    # Buscar UUID, Viaje GM y Número de Factura en el texto extraído
                                     resultado = self._buscar_datos_en_texto(pdf_text)
-                                    if resultado["uuid"] or resultado["viaje_gm"]:
+                                    if resultado["uuid"] or resultado["viaje_gm"] or resultado["numero_factura"]:
                                         return resultado
                                         
                             except Exception as e:
@@ -215,7 +214,7 @@ class PDFExtractor:
                 
                 # Buscar datos en el texto
                 resultado = self._buscar_datos_en_texto(body_text)
-                if resultado["uuid"] or resultado["viaje_gm"]:
+                if resultado["uuid"] or resultado["viaje_gm"] or resultado["numero_factura"]:
                     return resultado
                     
             except Exception as e:
@@ -223,15 +222,15 @@ class PDFExtractor:
             
             # MÉTODO 3: Buscar en elementos específicos que podrían contener los datos
             try:
-                # Buscar en cualquier elemento que pueda contener UUID o Viaje GM
+                # Buscar en cualquier elemento que pueda contener UUID, Viaje GM o Número de Factura
                 elementos_con_datos = driver.find_elements(By.XPATH, 
-                    "//*[contains(text(), '-') and (string-length(text()) > 20 or contains(text(), 'COB-') or contains(text(), 'HMO-'))]")
+                    "//*[contains(text(), '-') and (string-length(text()) > 20 or contains(text(), 'COB-') or contains(text(), 'HMO-') or contains(text(), 'W ') or contains(text(), 'FACTURA'))]")
                 
                 for elem in elementos_con_datos[:20]:  # Limitar a 20 elementos
                     texto = elem.text.strip()
                     if texto:
                         resultado = self._buscar_datos_en_texto(texto)
-                        if resultado["uuid"] or resultado["viaje_gm"]:
+                        if resultado["uuid"] or resultado["viaje_gm"] or resultado["numero_factura"]:
                             logger.info(f"✅ Datos encontrados en elemento: {elem.tag_name}")
                             return resultado
                             
@@ -239,7 +238,7 @@ class PDFExtractor:
                 logger.warning(f"⚠️ Error buscando en elementos específicos: {e}")
             
             logger.warning("⚠️ No se encontraron datos en el DOM")
-            return {"uuid": None, "viaje_gm": None}
+            return {"uuid": None, "viaje_gm": None, "numero_factura": None}
             
         except Exception as e:
             logger.error(f"❌ Error extrayendo datos del DOM: {e}")
@@ -248,17 +247,17 @@ class PDFExtractor:
                 driver.switch_to.default_content()
             except:
                 pass
-            return {"uuid": None, "viaje_gm": None}
+            return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def _buscar_datos_en_texto(self, texto):
         """
-        Método auxiliar para buscar UUID y Viaje GM en un texto
+        Método auxiliar para buscar UUID, Viaje GM y Número de Factura en un texto
         
         Args:
             texto: Texto donde buscar
             
         Returns:
-            dict: {"uuid": str, "viaje_gm": str} o valores None
+            dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} o valores None
         """
         try:
             # Buscar UUID
@@ -292,14 +291,32 @@ class PDFExtractor:
                     if viaje_gm:
                         break
             
+            # NUEVO: Buscar Número de Factura
+            numero_factura = None
+            # Buscar el patrón que viene después de "FACTURA"
+            # Ejemplo: "FACTURA\nW 160559" o "FACTURA W 160559"
+            factura_patterns = [
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s*\d+)",  # FACTURA con salto de línea
+                r"FACTURA\s+([A-Z]+\s*\d+)",           # FACTURA con espacio
+                r"(?:FACTURA[^\w]*)?([A-Z]+\s+\d{5,6})" # Patrón más flexible
+            ]
+            
+            for pattern in factura_patterns:
+                matches = re.findall(pattern, texto, re.IGNORECASE | re.MULTILINE)
+                if matches:
+                    numero_factura = matches[0].strip()
+                    logger.info(f"✅ Número de factura encontrado: {numero_factura}")
+                    break
+            
             return {
                 "uuid": uuid,
-                "viaje_gm": viaje_gm
+                "viaje_gm": viaje_gm,
+                "numero_factura": numero_factura
             }
             
         except Exception as e:
             logger.error(f"❌ Error buscando datos en texto: {e}")
-            return {"uuid": None, "viaje_gm": None}
+            return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def descargar_pdf_desde_url(self, url, nombre_archivo=None):
         """
@@ -555,15 +572,67 @@ class PDFExtractor:
             logger.error(f"❌ Error buscando Viaje GM: {e}")
             return None
     
-    def extraer_datos_completos(self, texto_pdf):
+    def extraer_numero_factura(self, texto_pdf):
         """
-        Extrae tanto UUID como Viaje GM del PDF
+        NUEVO MÉTODO: Extrae el número de factura del texto del PDF
         
         Args:
             texto_pdf: Texto extraído del PDF
             
         Returns:
-            dict: {"uuid": str, "viaje_gm": str} o valores None si no se encuentran
+            str: Número de factura encontrado o None
+        """
+        try:
+            logger.info("🔍 Buscando número de factura en el texto...")
+            
+            # Patrones para buscar el número de factura después de "FACTURA"
+            patrones_factura = [
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s*\d+)",  # FACTURA con salto de línea
+                r"FACTURA\s+([A-Z]+\s*\d+)",           # FACTURA con espacio directo
+                r"(?:FACTURA[^\w]*)?([A-Z]+\s+\d{5,6})" # Patrón más flexible para W 160559
+            ]
+            
+            for patron in patrones_factura:
+                matches = re.findall(patron, texto_pdf, re.IGNORECASE | re.MULTILINE)
+                if matches:
+                    numero_factura = matches[0].strip()
+                    logger.info(f"✅ Número de factura encontrado con patrón '{patron}': {numero_factura}")
+                    return numero_factura
+            
+            # Si no encuentra con patrones específicos, buscar líneas que contengan "FACTURA"
+            logger.warning("⚠️ No se encontró número de factura con patrones específicos")
+            logger.info("🔍 Buscando líneas que contengan 'FACTURA'...")
+            
+            lineas_factura = [linea for linea in texto_pdf.split('\n') if 'factura' in linea.lower()]
+            if lineas_factura:
+                logger.info("🔍 Líneas que contienen 'FACTURA':")
+                for linea in lineas_factura[:5]:  # Mostrar máximo 5 líneas
+                    linea_limpia = linea.strip()
+                    logger.info(f"   - {linea_limpia}")
+                    
+                    # Buscar códigos tipo W 160559 en estas líneas
+                    numero_match = re.search(r"([A-Z]+\s+\d{5,6})", linea_limpia)
+                    if numero_match:
+                        numero_encontrado = numero_match.group(1)
+                        logger.info(f"✅ Posible número de factura encontrado en línea: {numero_encontrado}")
+                        return numero_encontrado
+            
+            logger.warning("⚠️ No se encontró número de factura en el PDF")
+            return None
+                
+        except Exception as e:
+            logger.error(f"❌ Error buscando número de factura: {e}")
+            return None
+    
+    def extraer_datos_completos(self, texto_pdf):
+        """
+        Extrae UUID, Viaje GM y Número de Factura del PDF
+        
+        Args:
+            texto_pdf: Texto extraído del PDF
+            
+        Returns:
+            dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} o valores None si no se encuentran
         """
         try:
             logger.info("🚀 Extrayendo datos completos del PDF...")
@@ -574,21 +643,26 @@ class PDFExtractor:
             # Extraer Viaje GM
             viaje_gm = self.extraer_viaje_gm(texto_pdf)
             
+            # NUEVO: Extraer Número de Factura
+            numero_factura = self.extraer_numero_factura(texto_pdf)
+            
             # Resultado
             resultado = {
                 "uuid": uuid,
-                "viaje_gm": viaje_gm
+                "viaje_gm": viaje_gm,
+                "numero_factura": numero_factura
             }
             
             logger.info("📊 Resultado de extracción:")
             logger.info(f"   🆔 UUID: {uuid}")
             logger.info(f"   🚛 Viaje GM: {viaje_gm}")
+            logger.info(f"   📄 Número de Factura: {numero_factura}")
             
             return resultado
             
         except Exception as e:
             logger.error(f"❌ Error en extracción completa: {e}")
-            return {"uuid": None, "viaje_gm": None}
+            return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def extraer_de_pdf_automatico(self, driver, timeout=15):
         """
@@ -599,7 +673,7 @@ class PDFExtractor:
             timeout: Segundos a esperar por el PDF
             
         Returns:
-            dict: {"uuid": str, "viaje_gm": str} con los datos extraídos
+            dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} con los datos extraídos
         """
         try:
             logger.info("🚀 Iniciando extracción automática completa MEJORADA")
@@ -608,7 +682,7 @@ class PDFExtractor:
             logger.info("📄 Método 1: Extrayendo datos del DOM...")
             datos_dom = self.extraer_datos_del_dom(driver)
             
-            if datos_dom["uuid"] and datos_dom["viaje_gm"]:
+            if datos_dom["uuid"] and datos_dom["viaje_gm"] and datos_dom["numero_factura"]:
                 logger.info("🎉 Datos extraídos exitosamente del DOM")
                 return datos_dom
             
@@ -633,8 +707,10 @@ class PDFExtractor:
                             datos_dom["uuid"] = datos_pdf["uuid"]
                         if not datos_dom["viaje_gm"] and datos_pdf["viaje_gm"]:
                             datos_dom["viaje_gm"] = datos_pdf["viaje_gm"]
+                        if not datos_dom["numero_factura"] and datos_pdf["numero_factura"]:
+                            datos_dom["numero_factura"] = datos_pdf["numero_factura"]
                         
-                        if datos_dom["uuid"] or datos_dom["viaje_gm"]:
+                        if datos_dom["uuid"] or datos_dom["viaje_gm"] or datos_dom["numero_factura"]:
                             logger.info("🎉 Datos extraídos exitosamente combinando métodos")
                             return datos_dom
             
@@ -655,20 +731,22 @@ class PDFExtractor:
                         datos_dom["uuid"] = datos_pdf["uuid"]
                     if not datos_dom["viaje_gm"] and datos_pdf["viaje_gm"]:
                         datos_dom["viaje_gm"] = datos_pdf["viaje_gm"]
+                    if not datos_dom["numero_factura"] and datos_pdf["numero_factura"]:
+                        datos_dom["numero_factura"] = datos_pdf["numero_factura"]
                     
                     return datos_dom
             
             # Si llegamos aquí, retornar lo que hayamos podido extraer del DOM
-            if datos_dom["uuid"] or datos_dom["viaje_gm"]:
+            if datos_dom["uuid"] or datos_dom["viaje_gm"] or datos_dom["numero_factura"]:
                 logger.warning("⚠️ Extracción parcial - solo algunos datos encontrados")
                 return datos_dom
             
             logger.error("❌ No se pudieron extraer los datos con ningún método")
-            return {"uuid": None, "viaje_gm": None}
+            return {"uuid": None, "viaje_gm": None, "numero_factura": None}
             
         except Exception as e:
             logger.error(f"❌ Error en extracción automática mejorada: {e}")
-            return {"uuid": None, "viaje_gm": None}
+            return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def limpiar_pdfs_viejos(self):
         """Limpia PDFs si hay más del máximo permitido"""
@@ -721,7 +799,7 @@ class PDFExtractor:
 # Funciones de conveniencia para uso rápido
 def extraer_datos_automatico(driver, carpeta_pdfs="pdfs_temporales", timeout=15):
     """
-    FUNCIÓN MEJORADA: Extrae UUID y Viaje GM automáticamente
+    FUNCIÓN MEJORADA: Extrae UUID, Viaje GM y Número de Factura automáticamente
     
     Args:
         driver: WebDriver de Selenium
@@ -729,7 +807,7 @@ def extraer_datos_automatico(driver, carpeta_pdfs="pdfs_temporales", timeout=15)
         timeout: Segundos a esperar por el PDF
         
     Returns:
-        dict: {"uuid": str, "viaje_gm": str} con los datos extraídos
+        dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} con los datos extraídos
     """
     extractor = PDFExtractor(carpeta_pdfs)
     return extractor.extraer_de_pdf_automatico(driver, timeout)

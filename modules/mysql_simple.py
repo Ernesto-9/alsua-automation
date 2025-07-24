@@ -126,25 +126,29 @@ class MySQLSyncFromCSV:
             prefactura = registro.get('prefactura')
             uuid = registro.get('uuid')
             viajegm = registro.get('viajegm')
+            numero_factura = registro.get('numero_factura')
             
             if not prefactura:
                 logger.error("Registro sin prefactura, saltando")
                 return False
+            
+            # Determinar estatusr basado en datos completos
+            estatusr = "facturado" if (uuid and viajegm and numero_factura) else "pendiente"
                 
             cursor = self.connection.cursor()
             
-            # INSERT directo a tabla prefacturarobot (incluyendo erroresrobot vacío)
+            # INSERT directo a tabla prefacturarobot (incluyendo FACTURAGM y estatusr)
             insert_query = """
                 INSERT INTO prefacturarobot 
-                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot) 
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot, estatusr) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             
             logger.info(f"Procesando viaje exitoso: {prefactura}")
-            cursor.execute(insert_query, (prefactura, viajegm, '0', uuid, 'ROBOT', ''))
+            cursor.execute(insert_query, (prefactura, viajegm, numero_factura, uuid, 'ROBOT', '', estatusr))
             
-            logger.info(f"Viaje EXITOSO creado: {prefactura}")
-            logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm}")
+            logger.info(f"Viaje exitoso creado: {prefactura}")
+            logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm} - FACTURAGM: {numero_factura} - estatusr: {estatusr}")
             
             cursor.close()
             return True
@@ -167,17 +171,17 @@ class MySQLSyncFromCSV:
                 
             cursor = self.connection.cursor()
             
-            # INSERT directo a tabla prefacturarobot (sin columna estatus)
+            # INSERT directo a tabla prefacturarobot (incluyendo estatusr = "pendiente")
             insert_query = """
                 INSERT INTO prefacturarobot 
-                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot) 
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot, estatusr) 
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """
             
             logger.info(f"Procesando viaje fallido: {prefactura}")
-            cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo))
+            cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo, 'pendiente'))
             
-            logger.info(f"Viaje FALLIDO creado: {prefactura}")
+            logger.info(f"Viaje fallido creado: {prefactura}")
             logger.info(f"Error: {motivo_fallo}")
             
             cursor.close()

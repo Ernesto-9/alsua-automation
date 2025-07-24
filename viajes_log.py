@@ -35,6 +35,7 @@ class ViajesLogManager:
             'motivo_fallo',
             'uuid',
             'viajegm',
+            'numero_factura',
             'importe',
             'cliente_codigo'
         ]
@@ -44,14 +45,14 @@ class ViajesLogManager:
         """Verifica que el archivo CSV existe y tiene los headers correctos"""
         try:
             if not os.path.exists(self.archivo_csv):
-                logger.info(f"📄 Creando nuevo archivo de log: {self.archivo_csv}")
+                logger.info(f"Creando archivo de log: {self.archivo_csv}")
                 self._crear_archivo_con_headers()
             else:
-                logger.info(f"📄 Archivo de log encontrado: {self.archivo_csv}")
+                logger.info(f"Archivo de log encontrado: {self.archivo_csv}")
                 self._verificar_headers()
                 
         except Exception as e:
-            logger.error(f"❌ Error verificando archivo de log: {e}")
+            logger.error(f"Error verificando archivo de log: {e}")
     
     def _crear_archivo_con_headers(self):
         """Crea el archivo CSV con los headers correctos"""
@@ -59,9 +60,9 @@ class ViajesLogManager:
             with open(self.archivo_csv, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=self.campos)
                 writer.writeheader()
-            logger.info("✅ Archivo de log creado con headers")
+            logger.info("Archivo de log creado con headers")
         except Exception as e:
-            logger.error(f"❌ Error creando archivo de log: {e}")
+            logger.error(f"Error creando archivo de log: {e}")
     
     def _verificar_headers(self):
         """Verifica que el archivo existente tiene los headers correctos"""
@@ -73,18 +74,18 @@ class ViajesLogManager:
             # Verificar si faltan campos
             campos_faltantes = set(self.campos) - set(headers_existentes)
             if campos_faltantes:
-                logger.warning(f"⚠️ Campos faltantes en CSV: {campos_faltantes}")
-                logger.warning("🔧 Recreando archivo con headers correctos...")
+                logger.warning(f"Campos faltantes en CSV: {campos_faltantes}")
+                logger.warning("Recreando archivo con headers correctos...")
                 self._crear_archivo_con_headers()
                 
         except Exception as e:
-            logger.warning(f"⚠️ Error verificando headers: {e}")
-            logger.info("🔧 Recreando archivo por precaución...")
+            logger.warning(f"Error verificando headers: {e}")
+            logger.info("Recreando archivo por precaución...")
             self._crear_archivo_con_headers()
     
     def registrar_viaje_exitoso(self, prefactura, determinante=None, fecha_viaje=None, 
                                placa_tractor=None, placa_remolque=None, uuid=None, 
-                               viajegm=None, importe=None, cliente_codigo=None):
+                               viajegm=None, numero_factura=None, importe=None, cliente_codigo=None):
         """
         Registra un viaje exitoso en el log
         
@@ -96,6 +97,7 @@ class ViajesLogManager:
             placa_remolque: Placa del remolque
             uuid: UUID extraído del PDF
             viajegm: Código del viaje en GM
+            numero_factura: Número de factura extraído del PDF
             importe: Monto del viaje
             cliente_codigo: Código del cliente
             
@@ -112,6 +114,7 @@ class ViajesLogManager:
             motivo_fallo="",
             uuid=uuid,
             viajegm=viajegm,
+            numero_factura=numero_factura,
             importe=importe,
             cliente_codigo=cliente_codigo
         )
@@ -145,6 +148,7 @@ class ViajesLogManager:
             motivo_fallo=motivo_fallo,
             uuid="",
             viajegm="",
+            numero_factura="",
             importe=importe,
             cliente_codigo=cliente_codigo
         )
@@ -172,6 +176,7 @@ class ViajesLogManager:
                 'motivo_fallo': kwargs.get('motivo_fallo', ''),
                 'uuid': kwargs.get('uuid', ''),
                 'viajegm': kwargs.get('viajegm', ''),
+                'numero_factura': kwargs.get('numero_factura', ''),
                 'importe': kwargs.get('importe', ''),
                 'cliente_codigo': kwargs.get('cliente_codigo', '')
             }
@@ -181,9 +186,8 @@ class ViajesLogManager:
                 writer = csv.DictWriter(f, fieldnames=self.campos)
                 writer.writerow(registro)
             
-            # SINCRONIZACIÓN AUTOMÁTICA INMEDIATA CON MySQL
+            # SINCRONIZACIÓN AUTOMÁTICA CON MySQL
             try:
-                logger.info("🔄 Sincronizando registro con MySQL automáticamente...")
                 from modules.mysql_simple import sincronizar_csv_a_mysql
                 resultado_sync = sincronizar_csv_a_mysql()
                 
@@ -193,27 +197,19 @@ class ViajesLogManager:
                     errores = resultado_sync.get('errores', 0)
                     
                     if exitosos > 0 or fallidos > 0:
-                        logger.info(f"✅ Sincronización MySQL completada: {exitosos} exitosos, {fallidos} fallidos, {errores} errores")
-                    else:
-                        logger.info("ℹ️ Sincronización ejecutada - sin registros nuevos que procesar")
-                else:
-                    logger.warning("⚠️ Sincronización retornó resultado vacío")
+                        logger.info(f"Sincronización MySQL: {exitosos} exitosos, {fallidos} fallidos, {errores} errores")
                     
             except Exception as sync_error:
-                logger.warning(f"⚠️ Error en sincronización automática MySQL: {sync_error}")
-                logger.warning("📝 El registro CSV se guardó correctamente, pero MySQL falló")
-                logger.info("💡 El registro se procesará en la próxima sincronización manual")
+                logger.warning(f"Error en sincronización MySQL: {sync_error}")
+                logger.info("El registro se procesará en la próxima sincronización manual")
             
             # Log del registro en CSV
             estatus = registro['estatus']
             prefactura = registro['prefactura']
             if estatus == "EXITOSO":
-                logger.info(f"✅ Viaje EXITOSO registrado: {prefactura}")
-                logger.info(f"   🆔 UUID: {registro['uuid']}")
-                logger.info(f"   🚛 ViajeGM: {registro['viajegm']}")
+                logger.info(f"Viaje exitoso registrado: {prefactura}")
             else:
-                logger.info(f"❌ Viaje FALLIDO registrado: {prefactura}")
-                logger.info(f"   🔍 Motivo: {registro['motivo_fallo']}")
+                logger.info(f"Viaje fallido registrado: {prefactura} - {registro['motivo_fallo']}")
             
             return True
             
@@ -246,15 +242,13 @@ class ViajesLogManager:
                         if determinante and row.get('determinante') != str(determinante):
                             continue
                             
-                        logger.info(f"🔍 Viaje encontrado en log: {prefactura}")
-                        logger.info(f"   📊 Estatus: {row.get('estatus')}")
-                        logger.info(f"   📅 Timestamp: {row.get('timestamp')}")
+                        logger.info(f"Viaje encontrado en log: {prefactura}")
                         return dict(row)
             
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error verificando viaje en log: {e}")
+            logger.error(f"Error verificando viaje en log: {e}")
             return None
     
     def leer_viajes_por_estatus(self, estatus):
@@ -279,11 +273,11 @@ class ViajesLogManager:
                     if row.get('estatus') == estatus:
                         viajes.append(dict(row))
             
-            logger.info(f"📊 Encontrados {len(viajes)} viajes con estatus: {estatus}")
+            logger.info(f"Encontrados {len(viajes)} viajes con estatus: {estatus}")
             return viajes
             
         except Exception as e:
-            logger.error(f"❌ Error leyendo viajes por estatus: {e}")
+            logger.error(f"Error leyendo viajes por estatus: {e}")
             return viajes
     
     def obtener_estadisticas(self):
@@ -324,7 +318,7 @@ class ViajesLogManager:
             return estadisticas
             
         except Exception as e:
-            logger.error(f"❌ Error obteniendo estadísticas: {e}")
+            logger.error(f"Error obteniendo estadísticas: {e}")
             return estadisticas
     
     def limpiar_registros_antiguos(self, dias=30):
@@ -369,12 +363,12 @@ class ViajesLogManager:
             registros_eliminados = total_original - len(registros_actuales)
             
             if registros_eliminados > 0:
-                logger.info(f"🧹 Limpieza completada: {registros_eliminados} registros eliminados")
+                logger.info(f"Limpieza completada: {registros_eliminados} registros eliminados")
             
             return registros_eliminados
             
         except Exception as e:
-            logger.error(f"❌ Error limpiando registros antiguos: {e}")
+            logger.error(f"Error limpiando registros antiguos: {e}")
             return 0
 
 
@@ -384,7 +378,7 @@ viajes_log = ViajesLogManager()
 # Funciones de conveniencia para importar fácilmente
 def registrar_viaje_exitoso(prefactura, determinante=None, fecha_viaje=None, 
                            placa_tractor=None, placa_remolque=None, uuid=None, 
-                           viajegm=None, importe=None, cliente_codigo=None):
+                           viajegm=None, numero_factura=None, importe=None, cliente_codigo=None):
     """Función de conveniencia para registrar viaje exitoso CON SYNC AUTOMÁTICO"""
     return viajes_log.registrar_viaje_exitoso(
         prefactura=prefactura,
@@ -394,6 +388,7 @@ def registrar_viaje_exitoso(prefactura, determinante=None, fecha_viaje=None,
         placa_remolque=placa_remolque,
         uuid=uuid,
         viajegm=viajegm,
+        numero_factura=numero_factura,
         importe=importe,
         cliente_codigo=cliente_codigo
     )
@@ -421,29 +416,6 @@ def obtener_estadisticas():
     """Función de conveniencia para obtener estadísticas"""
     return viajes_log.obtener_estadisticas()
 
-# Script de prueba con sincronización automática
+# Ejemplo de uso
 if __name__ == "__main__":
-    print("🧪 Probando ViajesLogManager con sincronización automática...")
-    
-    # Mostrar estadísticas actuales
-    print("\n📊 Estadísticas actuales:")
-    stats = obtener_estadisticas()
-    for key, value in stats.items():
-        print(f"   {key}: {value}")
-    
-    # Registrar viaje de prueba
-    print("\n🚀 Registrando viaje de prueba (se sincronizará automáticamente)...")
-    resultado = registrar_viaje_exitoso(
-        prefactura="TEST123",
-        determinante="1234",
-        fecha_viaje="15/07/2025",
-        placa_tractor="TEST01",
-        placa_remolque="TEST02",
-        uuid="TEST-UUID-123",
-        viajegm="TEST-GM-456",
-        importe=100.00,
-        cliente_codigo="040512"
-    )
-    
-    print(f"📊 Resultado del registro: {resultado}")
-    print("\n✅ Prueba completada - verificar CSV y MySQL")
+    pass
