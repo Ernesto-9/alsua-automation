@@ -147,6 +147,15 @@ class MySQLSyncFromCSV:
             logger.info(f"Procesando viaje exitoso: {prefactura}")
             cursor.execute(insert_query, (prefactura, viajegm, numero_factura, uuid, 'ROBOT', '', estatusr))
             
+            # Verificar que se insertó realmente
+            cursor.execute("SELECT COUNT(*) FROM prefacturarobot WHERE NOPREFACTURA = %s", (prefactura,))
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                logger.error(f"ERROR CRÍTICO: {prefactura} no se insertó en MySQL")
+                cursor.close()
+                return False
+            
             logger.info(f"Viaje exitoso creado: {prefactura}")
             logger.info(f"UUID: {uuid} - VIAJEGM: {viajegm} - FACTURAGM: {numero_factura} - estatusr: {estatusr}")
             
@@ -180,6 +189,15 @@ class MySQLSyncFromCSV:
             
             logger.info(f"Procesando viaje fallido: {prefactura}")
             cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo, 'pendiente'))
+            
+            # Verificar que se insertó realmente
+            cursor.execute("SELECT COUNT(*) FROM prefacturarobot WHERE NOPREFACTURA = %s", (prefactura,))
+            count = cursor.fetchone()[0]
+            
+            if count == 0:
+                logger.error(f"ERROR CRÍTICO: {prefactura} no se insertó en MySQL")
+                cursor.close()
+                return False
             
             logger.info(f"Viaje fallido creado: {prefactura}")
             logger.info(f"Error: {motivo_fallo}")
