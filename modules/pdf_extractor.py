@@ -585,37 +585,34 @@ class PDFExtractor:
         try:
             logger.info("🔍 Buscando número de factura en el texto...")
             
-            # Patrones para buscar el número de factura después de "FACTURA"
+            # Patrones específicos para buscar W 162390 después de "Folio Fiscal"
             patrones_factura = [
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s*\d+)",  # FACTURA con salto de línea
-                r"FACTURA\s+([A-Z]+\s*\d+)",           # FACTURA con espacio directo
-                r"(?:FACTURA[^\w]*)?([A-Z]+\s+\d{5,6})" # Patrón más flexible para W 160559
+                r"Folio\s+Fiscal([A-Z]+\s+\d{5,6})",     # Folio FiscalW 162390
+                r"FolioFiscal([A-Z]+\s+\d{5,6})",        # FolioFiscalW 162390  
+                r"Folio\s*Fiscal\s*([A-Z]+\s+\d{5,6})",  # Folio Fiscal W 162390
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{5,6})", # FACTURA\nW 162390
+                r"(?<=FACTURA\s)([A-Z]+\s+\d{5,6})"     # Después de FACTURA 
             ]
             
             for patron in patrones_factura:
                 matches = re.findall(patron, texto_pdf, re.IGNORECASE | re.MULTILINE)
                 if matches:
                     numero_factura = matches[0].strip()
-                    logger.info(f"✅ Número de factura encontrado con patrón '{patron}': {numero_factura}")
+                    logger.info(f"✅ Número de factura encontrado: {numero_factura}")
                     return numero_factura
             
-            # Si no encuentra con patrones específicos, buscar líneas que contengan "FACTURA"
-            logger.warning("⚠️ No se encontró número de factura con patrones específicos")
-            logger.info("🔍 Buscando líneas que contengan 'FACTURA'...")
+            # Si no encuentra con patrones específicos, buscar manualmente
+            logger.warning("⚠️ No se encontró con patrones específicos, buscando manualmente...")
             
-            lineas_factura = [linea for linea in texto_pdf.split('\n') if 'factura' in linea.lower()]
-            if lineas_factura:
-                logger.info("🔍 Líneas que contienen 'FACTURA':")
-                for linea in lineas_factura[:5]:  # Mostrar máximo 5 líneas
-                    linea_limpia = linea.strip()
-                    logger.info(f"   - {linea_limpia}")
-                    
-                    # Buscar códigos tipo W 160559 en estas líneas
-                    numero_match = re.search(r"([A-Z]+\s+\d{5,6})", linea_limpia)
-                    if numero_match:
-                        numero_encontrado = numero_match.group(1)
-                        logger.info(f"✅ Posible número de factura encontrado en línea: {numero_encontrado}")
-                        return numero_encontrado
+            # Buscar específicamente el patrón W + números después de cualquier mención de fiscal/factura
+            patron_generico = r"([A-Z]\s+\d{5,6})"
+            matches_genericos = re.findall(patron_generico, texto_pdf)
+            
+            for match in matches_genericos:
+                # Filtrar solo los que empiecen con W
+                if match.strip().startswith('W '):
+                    logger.info(f"✅ Número de factura encontrado (búsqueda genérica): {match.strip()}")
+                    return match.strip()
             
             logger.warning("⚠️ No se encontró número de factura en el PDF")
             return None

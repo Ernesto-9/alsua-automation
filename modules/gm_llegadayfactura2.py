@@ -323,6 +323,7 @@ class ProcesadorLlegadaFactura:
                 # Verificar extracción
                 uuid_extraido = datos_extraidos.get("uuid")
                 viajegm_extraido = datos_extraidos.get("viaje_gm")
+                numero_factura_extraido = datos_extraidos.get("numero_factura")
                 
                 logger.info(f"✅ Datos extraídos: UUID={uuid_extraido}, VIAJEGM={viajegm_extraido}")
                 
@@ -336,6 +337,11 @@ class ProcesadorLlegadaFactura:
                     self.datos_viaje['viajegm'] = viajegm_extraido
                 else:
                     logger.warning("⚠️ No se pudo extraer VIAJEGM del PDF")
+                
+                if numero_factura_extraido:
+                    self.datos_viaje['numero_factura'] = numero_factura_extraido
+                else:
+                    logger.warning("⚠️ No se pudo extraer número de factura del PDF")
                 
                 # SIMPLIFICADO: REGISTRAR VIAJE EXITOSO SOLO EN CSV
                 logger.info("💾 Registrando viaje exitoso en log CSV...")
@@ -391,6 +397,7 @@ class ProcesadorLlegadaFactura:
             fecha_viaje = self.datos_viaje.get('fecha')
             uuid = self.datos_viaje.get('uuid')
             viajegm = self.datos_viaje.get('viajegm')
+            numero_factura = self.datos_viaje.get('numero_factura')
             placa_tractor = self.datos_viaje.get('placa_tractor')
             placa_remolque = self.datos_viaje.get('placa_remolque')
             determinante = self.datos_viaje.get('clave_determinante')
@@ -416,6 +423,7 @@ class ProcesadorLlegadaFactura:
                     placa_remolque=placa_remolque,
                     uuid=uuid,
                     viajegm=viajegm,
+                    numero_factura=numero_factura,
                     importe=importe,
                     cliente_codigo=cliente_codigo
                 )
