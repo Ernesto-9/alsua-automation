@@ -146,6 +146,7 @@ class MySQLSyncFromCSV:
             
             logger.info(f"Procesando viaje exitoso: {prefactura}")
             cursor.execute(insert_query, (prefactura, viajegm, numero_factura, uuid, 'ROBOT', '', estatusr))
+            self.connection.commit()
             
             # Verificar que se insertó realmente
             cursor.execute("SELECT COUNT(*) FROM prefacturarobot WHERE NOPREFACTURA = %s", (prefactura,))
@@ -189,6 +190,7 @@ class MySQLSyncFromCSV:
             
             logger.info(f"Procesando viaje fallido: {prefactura}")
             cursor.execute(insert_query, (prefactura, '0', '0', '0', 'ROBOT', motivo_fallo, 'pendiente'))
+            self.connection.commit()
             
             # Verificar que se insertó realmente
             cursor.execute("SELECT COUNT(*) FROM prefacturarobot WHERE NOPREFACTURA = %s", (prefactura,))
