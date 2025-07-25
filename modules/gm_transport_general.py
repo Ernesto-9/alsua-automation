@@ -103,7 +103,7 @@ class GMTransportAutomation:
             cliente_codigo = self.datos_viaje.get('cliente_codigo', '')
             
             # Motivo específico para determinantes faltantes
-            motivo_fallo = f"Determinante {determinante_faltante} no encontrada en clave_ruta_base.csv"
+            motivo_fallo = f"Determinante {determinante_faltante} no encontrada"
             
             # Registrar en log CSV
             exito_log = log_viaje_fallido(
