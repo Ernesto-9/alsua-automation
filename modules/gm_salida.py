@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class GMSalidaAutomation:
     def __init__(self, driver, datos_viaje=None):
         self.driver = driver
-        self.wait = WebDriverWait(driver, 20)
+        self.wait = WebDriverWait(driver, 30)  # Aumentado de 20 a 30
         self.datos_viaje = datos_viaje or {}
         
     def obtener_sucursal_por_determinante(self, clave_determinante):
@@ -338,7 +338,7 @@ class GMSalidaAutomation:
             try:
                 aplicar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_APLICAR")))
                 aplicar_btn.click()
-                time.sleep(3)
+                time.sleep(5)  # Aumentado de 3 a 5 segundos
                 logger.info("✅ Filtros aplicados")
                     
             except Exception as e:
@@ -352,72 +352,93 @@ class GMSalidaAutomation:
             return False
     
     def seleccionar_viaje_de_tabla(self):
-        """FUNCIÓN CON DEBUG: Selecciona el primer viaje de la tabla después del filtrado"""
+        """FUNCIÓN MEJORADA: Selecciona el primer viaje de la tabla después del filtrado"""
         try:
             logger.info("🔍 Seleccionando viaje de la tabla...")
             
             # Esperar más tiempo tras aplicar filtros
-            time.sleep(3)
+            time.sleep(8)  # Aumentado de 3 a 8 segundos
             
-            # Buscar elementos de viajes con múltiples selectores
-            elementos_proviajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
-            filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
-            elementos_walmart = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
-            
-            # Decidir qué selector usar - PRIORIZAR WALMART
-            elementos_a_usar = None
-            selector_usado = ""
-            
-            if elementos_walmart:
-                # PRIORIDAD 1: Usar elementos con texto WALMART (los viajes reales)
-                elementos_a_usar = elementos_walmart
-                selector_usado = "WALMART text"
-            elif elementos_proviajes and len(elementos_proviajes) <= 20:
-                # PRIORIDAD 2: Solo usar TABLE_PROVIAJES si hay pocos elementos (evitar headers)
-                elementos_a_usar = elementos_proviajes
-                selector_usado = "TABLE_PROVIAJES"
-            elif filas_tabla and len(filas_tabla) <= 10:
-                # PRIORIDAD 3: Filas de tabla solo si hay muy pocas
-                elementos_a_usar = filas_tabla
-                selector_usado = "filas de tabla"
-            else:
-                logger.error("❌ No se encontraron elementos válidos para seleccionar")
-                return False
-            
-            logger.info(f"✅ Usando selector: {selector_usado}")
-            
-            # Hacer clic en el primer elemento
-            primer_elemento = elementos_a_usar[0]
-            try:
-                # Intentar hacer scroll al elemento primero
-                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", primer_elemento)
-                time.sleep(0.5)
+            # Intentar hasta 2 veces la selección
+            for intento in range(2):
+                logger.info(f"🎯 Intento {intento + 1}/2 de selección")
                 
-                # Hacer clic
-                self.driver.execute_script("arguments[0].click();", primer_elemento)
+                # Buscar elementos de viajes con múltiples selectores
+                elementos_proviajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
+                filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
+                elementos_walmart = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
                 
-                # Esperar más tiempo para que GM procese la selección
-                time.sleep(4)
+                # Decidir qué selector usar - PRIORIZAR WALMART
+                elementos_a_usar = None
+                selector_usado = ""
                 
-                # Verificar que apareció el link "Salida"
+                if elementos_walmart:
+                    # PRIORIDAD 1: Usar elementos con texto WALMART (los viajes reales)
+                    elementos_a_usar = elementos_walmart
+                    selector_usado = "WALMART text"
+                elif elementos_proviajes and len(elementos_proviajes) <= 20:
+                    # PRIORIDAD 2: Solo usar TABLE_PROVIAJES si hay pocos elementos (evitar headers)
+                    elementos_a_usar = elementos_proviajes
+                    selector_usado = "TABLE_PROVIAJES"
+                elif filas_tabla and len(filas_tabla) <= 10:
+                    # PRIORIDAD 3: Filas de tabla solo si hay muy pocas
+                    elementos_a_usar = filas_tabla
+                    selector_usado = "filas de tabla"
+                else:
+                    logger.error("❌ No se encontraron elementos válidos para seleccionar")
+                    if intento == 0:  # Solo reintenta una vez
+                        time.sleep(5)
+                        continue
+                    return False
+                
+                logger.info(f"✅ Usando selector: {selector_usado}")
+                
+                # Hacer clic en el primer elemento
+                primer_elemento = elementos_a_usar[0]
                 try:
-                    salida_check = WebDriverWait(self.driver, 10).until(
-                        EC.presence_of_element_located((By.LINK_TEXT, "Salida"))
-                    )
-                    if salida_check.is_displayed():
-                        logger.info("✅ Viaje seleccionado correctamente")
-                        return True
-                    else:
-                        logger.error("❌ Link 'Salida' no visible")
+                    # Intentar hacer scroll al elemento primero
+                    self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", primer_elemento)
+                    time.sleep(0.5)
+                    
+                    # DOBLE CLIC para asegurar selección
+                    self.driver.execute_script("arguments[0].click();", primer_elemento)
+                    time.sleep(1)
+                    self.driver.execute_script("arguments[0].click();", primer_elemento)
+                    
+                    # Esperar más tiempo para que GM procese la selección
+                    time.sleep(6)  # Aumentado de 4 a 6 segundos
+                    
+                    # Verificar que apareció el link "Salida" con mayor timeout
+                    try:
+                        salida_check = WebDriverWait(self.driver, 25).until(  # Aumentado de 10 a 25 segundos
+                            EC.presence_of_element_located((By.LINK_TEXT, "Salida"))
+                        )
+                        if salida_check.is_displayed():
+                            logger.info("✅ Viaje seleccionado correctamente")
+                            return True
+                        else:
+                            logger.error("❌ Link 'Salida' no visible")
+                            if intento == 0:  # Solo reintenta una vez
+                                time.sleep(3)
+                                continue
+                            return False
+                            
+                    except Exception as e:
+                        logger.error(f"❌ Link 'Salida' no apareció: {e}")
+                        if intento == 0:  # Solo reintenta una vez
+                            time.sleep(3)
+                            continue
                         return False
                         
                 except Exception as e:
-                    logger.error(f"❌ Link 'Salida' no apareció: {e}")
+                    logger.error(f"❌ Error al hacer clic en el elemento: {e}")
+                    if intento == 0:  # Solo reintenta una vez
+                        time.sleep(3)
+                        continue
                     return False
-                    
-            except Exception as e:
-                logger.error(f"❌ Error al hacer clic en el elemento: {e}")
-                return False
+            
+            # Si llegamos aquí, fallaron todos los intentos
+            return False
                 
         except Exception as e:
             logger.error(f"❌ Error general al seleccionar viaje de tabla: {e}")
@@ -434,21 +455,44 @@ class GMSalidaAutomation:
                 logger.error("❌ No se encontró fecha del viaje")
                 return False
             
-            # Paso 1: Hacer clic en el link "Salida"
-            try:
-                salida_link = self.wait.until(EC.element_to_be_clickable((By.LINK_TEXT, "Salida")))
-                self.driver.execute_script("arguments[0].click();", salida_link)
-                time.sleep(1.5)
-                logger.info("✅ Link 'Salida' clickeado")
-                
-                # Verificar inmediatamente si hay error de operador ocupado
-                if self.detectar_operador_ocupado():
-                    self.manejar_operador_ocupado()
-                    return "OPERADOR_OCUPADO"
+            # Paso 1: Hacer clic en el link "Salida" con mejores reintentos
+            salida_clickeado = False
+            for intento in range(2):  # Máximo 2 intentos
+                try:
+                    logger.info(f"🎯 Intento {intento + 1}/2 - Buscando link 'Salida'")
                     
-            except Exception as e:
-                logger.error(f"❌ Error al hacer clic en 'Salida': {e}")
+                    # Buscar con timeout más largo
+                    salida_link = WebDriverWait(self.driver, 20).until(
+                        EC.element_to_be_clickable((By.LINK_TEXT, "Salida"))
+                    )
+                    
+                    # Verificar que esté visible antes de hacer clic
+                    if salida_link.is_displayed() and salida_link.is_enabled():
+                        self.driver.execute_script("arguments[0].click();", salida_link)
+                        time.sleep(2)  # Aumentado de 1.5 a 2 segundos
+                        logger.info("✅ Link 'Salida' clickeado")
+                        salida_clickeado = True
+                        break
+                    else:
+                        logger.warning(f"⚠️ Link 'Salida' no visible/habilitado en intento {intento + 1}")
+                        if intento == 0:
+                            time.sleep(3)
+                            continue
+                        
+                except Exception as e:
+                    logger.error(f"❌ Error al hacer clic en 'Salida' intento {intento + 1}: {e}")
+                    if intento == 0:
+                        time.sleep(3)
+                        continue
+                    
+            if not salida_clickeado:
+                logger.error("❌ No se pudo hacer clic en 'Salida' después de 2 intentos")
                 return False
+                
+            # Verificar inmediatamente si hay error de operador ocupado
+            if self.detectar_operador_ocupado():
+                self.manejar_operador_ocupado()
+                return "OPERADOR_OCUPADO"
             
             # Paso 2: Llenar fecha de salida CON FUNCIÓN ROBUSTA
             try:
@@ -559,7 +603,7 @@ class GMSalidaAutomation:
                 logger.error("❌ Error crítico buscando viaje")
                 return False
             
-            # Seleccionar viaje de la tabla (SIN pausas manuales)
+            # Seleccionar viaje de la tabla (MEJORADO con reintentos)
             if not self.seleccionar_viaje_de_tabla():
                 logger.error("❌ Error crítico seleccionando viaje automáticamente")
                 return False
@@ -611,7 +655,7 @@ def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
                 try:
                     log_viaje_fallido(
                         prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
-                        motivo_fallo="FALLO_EN_GM_SALIDA - Error en proceso de salida del viaje",
+                        motivo_fallo="Error en proceso de salida",  # MENSAJE ACORTADO
                         determinante=datos_viaje.get('clave_determinante', ''),
                         fecha_viaje=datos_viaje.get('fecha', ''),
                         placa_tractor=datos_viaje.get('placa_tractor', ''),
@@ -633,7 +677,7 @@ def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
             try:
                 log_viaje_fallido(
                     prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
-                    motivo_fallo=f"EXCEPCION_EN_GM_SALIDA - {str(e)}",
+                    motivo_fallo="Error en proceso de salida",  # MENSAJE ACORTADO
                     determinante=datos_viaje.get('clave_determinante', ''),
                     fecha_viaje=datos_viaje.get('fecha', ''),
                     placa_tractor=datos_viaje.get('placa_tractor', ''),
