@@ -5,6 +5,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 import os
 
@@ -14,8 +15,7 @@ USUARIO = "ROBOT"
 CONTRASENA = 'r0b4t2025ROB$'
 CRM_URL = "https://www.softwareparatransporte.com/GMTERPV8_WEB/ES/PAGE_CatUsuariosLoginAWP.awp"
 
-# Ruta al chromedriver y carpeta de perfil temporal
-CHROMEDRIVER_PATH = r"C:\Users\MONITOR3\Documents\ROBOTS\VACIO\chromedriver-win64\\chromedriver.exe"
+# Ruta al perfil temporal
 USER_DATA_DIR = os.path.join(os.getcwd(), "chrome_temp_profile")
 
 def launch_driver():
@@ -27,7 +27,7 @@ def launch_driver():
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--disable-gpu")
-    service = Service(executable_path=CHROMEDRIVER_PATH)
+    service = Service(ChromeDriverManager().install())
     driver = webdriver.Chrome(service=service, options=options)
     return driver
 
