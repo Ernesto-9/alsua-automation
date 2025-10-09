@@ -21,14 +21,9 @@ from cola_viajes import (
     marcar_viaje_exitoso_cola,
     marcar_viaje_fallido_cola,
     registrar_error_reintentable_cola,
-    obtener_estadisticas_cola,
-    resetear_viajes_atascados
+    obtener_estadisticas_cola
 )
 from viajes_log import registrar_viaje_fallido as log_viaje_fallido, viajes_log
-
-print("=" * 70)
-print("SCRIPT INICIANDO - alsua_mail_automation.py")
-print("=" * 70)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,8 +37,11 @@ logger = logging.getLogger(__name__)
 class AlsuaMailAutomation:
     def __init__(self):
         self.carpeta_descarga = os.path.abspath("archivos_descargados")
+        
         self.driver = None
+        
         self.com_inicializado = False
+        
         self._crear_carpeta_descarga()
         
     def _crear_carpeta_descarga(self):
@@ -301,9 +299,23 @@ class AlsuaMailAutomation:
                     datos_viaje = self.extraer_datos_de_correo(mensaje)
                     
                     if datos_viaje:
+                        # VALIDACIÓN DEFENSIVA AGREGADA
+                        if isinstance(datos_viaje, list):
+                            logger.error(f"ERROR CRÍTICO: datos_viaje es una lista cuando debería ser dict")
+                            logger.error(f"Contenido: {datos_viaje}")
+                            correos_saltados += 1
+                            continue
+                        
+                        if not isinstance(datos_viaje, dict):
+                            logger.error(f"ERROR CRÍTICO: datos_viaje no es dict. Tipo: {type(datos_viaje)}")
+                            logger.error(f"Contenido: {datos_viaje}")
+                            correos_saltados += 1
+                            continue
+                        
                         if agregar_viaje_a_cola(datos_viaje):
                             viajes_extraidos += 1
                             logger.info(f"Viaje agregado a cola: {datos_viaje['prefactura']}")
+                            
                             mensaje.UnRead = False
                         else:
                             logger.warning(f"No se pudo agregar viaje a cola: {datos_viaje.get('prefactura')}")
@@ -483,12 +495,14 @@ class AlsuaMailAutomation:
                 if resultado == 'EXITOSO':
                     marcar_viaje_exitoso_cola(viaje_id)
                     logger.info(f"Viaje {prefactura} completado y removido de cola")
+                    
                     logger.info("Esperando 1 minuto antes del siguiente viaje...")
                     time.sleep(60)
                     
                 elif resultado == 'LOGIN_LIMIT':
                     registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
                     logger.warning(f"Límite de usuarios - {prefactura} reintentará en 15 minutos")
+                    
                     logger.info("Esperando 15 minutos por límite de usuarios...")
                     time.sleep(15 * 60)
                     
@@ -500,6 +514,7 @@ class AlsuaMailAutomation:
                     motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                     marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
                     logger.error(f"{prefactura} FALLÓ EN: {modulo_error} - removido de cola")
+                    
                     logger.info("Esperando 30 segundos después de viaje fallido...")
                     time.sleep(30)
             
@@ -534,14 +549,9 @@ class AlsuaMailAutomation:
         logger.info("Iniciando sistema de automatización Alsua Transport")
         logger.info("FLUJO:")
         logger.info("   PRIORIDAD 1: Procesar cola existente")
-        logger.info("   PRIORIDAD 2: Si cola vacía -> buscar nuevos correos")
+        logger.info("   PRIORIDAD 2: Si cola vacía → buscar nuevos correos")
         logger.info("   RESULTADO: 1 viaje a la vez, sin acumulación")
         logger.info("=" * 70)
-        
-        logger.info("Verificando viajes atascados en cola...")
-        viajes_reseteados = resetear_viajes_atascados()
-        if viajes_reseteados > 0:
-            logger.warning(f"Se resetearon {viajes_reseteados} viajes que estaban atascados en 'procesando'")
         
         self.mostrar_estadisticas_inicio()
         
@@ -744,7 +754,7 @@ def main():
     else:
         logger.info("MODO PRODUCCIÓN: Iniciando flujo continuo")
         logger.info("PROCESAMIENTO PERPETUO:")
-        logger.info("   Revisar correos -> Viaje VACIO -> Cola -> Procesar")
+        logger.info("   Revisar correos → Viaje VACIO → Cola → Procesar")
         logger.info("   Sin intervalos fijos innecesarios")
         logger.info("   Máxima robustez con cola persistente")
         logger.info("   Solo 2 errores reintentables")
