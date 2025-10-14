@@ -16,7 +16,7 @@ from modules.parser import parse_xls
 from modules.gm_login import login_to_gm
 from modules.gm_transport_general import GMTransportAutomation
 from cola_viajes import (
-    agregar_viaje_a_cola, 
+    agregar_viaje_a_cola,
     obtener_siguiente_viaje_cola,
     marcar_viaje_exitoso_cola,
     marcar_viaje_fallido_cola,
@@ -24,6 +24,9 @@ from cola_viajes import (
     obtener_estadisticas_cola
 )
 from viajes_log import registrar_viaje_fallido as log_viaje_fallido, viajes_log
+# Importar módulos de mejora
+from modules import robot_state_manager
+from modules.debug_logger import debug_logger
 
 logging.basicConfig(
     level=logging.INFO,
@@ -383,11 +386,22 @@ class AlsuaMailAutomation:
             viaje_id = viaje_registro.get('id')
             datos_viaje = viaje_registro.get('datos_viaje', {})
             prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
-            
+
+            # Marcar viaje como en proceso en estado_robots.json
+            robot_state_manager.marcar_viaje_actual(
+                prefactura=prefactura,
+                fase="Inicializando",
+                placa_tractor=datos_viaje.get('placa_tractor', ''),
+                placa_remolque=datos_viaje.get('placa_remolque', ''),
+                determinante=datos_viaje.get('clave_determinante', '')
+            )
+            debug_logger.log_viaje_inicio(prefactura, datos_viaje)
+
             if viajes_log.verificar_viaje_existe(prefactura):
                 logger.warning(f"DUPLICADO DETECTADO: {prefactura} ya fue procesado - saltando")
+                robot_state_manager.limpiar_viaje_actual()
                 return 'EXITOSO', 'duplicado_detectado'
-            
+
             logger.info(f"Procesando viaje: {prefactura}")
             
             if not self.driver:
@@ -421,15 +435,21 @@ class AlsuaMailAutomation:
                     logger.info(f"Viaje completado exitosamente: {prefactura}")
                     logger.info("Datos completos (UUID, Viaje GM, placas) registrados automáticamente")
                     logger.info("MySQL sincronizado automáticamente desde CSV")
-                    
+
+                    # Actualizar estado: viaje exitoso
+                    robot_state_manager.incrementar_exitosos(prefactura)
+                    debug_logger.log_viaje_exito(prefactura)
+
                     archivo_descargado = datos_viaje.get('archivo_descargado')
                     if archivo_descargado and os.path.exists(archivo_descargado):
                         os.remove(archivo_descargado)
                         logger.info(f"Archivo limpiado: {os.path.basename(archivo_descargado)}")
-                    
+
                     return 'EXITOSO', ''
                 else:
                     logger.error(f"Error en automatización GM: {prefactura}")
+                    robot_state_manager.incrementar_fallidos(prefactura, "Error en automatización GM")
+                    debug_logger.log_viaje_fallo(prefactura, "gm_transport_general", "Error en automatización")
                     return 'VIAJE_FALLIDO', 'gm_transport_general'
                     
             except Exception as automation_error:
@@ -438,6 +458,7 @@ class AlsuaMailAutomation:
                 tipo_error = self.detectar_tipo_error(automation_error)
                 
                 if tipo_error == 'LOGIN_LIMIT':
+                    robot_state_manager.limpiar_viaje_actual()
                     return 'LOGIN_LIMIT', 'gm_login'
                 elif tipo_error == 'DRIVER_CORRUPTO':
                     try:
@@ -446,13 +467,21 @@ class AlsuaMailAutomation:
                         pass
                     finally:
                         self.driver = None
+                    robot_state_manager.limpiar_viaje_actual()
                     return 'DRIVER_CORRUPTO', 'selenium_driver'
                 else:
                     modulo_error = self.determinar_modulo_error(automation_error)
+                    robot_state_manager.incrementar_fallidos(prefactura, f"Error durante automatización: {modulo_error}")
+                    debug_logger.log_viaje_fallo(prefactura, modulo_error, str(automation_error))
                     return 'VIAJE_FALLIDO', modulo_error
                 
         except Exception as e:
             logger.error(f"Error general procesando viaje: {e}")
+            try:
+                robot_state_manager.incrementar_fallidos(prefactura, f"Error general: {str(e)}")
+                debug_logger.log_viaje_fallo(prefactura, 'sistema_general', str(e))
+            except:
+                pass
             return 'VIAJE_FALLIDO', 'sistema_general'
     
     def determinar_modulo_error(self, error):
@@ -552,9 +581,13 @@ class AlsuaMailAutomation:
         logger.info("   PRIORIDAD 2: Si cola vacía → buscar nuevos correos")
         logger.info("   RESULTADO: 1 viaje a la vez, sin acumulación")
         logger.info("=" * 70)
-        
+
+        # Marcar robot como ejecutando
+        robot_state_manager.actualizar_estado_robot("ejecutando")
+        debug_logger.info("Iniciando bucle continuo de automatización")
+
         self.mostrar_estadisticas_inicio()
-        
+
         try:
             contador_ciclos = 0
             while True:
@@ -564,7 +597,28 @@ class AlsuaMailAutomation:
                         logger.info(f"Ciclo #{contador_ciclos}")
                     
                     viaje_registro = obtener_siguiente_viaje_cola()
-                    
+
+                    # Actualizar cola en estado_robots.json
+                    try:
+                        stats = obtener_estadisticas_cola()
+                        if stats.get('total_viajes', 0) > 0:
+                            # Obtener lista de viajes pendientes para el panel
+                            from cola_viajes import leer_cola
+                            cola_actual = leer_cola()
+                            viajes_pendientes = [
+                                {
+                                    'prefactura': v.get('datos_viaje', {}).get('prefactura', 'N/A'),
+                                    'fecha': v.get('datos_viaje', {}).get('fecha', 'N/A'),
+                                    'placa_tractor': v.get('datos_viaje', {}).get('placa_tractor', 'N/A'),
+                                    'placa_remolque': v.get('datos_viaje', {}).get('placa_remolque', 'N/A')
+                                }
+                                for v in cola_actual.get('viajes', [])
+                                if v.get('estatus') in ['pendiente', 'procesando']
+                            ]
+                            robot_state_manager.actualizar_cola(viajes_pendientes)
+                    except:
+                        pass
+
                     if viaje_registro:
                         viaje_id = viaje_registro.get('id')
                         datos_viaje = viaje_registro.get('datos_viaje', {})
@@ -629,16 +683,20 @@ class AlsuaMailAutomation:
                     
         except KeyboardInterrupt:
             logger.info("Sistema detenido por usuario")
-            
+
         finally:
+            # Marcar robot como detenido
+            robot_state_manager.actualizar_estado_robot("detenido")
+            debug_logger.info("Bucle continuo finalizado")
+
             if self.driver:
                 try:
                     self.driver.quit()
                 except:
                     pass
-            
+
             self.limpiar_com()
-            
+
             logger.info("Sistema de automatización finalizado")
     
     def ejecutar_revision_unica(self):
