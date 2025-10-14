@@ -211,3 +211,34 @@ chrome_temp_profile/
 *.tmp
 **/logs/
 **/__pycache__/
+
+# ============================================
+# CONFIGURACIÓN ALSUA AUTOMATION
+# ============================================
+
+# Documentación de desarrollo (mantener solo en computadora de casa)
+*.md
+!README.md
+
+# Archivos de datos locales
+cola_viajes.json
+estado_robots.json
+debug.log
+debug.log.*
+
+# Carpetas con archivos temporales
+archivos_descargados/
+screenshots_errores/
+
+# IMPORTANTE: pdfs_temporales/ NO está en .gitignore
+# Los PDFs son facturas importantes y deben respaldarse manualmente
+
+# Archivos de Excel descargados
+*.xls
+*.xlsx
+
+# Base de datos SQLite
+*.db
+
+# Credenciales (NUNCA subir)
+credentials.json
