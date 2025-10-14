@@ -7,13 +7,20 @@ import time
 import csv
 import os
 import logging
+import traceback
 from datetime import datetime
 # SIMPLIFICADO: Solo importar sistema de log CSV
 from viajes_log import registrar_viaje_fallido as log_viaje_fallido
+# Importar nuevos módulos de mejora
+from modules.screenshot_manager import ScreenshotManager
+from modules.debug_logger import debug_logger
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Instancia global del screenshot manager
+screenshot_mgr = ScreenshotManager()
 
 class GMSalidaAutomation:
     def __init__(self, driver, datos_viaje=None):
@@ -446,8 +453,10 @@ class GMSalidaAutomation:
     
     def procesar_salida_viaje(self):
         """Proceso específico de salida del viaje CON DETECCIÓN DE OPERADOR OCUPADO Y FECHA ROBUSTA"""
+        paso_actual = "Inicialización"
         try:
             logger.info("🚛 Iniciando proceso de SALIDA del viaje")
+            debug_logger.info("Iniciando proceso de salida")
             
             # Obtener fecha del viaje
             fecha_viaje = self.datos_viaje.get('fecha', '')
@@ -456,6 +465,8 @@ class GMSalidaAutomation:
                 return False
             
             # Paso 1: Hacer clic en el link "Salida" con mejores reintentos
+            paso_actual = "Clic en link 'Salida'"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             salida_clickeado = False
             for intento in range(2):  # Máximo 2 intentos
                 try:
@@ -495,6 +506,8 @@ class GMSalidaAutomation:
                 return "OPERADOR_OCUPADO"
             
             # Paso 2: Llenar fecha de salida CON FUNCIÓN ROBUSTA
+            paso_actual = "Llenado de fecha de salida"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             try:
                 logger.info("📅 Llenando fecha de salida con método ROBUSTO...")
                 exito_fecha = self.llenar_fecha_salida_robusto("EDT_SALIDA", fecha_viaje)
@@ -516,6 +529,8 @@ class GMSalidaAutomation:
                 return False
             
             # Paso 3: Seleccionar status "EN RUTA"
+            paso_actual = "Selección de status 'EN RUTA'"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             try:
                 status_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATESTATUSVIAJE"))))
                 status_select.select_by_value("2")  # EN RUTA
@@ -532,6 +547,8 @@ class GMSalidaAutomation:
                 return False
             
             # Paso 4: Hacer clic en "Aceptar" (PUNTO CRÍTICO donde aparece BTN_OK)
+            paso_actual = "Clic en botón 'Aceptar'"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             try:
                 aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTAR")))
                 self.driver.execute_script("arguments[0].click();", aceptar_btn)
@@ -548,6 +565,8 @@ class GMSalidaAutomation:
                 return False
             
             # Paso 5: Responder "No" al envío de correo (solo si no hubo error)
+            paso_actual = "Clic en botón 'No' (confirmación correo)"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             try:
                 no_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_NO")))
                 self.driver.execute_script("arguments[0].click();", no_btn)
@@ -560,9 +579,25 @@ class GMSalidaAutomation:
             
             logger.info("✅ Proceso de SALIDA completado exitosamente")
             return True
-            
+
         except Exception as e:
-            logger.error(f"❌ Error en proceso de salida: {e}")
+            logger.error(f"❌ Error en proceso de salida - PASO: {paso_actual}")
+            logger.error(f"❌ Detalles del error: {e}")
+            debug_logger.error(f"Error en paso '{paso_actual}': {e}")
+            debug_logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Capturar screenshot del error
+            try:
+                prefactura = self.datos_viaje.get('prefactura', 'UNKNOWN')
+                screenshot_mgr.capturar_con_html(
+                    self.driver,
+                    prefactura=prefactura,
+                    modulo="gm_salida",
+                    detalle_error=f"{paso_actual}: {str(e)[:50]}"
+                )
+            except:
+                pass  # Si falla la captura, no detener el proceso
+
             return False
     
     def procesar_salida_completo(self, configurar_filtros=True):
