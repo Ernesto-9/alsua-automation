@@ -1,4 +1,5 @@
 import logging
+import traceback
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait, Select
@@ -9,10 +10,16 @@ from datetime import datetime
 from .pdf_extractor import extraer_datos_automatico
 # SIMPLIFICADO: Solo importar sistema de log CSV
 from viajes_log import registrar_viaje_exitoso as log_viaje_exitoso, registrar_viaje_fallido as log_viaje_fallido
+# Importar nuevos módulos de mejora
+from modules.screenshot_manager import ScreenshotManager
+from modules.debug_logger import debug_logger
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Instancia global del screenshot manager
+screenshot_mgr = ScreenshotManager()
 
 class ProcesadorLlegadaFactura:
     def __init__(self, driver, datos_viaje):
@@ -22,30 +29,56 @@ class ProcesadorLlegadaFactura:
         
     def procesar_llegada_y_factura(self):
         """Proceso principal de llegada y facturación CON EXTRACCIÓN AUTOMÁTICA"""
+        paso_actual = "Inicialización"
         try:
             logger.info("🚀 Iniciando proceso de llegada y facturación")
-            
+            debug_logger.info("Iniciando proceso de llegada y facturación")
+
             # Paso 1: Hacer clic en "Llegada"
+            paso_actual = "Clic en link 'Llegada'"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             if not self._hacer_clic_llegada():
                 return False
-                
+
             # Paso 2: Llenar fecha de llegada y status
+            paso_actual = "Procesamiento de llegada (fecha y status)"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             if not self._procesar_llegada():
                 return False
-                
+
             # Paso 3: Autorizar
+            paso_actual = "Autorización del viaje"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             if not self._autorizar():
                 return False
-                
+
             # Paso 4: Facturar
+            paso_actual = "Proceso de facturación"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
             if not self._procesar_facturacion():
                 return False
-                
+
             logger.info("🎉 Proceso de llegada y facturación completado exitosamente")
             return True
-            
+
         except Exception as e:
-            logger.error(f"❌ Error en proceso de llegada y facturación: {e}")
+            logger.error(f"❌ Error en proceso de llegada y facturación - PASO: {paso_actual}")
+            logger.error(f"❌ Detalles del error: {e}")
+            debug_logger.error(f"Error en paso '{paso_actual}': {e}")
+            debug_logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Capturar screenshot del error
+            try:
+                prefactura = self.datos_viaje.get('prefactura', 'UNKNOWN')
+                screenshot_mgr.capturar_con_html(
+                    self.driver,
+                    prefactura=prefactura,
+                    modulo="gm_llegadayfactura2",
+                    detalle_error=f"{paso_actual}: {str(e)[:50]}"
+                )
+            except:
+                pass  # Si falla la captura, no detener el proceso
+
             return False
     
     def _hacer_clic_llegada(self):
