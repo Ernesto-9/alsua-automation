@@ -588,21 +588,17 @@ class AlsuaMailAutomation:
 
         self.mostrar_estadisticas_inicio()
 
-        # Importar estado del sistema Flask si está disponible
-        try:
-            from app import sistema_estado
-            flask_disponible = True
-        except:
-            flask_disponible = False
-            sistema_estado = None
-
         try:
             contador_ciclos = 0
             while True:
-                # Verificar si Flask pidió detener
-                if flask_disponible and sistema_estado and not sistema_estado.get("ejecutando", True):
-                    logger.info("🛑 Detención solicitada desde panel web")
-                    break
+                # Verificar si Flask pidió detener (importar en cada ciclo para tener valor actualizado)
+                try:
+                    from app import sistema_estado
+                    if not sistema_estado.get("ejecutando", True):
+                        logger.info("🛑 Detención solicitada desde panel web")
+                        break
+                except ImportError:
+                    pass  # Flask no disponible, continuar normalmente
 
                 try:
                     contador_ciclos += 1
