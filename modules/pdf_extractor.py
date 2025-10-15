@@ -293,12 +293,13 @@ class PDFExtractor:
             
             # NUEVO: Buscar Número de Factura
             numero_factura = None
-            # Buscar el patrón que viene después de "FACTURA"
-            # Ejemplo: "FACTURA\nW 160559" o "FACTURA W 160559"
+            # Buscar lo que está entre "FACTURA" y "Folio Fiscal"
+            # Ejemplos: "W 160562", "CORP 2156"
             factura_patterns = [
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s*\d+)",  # FACTURA con salto de línea
-                r"FACTURA\s+([A-Z]+\s*\d+)",           # FACTURA con espacio
-                r"(?:FACTURA[^\w]*)?([A-Z]+\s+\d{5,6})" # Patrón más flexible
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})\s*[\r\n]+\s*Folio\s+Fiscal",  # FACTURA\nCORP 2156\nFolio Fiscal
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})",                              # FACTURA\nCORP 2156
+                r"FACTURA\s+([A-Z]+\s+\d{4,6})",                                        # FACTURA CORP 2156 (con espacio)
+                r"(?:FACTURA[^\w]*)?([A-Z]+\s+\d{4,6})"                                 # Patrón flexible
             ]
             
             for pattern in factura_patterns:
@@ -585,13 +586,17 @@ class PDFExtractor:
         try:
             logger.info("🔍 Buscando número de factura en el texto...")
             
-            # Patrones específicos para buscar W 162390 después de "Folio Fiscal"
+            # Patrones para capturar número de factura entre "FACTURA" y "Folio Fiscal"
+            # Ejemplos: "W 160562", "CORP 2156", etc.
             patrones_factura = [
-                r"Folio\s+Fiscal([A-Z]+\s+\d{5,6})",     # Folio FiscalW 162390
-                r"FolioFiscal([A-Z]+\s+\d{5,6})",        # FolioFiscalW 162390  
-                r"Folio\s*Fiscal\s*([A-Z]+\s+\d{5,6})",  # Folio Fiscal W 162390
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{5,6})", # FACTURA\nW 162390
-                r"(?<=FACTURA\s)([A-Z]+\s+\d{5,6})"     # Después de FACTURA 
+                # PATRÓN PRINCIPAL: Entre FACTURA y Folio Fiscal
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})\s*[\r\n]+\s*Folio\s+Fiscal",  # FACTURA\nCORP 2156\nFolio Fiscal
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})",                              # FACTURA\nCORP 2156 (más flexible)
+
+                # Patrones alternativos por si el formato cambia
+                r"Folio\s+Fiscal([A-Z]+\s+\d{4,6})",     # FolioFiscalW 162390 (pegado)
+                r"FolioFiscal([A-Z]+\s+\d{4,6})",        # FolioFiscalW 162390
+                r"(?<=FACTURA\s)([A-Z]+\s+\d{4,6})"      # Después de FACTURA con espacio
             ]
             
             for patron in patrones_factura:
