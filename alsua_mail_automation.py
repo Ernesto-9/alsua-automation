@@ -38,6 +38,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class AlsuaMailAutomation:
+    # Variable de clase para controlar la ejecución desde Flask
+    continuar_ejecutando = True
+
     def __init__(self):
         self.carpeta_descarga = os.path.abspath("archivos_descargados")
         
@@ -590,15 +593,8 @@ class AlsuaMailAutomation:
 
         try:
             contador_ciclos = 0
-            while True:
-                # Verificar si Flask pidió detener (importar en cada ciclo para tener valor actualizado)
-                try:
-                    from app import sistema_estado
-                    if not sistema_estado.get("ejecutando", True):
-                        logger.info("🛑 Detención solicitada desde panel web")
-                        break
-                except ImportError:
-                    pass  # Flask no disponible, continuar normalmente
+            while AlsuaMailAutomation.continuar_ejecutando:
+                # La variable de clase controla la ejecución
 
                 try:
                     contador_ciclos += 1
