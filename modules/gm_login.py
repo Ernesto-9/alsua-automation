@@ -82,11 +82,30 @@ def login(driver):
 
         # Confirmación de login exitoso
         try:
-            driver.find_element(By.XPATH, "//img[contains(@src, 'TRAFICO')]")
+            # Esperar más tiempo para que cargue el menú
+            print("🔍 Buscando menú de tráfico...")
+            WebDriverWait(driver, 15).until(
+                EC.presence_of_element_located((By.XPATH, "//img[contains(@src, 'TRAFICO')]"))
+            )
             print("✅ Login exitoso detectado")
             return True
-        except:
+        except Exception as e:
             print("⚠️ No se detectó menú de tráfico. Posible fallo en login.")
+            print(f"   Error: {e}")
+
+            # Capturar screenshot para diagnóstico
+            try:
+                from modules.screenshot_manager import screenshot_mgr
+                screenshot_path = screenshot_mgr.capturar_error(
+                    driver,
+                    prefactura="LOGIN_FAIL",
+                    modulo="gm_login",
+                    detalle_error="No se encontro menu trafico"
+                )
+                print(f"📸 Screenshot guardado: {screenshot_path}")
+            except Exception as ss_error:
+                print(f"⚠️ No se pudo capturar screenshot: {ss_error}")
+
             return False
 
     except Exception as e:
