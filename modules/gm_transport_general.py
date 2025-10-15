@@ -12,9 +12,15 @@ from .gm_salida import procesar_salida_viaje
 from .gm_llegadayfactura2 import procesar_llegada_factura
 from .parser import parse_xls
 from viajes_log import registrar_viaje_fallido as log_viaje_fallido
+# Importar módulos de mejora
+from .screenshot_manager import ScreenshotManager
+from .debug_logger import debug_logger
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Instancia global del screenshot manager
+screenshot_mgr = ScreenshotManager()
 
 class GMTransportAutomation:
     def __init__(self, driver):
@@ -439,27 +445,46 @@ class GMTransportAutomation:
             return False, "ERROR_SELECCION_TRACTOR"
     
     def fill_viaje_form(self):
-        """Función principal para llenar formulario de viaje"""
+        """Función principal para llenar formulario de viaje CON LOGGING Y SCREENSHOTS MEJORADOS"""
+        paso_actual = "Inicialización"
         try:
             logger.info("Iniciando llenado de formulario de viaje")
-            
+            debug_logger.info("Iniciando fill_viaje_form")
+
             if not self.datos_viaje:
                 logger.error("ERROR CRÍTICO: No hay datos del viaje")
+                debug_logger.error("ERROR CRÍTICO: No hay datos del viaje")
                 return False
-            
+
             campos_requeridos = ['fecha', 'prefactura', 'cliente_codigo', 'importe', 'clave_determinante', 'placa_tractor', 'placa_remolque']
             campos_faltantes = [campo for campo in campos_requeridos if not self.datos_viaje.get(campo)]
-            
+
             if campos_faltantes:
                 logger.error(f"ERROR CRÍTICO: Campos faltantes: {campos_faltantes}")
+                debug_logger.error(f"Campos faltantes en datos_viaje: {campos_faltantes}")
                 return False
-            
+
             logger.info("Datos del viaje validados correctamente")
+            debug_logger.info(f"Datos del viaje validados: {self.datos_viaje.get('prefactura')}")
             
+            paso_actual = "Navegación a crear viaje"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
+
             from .navigate_to_create_viaje import navigate_to_create_viaje
             logger.info("Navegando al módulo de creación de viajes...")
             if not navigate_to_create_viaje(self.driver):
                 logger.error("Error al navegar al módulo de viajes")
+                debug_logger.error(f"Error en {paso_actual}")
+                # Capturar screenshot del error
+                try:
+                    screenshot_mgr.capturar_con_html(
+                        self.driver,
+                        prefactura=self.datos_viaje.get('prefactura', 'UNKNOWN'),
+                        modulo="gm_transport_general",
+                        detalle_error=f"{paso_actual}: No se pudo navegar"
+                    )
+                except:
+                    pass
                 return False
             
             fecha_valor = self.datos_viaje['fecha']
@@ -498,6 +523,9 @@ class GMTransportAutomation:
             
             time.sleep(1)
             
+            paso_actual = "Llenado de fechas del viaje"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
+
             logger.info("Moviendo foco al campo de ruta...")
             try:
                 campo_ruta = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FOLIORUTA")))
@@ -506,7 +534,11 @@ class GMTransportAutomation:
                 logger.info("Enfoque movido al campo de ruta")
             except Exception as e:
                 logger.warning(f"No se pudo hacer clic en campo de ruta: {e}")
-            
+                debug_logger.warning(f"No se pudo hacer clic en campo de ruta: {e}")
+
+            paso_actual = "Obtención de ruta y determinante"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
+
             logger.info("Obteniendo ruta GM...")
             ruta_gm, base_origen, estado_determinante = self.obtener_ruta_y_base(clave_determinante)
             
@@ -548,24 +580,62 @@ class GMTransportAutomation:
                 
                 self.seleccionar_base_origen(base_origen)
             
+            paso_actual = "Selección de remolque"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
+
             logger.info("Seleccionando remolque...")
             exito_remolque, error_remolque = self.seleccionar_remolque()
             if not exito_remolque:
+                debug_logger.error(f"Error en {paso_actual}: {error_remolque}")
                 self.registrar_error_viaje(error_remolque, f"No se pudo seleccionar remolque {self.datos_viaje.get('placa_remolque')}")
                 logger.error("Error al seleccionar remolque - Viaje marcado para revisión manual")
+                # Capturar screenshot del error
+                try:
+                    screenshot_mgr.capturar_con_html(
+                        self.driver,
+                        prefactura=self.datos_viaje.get('prefactura', 'UNKNOWN'),
+                        modulo="gm_transport_general",
+                        detalle_error=f"{paso_actual}: {error_remolque}"
+                    )
+                except:
+                    pass
                 return False
             
+            paso_actual = "Selección de tractor y operador"
+            debug_logger.debug(f"Paso actual: {paso_actual}")
+
             logger.info("Seleccionando tractor y verificando operador...")
             exito_tractor, error_tractor = self.seleccionar_tractor_y_operador()
-            
+
             if not exito_tractor:
+                debug_logger.error(f"Error en {paso_actual}: {error_tractor}")
                 if error_tractor == "Sin operador asignado":
                     self.registrar_error_viaje("Sin operador asignado", f"Tractor {self.datos_viaje.get('placa_tractor')} no tiene operador asignado")
                     logger.error("VIAJE CANCELADO: Placa sin operador - Requiere asignación manual")
+                    # Capturar screenshot
+                    try:
+                        screenshot_mgr.capturar_con_html(
+                            self.driver,
+                            prefactura=self.datos_viaje.get('prefactura', 'UNKNOWN'),
+                            modulo="gm_transport_general",
+                            detalle_error=f"{paso_actual}: Sin operador"
+                        )
+                    except:
+                        pass
                     return False
                 else:
                     self.registrar_error_viaje(error_tractor, f"Error con tractor {self.datos_viaje.get('placa_tractor')}")
                     logger.error("VIAJE CANCELADO: Error en selección de tractor")
+                    # Capturar screenshot
+                    try:
+                        screenshot_mgr.capturar_con_html(
+                            self.driver,
+                            prefactura=self.datos_viaje.get('prefactura', 'UNKNOWN'),
+                            modulo="gm_transport_general",
+                            detalle_error=f"{paso_actual}: {error_tractor}"
+                        )
+                    except:
+                        pass
                     return False
             
             logger.info("Ejecutando facturación inicial...")
@@ -609,9 +679,30 @@ class GMTransportAutomation:
             logger.info("Proceso completo de automatización GM Transport exitoso")
             logger.info(f"VIAJE COMPLETADO: Prefactura {prefactura_valor} - Placa Tractor: {self.datos_viaje.get('placa_tractor')} - Placa Remolque: {self.datos_viaje.get('placa_remolque')}")
             return True
-            
+
         except Exception as e:
-            logger.error(f"Error general en fill_viaje_form: {e}")
+            import traceback
+            logger.error(f"Error general en fill_viaje_form - PASO: {paso_actual}")
+            logger.error(f"Detalles del error: {e}")
+            logger.error(f"Traceback completo:\n{traceback.format_exc()}")
+
+            # Logging detallado con debug_logger
+            debug_logger.error(f"Error en fill_viaje_form - Paso: {paso_actual}")
+            debug_logger.error(f"Excepción: {str(e)}")
+            debug_logger.error(f"Traceback: {traceback.format_exc()}")
+
+            # Capturar screenshot del error
+            try:
+                prefactura = self.datos_viaje.get('prefactura', 'UNKNOWN')
+                screenshot_mgr.capturar_con_html(
+                    self.driver,
+                    prefactura=prefactura,
+                    modulo="gm_transport_general",
+                    detalle_error=f"{paso_actual}: {str(e)[:50]}"
+                )
+            except:
+                pass  # Si falla la captura, no detener el proceso
+
             return False
 
 def fill_viaje_form(driver):
