@@ -69,93 +69,74 @@ class GMSalidaAutomation:
     
     def llenar_fecha_salida_robusto(self, campo_id, fecha_valor):
         """
-        FUNCIÓN MEJORADA: Llena fecha de salida con validación anti-1000
-        
+        FUNCIÓN MEJORADA V2: Llena fecha usando JavaScript para EVITAR abrir calendarios
+
         Args:
             campo_id: ID del campo de fecha
             fecha_valor: Fecha en formato DD/MM/YYYY
-            
+
         Returns:
             bool: True si se insertó correctamente, False si falló
         """
         try:
             logger.info(f"🎯 Llenando fecha en {campo_id}: {fecha_valor}")
-            
-            # Intentar hasta 3 veces si hay problemas
+            debug_logger.info(f"Llenando fecha {campo_id} con valor {fecha_valor}")
+
+            # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
             for intento in range(3):
-                # Paso 1: Localizar y hacer clic en el campo
-                campo = self.wait.until(EC.element_to_be_clickable((By.ID, campo_id)))
-                
-                # Paso 2: LIMPIEZA AGRESIVA
-                campo.click()
-                time.sleep(0.3)
-                
-                # Múltiples métodos de limpieza
-                campo.send_keys(Keys.CONTROL + "a")  # Seleccionar todo
-                time.sleep(0.1)
-                campo.send_keys(Keys.DELETE)         # Borrar selección
-                time.sleep(0.1)
-                campo.clear()                        # Método clear adicional
-                time.sleep(0.1)
-                
-                # Limpieza adicional caracter por caracter
-                for _ in range(15):  # Eliminar hasta 15 caracteres residuales
-                    campo.send_keys(Keys.BACKSPACE)
-                    time.sleep(0.05)
-                
-                # Paso 3: Verificar que está limpio
-                valor_actual = campo.get_attribute("value")
-                
-                if valor_actual and len(valor_actual) > 0:
-                    # Una limpieza final
-                    campo.send_keys(Keys.HOME)
-                    time.sleep(0.1)
-                    for _ in range(20):
-                        campo.send_keys(Keys.DELETE)
-                        time.sleep(0.02)
-                
-                # Paso 4: INSERTAR FECHA LENTAMENTE
-                time.sleep(0.5)  # Pausa antes de escribir
-                
-                # Escribir carácter por carácter para evitar problemas
-                for i, char in enumerate(fecha_valor):
-                    campo.send_keys(char)
-                    time.sleep(0.08)  # Pausa entre caracteres
-                
-                # Paso 5: VALIDACIÓN INMEDIATA
-                time.sleep(0.5)  # Esperar que se procese
-                valor_final = campo.get_attribute("value")
-                
-                # Verificar que no tiene el problema del 1000
-                if "1000" in valor_final:
-                    logger.error(f"🚨 ERROR: Fecha con '1000' en intento {intento + 1}")
+                try:
+                    logger.info(f"Intento {intento + 1}/3 de llenar fecha con JavaScript")
+
+                    # Usar JavaScript directo para llenar el campo SIN abrirlo
+                    script = f"""
+                    var campo = document.getElementById('{campo_id}');
+                    if (campo) {{
+                        campo.value = '{fecha_valor}';
+                        campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        campo.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                        return true;
+                    }}
+                    return false;
+                    """
+
+                    resultado = self.driver.execute_script(script)
+
+                    if not resultado:
+                        logger.warning(f"Campo {campo_id} no encontrado en intento {intento + 1}")
+                        time.sleep(1)
+                        continue
+
+                    # Esperar un momento para que se procese
+                    time.sleep(0.5)
+
+                    # Verificar que se llenó correctamente
+                    valor_actual = self.driver.execute_script(f"return document.getElementById('{campo_id}').value;")
+
+                    if valor_actual and fecha_valor in valor_actual:
+                        logger.info(f"✅ Fecha insertada correctamente con JavaScript: {fecha_valor}")
+                        debug_logger.info(f"✅ Fecha {campo_id} = {valor_actual}")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Verificación falló. Esperado: {fecha_valor}, Actual: {valor_actual}")
+                        time.sleep(1)
+                        continue
+
+                except Exception as e:
+                    logger.error(f"❌ Error en intento {intento + 1}: {e}")
+                    debug_logger.error(f"Error llenando fecha {campo_id} intento {intento + 1}: {e}")
+                    time.sleep(1)
                     continue
-                    
-                # Verificar longitud razonable (DD/MM/YYYY = 10 caracteres + posible hora)
-                if len(valor_final) > 20:
-                    logger.error(f"🚨 ERROR: Fecha muy larga en intento {intento + 1}")
-                    continue
-                
-                # Verificar que contiene la fecha esperada
-                if fecha_valor.replace("/", "") not in valor_final.replace("/", "").replace(" ", ""):
-                    logger.error(f"🚨 ERROR: Fecha no coincide en intento {intento + 1}")
-                    continue
-                
-                # Si llegamos aquí, la fecha está correcta
-                logger.info(f"✅ Fecha insertada correctamente: {fecha_valor}")
-                
-                # Confirmar con ENTER
-                campo.send_keys(Keys.ENTER)
-                time.sleep(0.3)
-                
-                return True
-                
+
             # Si llegamos aquí, fallaron todos los intentos
             logger.error(f"❌ ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
+            debug_logger.error(f"FALLO CRÍTICO llenando fecha {campo_id} con valor {fecha_valor}")
             return False
-            
+
         except Exception as e:
             logger.error(f"❌ Error en llenar_fecha_salida_robusto: {e}")
+            debug_logger.error(f"Excepción en llenar_fecha_salida_robusto: {e}")
+            debug_logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def detectar_operador_ocupado(self):
