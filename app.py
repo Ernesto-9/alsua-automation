@@ -6,8 +6,11 @@ Monitoreo en tiempo real del robot de automatización
 from flask import Flask, render_template, jsonify, redirect, url_for
 import threading
 import os
+import logging
 from modules import robot_state_manager
 from alsua_mail_automation import AlsuaMailAutomation
+
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -23,6 +26,7 @@ def ejecutar_robot_bucle():
     """Función que ejecuta el bucle del robot en un hilo separado"""
     try:
         robot_state_manager.actualizar_estado_robot("ejecutando")
+        AlsuaMailAutomation.continuar_ejecutando = True  # Habilitar ejecución
         sistema = AlsuaMailAutomation()
         sistema_estado["instancia"] = sistema
         print(">>> Robot iniciado desde panel web <<<")
@@ -88,16 +92,10 @@ def iniciar_robot():
 def detener_robot():
     """Detiene el robot de automatización"""
     sistema_estado["ejecutando"] = False
+    AlsuaMailAutomation.continuar_ejecutando = False  # Señal para detener
     robot_state_manager.actualizar_estado_robot("detenido")
 
-    # Intentar detener la instancia si existe
-    if sistema_estado["instancia"]:
-        try:
-            # El bucle continuo debe chequear sistema_estado["ejecutando"]
-            # y terminar cuando sea False
-            pass
-        except:
-            pass
+    logger.info("🛑 Señal de detención enviada al robot")
 
     return redirect(url_for('index'))
 
