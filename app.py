@@ -1,66 +1,139 @@
-from flask import Flask, render_template, redirect
+"""
+Panel Web Alsua - Servidor Flask
+Monitoreo en tiempo real del robot de automatización
+"""
+
+from flask import Flask, render_template, jsonify, redirect, url_for
 import threading
-import time
+import os
+from modules import robot_state_manager
 from alsua_mail_automation import AlsuaMailAutomation
-from modules.mysql_simple import mysql_sync
 
 app = Flask(__name__)
-estado = {"ejecutando": False, "hilo": None}
 
-def ejecutar_bucle():
-    print(">>> Iniciando hilo de automatización desde Flask <<<")
+# Estado del sistema Flask
+sistema_estado = {
+    "ejecutando": False,
+    "hilo": None,
+    "instancia": None
+}
+
+
+def ejecutar_robot_bucle():
+    """Función que ejecuta el bucle del robot en un hilo separado"""
     try:
+        robot_state_manager.actualizar_estado_robot("ejecutando")
         sistema = AlsuaMailAutomation()
-        print(">>> Instancia creada, ejecutando bucle continuo <<<")
+        sistema_estado["instancia"] = sistema
+        print(">>> Robot iniciado desde panel web <<<")
         sistema.ejecutar_bucle_continuo()
     except Exception as e:
-        print(f"Error en ejecución del bucle: {e}")
+        print(f"Error en ejecución del robot: {e}")
+        robot_state_manager.actualizar_estado_robot("detenido")
+    finally:
+        sistema_estado["ejecutando"] = False
+        sistema_estado["instancia"] = None
+
 
 @app.route("/")
 def index():
-    try:
-        if not mysql_sync.conectar():
-            viajes = []
-        else:
-            cursor = mysql_sync.connection.cursor(dictionary=True)
-            cursor.execute("""
-                SELECT 
-                    NOPREFACTURA as prefactura, 
-                    FECHA as fecha, 
-                    TOTALFACTURA2 as importe, 
-                    estatus, 
-                    anotaciones 
-                FROM acumuladoprefactura 
-                WHERE estatus IN ('EXITOSO', 'FALLIDO')
-                ORDER BY FECHA DESC, NUMERO DESC
-                LIMIT 15
-            """)
-            viajes = cursor.fetchall()
-            cursor.close()
-    except Exception as e:
-        print(f"Error leyendo viajes: {e}")
-        viajes = []
+    """Página principal del dashboard"""
+    return render_template("dashboard.html")
 
-    return render_template("index.html", estado=estado, viajes=viajes)
+
+@app.route("/api/estado")
+def api_estado():
+    """API que devuelve el estado completo del robot en JSON"""
+    estado = robot_state_manager.obtener_estado_completo()
+    robot = estado['robots']['robot_1']
+    cola = estado['cola']
+
+    # Verificar si está trabado
+    trabado, mensaje_trabado = robot_state_manager.verificar_si_trabado()
+
+    return jsonify({
+        'robot': {
+            'nombre': robot['nombre'],
+            'estado': robot['estado'],
+            'ultima_actividad': robot['ultima_actividad'],
+            'viaje_actual': robot.get('viaje_actual'),
+            'trabado': trabado,
+            'mensaje_trabado': mensaje_trabado
+        },
+        'estadisticas': {
+            'viajes_exitosos': robot['estadisticas']['viajes_exitosos'],
+            'viajes_fallidos': robot['estadisticas']['viajes_fallidos'],
+            'viajes_pendientes': len(cola.get('viajes', []))
+        },
+        'cola': cola,
+        'viajes_exitosos': robot.get('viajes_exitosos_recientes', []),
+        'viajes_fallidos': robot.get('viajes_fallidos_recientes', [])
+    })
+
 
 @app.route("/iniciar")
-def iniciar():
-    if not estado["ejecutando"]:
-        print(">>> Botón Iniciar presionado <<<")
-        estado["ejecutando"] = True
-        estado["hilo"] = threading.Thread(target=ejecutar_bucle)
-        estado["hilo"].start()
-    else:
-        print(">>> Ya se estaba ejecutando la automatización <<<")
-    return redirect("/")
+def iniciar_robot():
+    """Inicia el robot de automatización en un hilo separado"""
+    if sistema_estado["ejecutando"]:
+        return redirect(url_for('index'))
+
+    sistema_estado["ejecutando"] = True
+    sistema_estado["hilo"] = threading.Thread(target=ejecutar_robot_bucle, daemon=True)
+    sistema_estado["hilo"].start()
+
+    return redirect(url_for('index'))
+
 
 @app.route("/detener")
-def detener():
-    if estado["ejecutando"]:
-        print(">>> Botón Detener presionado <<<")
-        estado["ejecutando"] = False
-        # Solo detiene el flag, no mata el hilo de inmediato
-    return redirect("/")
+def detener_robot():
+    """Detiene el robot de automatización"""
+    sistema_estado["ejecutando"] = False
+    robot_state_manager.actualizar_estado_robot("detenido")
+
+    # Intentar detener la instancia si existe
+    if sistema_estado["instancia"]:
+        try:
+            # El bucle continuo debe chequear sistema_estado["ejecutando"]
+            # y terminar cuando sea False
+            pass
+        except:
+            pass
+
+    return redirect(url_for('index'))
+
+
+@app.route("/screenshots")
+def listar_screenshots():
+    """Lista los screenshots disponibles"""
+    carpeta = "screenshots_errores"
+    if not os.path.exists(carpeta):
+        return jsonify([])
+
+    screenshots = []
+    for archivo in os.listdir(carpeta):
+        if archivo.endswith('.png'):
+            screenshots.append({
+                'nombre': archivo,
+                'ruta': f'/screenshot/{archivo}'
+            })
+
+    return jsonify(screenshots)
+
+
+@app.route("/screenshot/<nombre>")
+def ver_screenshot(nombre):
+    """Sirve un screenshot específico"""
+    from flask import send_from_directory
+    return send_from_directory('screenshots_errores', nombre)
+
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=5050)
+    print("\n" + "="*60)
+    print("🚀 PANEL WEB ALSUA - INICIANDO")
+    print("="*60)
+    print("📡 Servidor: http://localhost:5050")
+    print("🌐 Acceso local: http://127.0.0.1:5050")
+    print("📱 Acceso red: http://<IP_COMPUTADORA>:5050")
+    print("="*60 + "\n")
+
+    app.run(host='0.0.0.0', port=5050, debug=True, use_reloader=False)
