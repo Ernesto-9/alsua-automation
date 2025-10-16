@@ -230,7 +230,19 @@ class GMTransportAutomation:
                         continue
 
                 except Exception as e:
-                    logger.error(f"❌ Error en intento {intento + 1}: {e}")
+                    # Manejar alerts de "Valor no válido" que bloquean la página
+                    try:
+                        alert = self.driver.switch_to.alert
+                        alert_text = alert.text
+                        logger.warning(f"⚠️ Alert detectado y cerrando: '{alert_text}'")
+                        debug_logger.warning(f"Alert en {id_input}: {alert_text}")
+                        alert.accept()  # Cerrar el alert
+                        logger.info("✅ Alert cerrado - reintentando")
+                        time.sleep(0.5)
+                    except:
+                        pass  # No había alert
+
+                    logger.error(f"❌ Error en intento {intento + 1}: {str(e)[:100]}")
                     debug_logger.error(f"Error llenando fecha {id_input} intento {intento + 1}: {e}")
                     time.sleep(1)
                     continue
