@@ -213,7 +213,9 @@ def actualizar_cola(lista_viajes):
 
 def verificar_si_trabado():
     """
-    Verifica si el robot está trabado (más de 15 minutos sin actividad mientras procesa)
+    Verifica si el robot está trabado en dos escenarios:
+    1. Estado "procesando": más de 15 minutos sin actividad
+    2. Estado "ejecutando": más de 20 minutos sin procesar viajes cuando hay pendientes
 
     Returns:
         tuple: (trabado: bool, mensaje: str o None)
@@ -223,28 +225,39 @@ def verificar_si_trabado():
     estado = _leer_estado()
     robot = estado['robots']['robot_1']
 
-    # Solo verificar si está en estado "procesando"
-    if robot['estado'] != 'procesando':
-        return False, None
-
     try:
         # Calcular tiempo sin actividad
         ultima_act = datetime.fromisoformat(robot['ultima_actividad'])
         ahora = datetime.now()
         minutos_sin_actividad = (ahora - ultima_act).total_seconds() / 60
 
-        # Si han pasado más de 15 minutos sin actividad
-        if minutos_sin_actividad > 15:
-            viaje = robot.get('viaje_actual', {})
-            prefactura = viaje.get('prefactura', 'DESCONOCIDO')
-            fase = viaje.get('fase', 'DESCONOCIDA')
+        # ESCENARIO 1: Robot procesando un viaje pero sin actividad por 15+ minutos
+        if robot['estado'] == 'procesando':
+            if minutos_sin_actividad > 15:
+                viaje = robot.get('viaje_actual', {})
+                prefactura = viaje.get('prefactura', 'DESCONOCIDO')
+                fase = viaje.get('fase', 'DESCONOCIDA')
 
-            mensaje = (
-                f"Robot trabado procesando {prefactura} - "
-                f"Fase: {fase} - "
-                f"{int(minutos_sin_actividad)} minutos sin actividad"
-            )
-            return True, mensaje
+                mensaje = (
+                    f"Robot trabado procesando {prefactura} - "
+                    f"Fase: {fase} - "
+                    f"{int(minutos_sin_actividad)} minutos sin actividad"
+                )
+                return True, mensaje
+
+        # ESCENARIO 2: Robot "buscando viajes" pero hay pendientes y no los procesa
+        elif robot['estado'] == 'ejecutando':
+            cola = estado.get('cola', {})
+            viajes_pendientes = len(cola.get('viajes', []))
+
+            # Si hay viajes pendientes pero lleva 20+ minutos sin actividad
+            if viajes_pendientes > 0 and minutos_sin_actividad > 20:
+                mensaje = (
+                    f"Robot no procesa viajes - "
+                    f"{viajes_pendientes} viaje(s) pendiente(s) - "
+                    f"{int(minutos_sin_actividad)} minutos sin actividad"
+                )
+                return True, mensaje
 
     except Exception as e:
         print(f"⚠️ Error al verificar si trabado: {e}")

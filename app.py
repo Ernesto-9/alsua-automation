@@ -130,8 +130,8 @@ if __name__ == "__main__":
     print("🚀 PANEL WEB ALSUA - INICIANDO")
     print("="*60)
     print("📡 Servidor: http://localhost:5051")
-    print("🌐 Acceso local: http://127.0.0.1:5050")
-    print("📱 Acceso red: http://<IP_COMPUTADORA>:5050")
+    print("🌐 Acceso local: http://127.0.0.1:5051")
+    print("📱 Acceso red: http://<IP_COMPUTADORA>:5051")
     print("="*60 + "\n")
 
     app.run(host='0.0.0.0', port=5051, debug=True, use_reloader=False)
