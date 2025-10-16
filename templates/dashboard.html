@@ -150,9 +150,12 @@
 
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
             margin-bottom: 24px;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
         }
 
         .stat-card {
@@ -266,6 +269,7 @@
 
             .stats-grid {
                 grid-template-columns: 1fr;
+                max-width: 100%;
             }
 
             table {
@@ -313,10 +317,6 @@
         </div>
 
         <div class="stats-grid">
-            <div class="stat-card pending">
-                <h3>Prefacturas Pendientes</h3>
-                <div class="stat-value" id="statPendientes">0</div>
-            </div>
             <div class="stat-card success">
                 <h3>Total Facturadas</h3>
                 <div class="stat-value" id="statExitosos">0</div>
@@ -324,25 +324,6 @@
             <div class="stat-card error">
                 <h3>Total con Error</h3>
                 <div class="stat-value" id="statFallidos">0</div>
-            </div>
-        </div>
-
-        <div class="table-container">
-            <h2>📋 Cola de Viajes Pendientes</h2>
-            <div class="table-wrapper">
-                <table id="tablaCola">
-                    <thead>
-                        <tr>
-                            <th>Prefactura</th>
-                            <th>Fecha</th>
-                            <th>Placa Tractor</th>
-                            <th>Placa Remolque</th>
-                        </tr>
-                    </thead>
-                    <tbody id="colaBody">
-                        <tr><td colspan="4" class="empty-state">No hay viajes pendientes</td></tr>
-                    </tbody>
-                </table>
             </div>
         </div>
 
@@ -427,24 +408,8 @@
                 }
 
                 // Actualizar estadísticas
-                document.getElementById('statPendientes').textContent = data.estadisticas.viajes_pendientes;
                 document.getElementById('statExitosos').textContent = data.estadisticas.viajes_exitosos;
                 document.getElementById('statFallidos').textContent = data.estadisticas.viajes_fallidos;
-
-                // Actualizar tabla de cola
-                const colaBody = document.getElementById('colaBody');
-                if (data.cola.viajes && data.cola.viajes.length > 0) {
-                    colaBody.innerHTML = data.cola.viajes.map(v => `
-                        <tr>
-                            <td>${v.prefactura || '--'}</td>
-                            <td>${v.fecha || '--'}</td>
-                            <td>${v.placa_tractor || '--'}</td>
-                            <td>${v.placa_remolque || '--'}</td>
-                        </tr>
-                    `).join('');
-                } else {
-                    colaBody.innerHTML = '<tr><td colspan="4" class="empty-state">No hay viajes pendientes</td></tr>';
-                }
 
                 // Actualizar tabla de exitosos
                 const exitososBody = document.getElementById('exitososBody');
