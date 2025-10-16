@@ -282,12 +282,86 @@ class ProcesadorLlegadaFactura:
             # Cambiar tipo de documento a "FACTURA CFDI - W" (valor 7)
             try:
                 logger.info("📄 Cambiando tipo de documento a 'FACTURA CFDI - W'...")
+                debug_logger.info("Intentando cambiar tipo de documento a FACTURA CFDI - W")
+
+                # Esperar a que el combo esté disponible
                 tipo_doc_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATTIPOSDOCUMENTOS"))))
-                tipo_doc_select.select_by_value("7")  # FACTURA CFDI - W
-                time.sleep(0.5)
-                logger.info("✅ Tipo de documento 'FACTURA CFDI - W' seleccionado")
+
+                # LOGGING: Mostrar todas las opciones disponibles
+                opciones_disponibles = [(opt.get_attribute('value'), opt.text) for opt in tipo_doc_select.options]
+                logger.info(f"📋 Opciones disponibles en combo tipo documento:")
+                for i, (valor, texto) in enumerate(opciones_disponibles, 1):
+                    logger.info(f"   {i}. valor='{valor}' | texto='{texto}'")
+                debug_logger.info(f"Opciones combo tipo documento: {opciones_disponibles}")
+
+                # Mostrar selección actual (por defecto)
+                seleccionado_actual = tipo_doc_select.first_selected_option
+                logger.info(f"🔍 Actualmente seleccionado: '{seleccionado_actual.text}' (valor: {seleccionado_actual.get_attribute('value')})")
+
+                # 🔴 PUNTO DE PAUSA PARA VERIFICACIÓN
+                # Crear archivo de señal de pausa
+                import os
+                archivo_pausa = "pausa_tipo_documento.txt"
+                with open(archivo_pausa, 'w') as f:
+                    f.write("PAUSADO - Borra este archivo para continuar\n")
+                    f.write(f"Opciones disponibles:\n")
+                    for i, (valor, texto) in enumerate(opciones_disponibles, 1):
+                        f.write(f"  {i}. valor='{valor}' | texto='{texto}'\n")
+
+                logger.info("=" * 70)
+                logger.info("⏸️  SISTEMA PAUSADO PARA VERIFICACIÓN")
+                logger.info(f"⏸️  Verifica manualmente que el combo tiene la opción correcta")
+                logger.info(f"⏸️  Para CONTINUAR: Borra el archivo '{archivo_pausa}'")
+                logger.info("=" * 70)
+                debug_logger.info(f"Sistema pausado - esperando eliminación de {archivo_pausa}")
+
+                # Esperar a que borren el archivo para continuar
+                while os.path.exists(archivo_pausa):
+                    time.sleep(2)  # Verificar cada 2 segundos
+
+                logger.info("▶️  Continuando automatización...")
+                debug_logger.info("Reanudando automatización después de pausa")
+
+                # Intentar seleccionar por valor 7 (FACTURA CFDI - W)
+                tipo_doc_select.select_by_value("7")
+                time.sleep(1)
+
+                # VERIFICAR que se seleccionó correctamente
+                seleccionado = tipo_doc_select.first_selected_option
+                valor_seleccionado = seleccionado.get_attribute('value')
+                texto_seleccionado = seleccionado.text
+
+                logger.info(f"✅ Tipo de documento seleccionado: '{texto_seleccionado}' (valor: {valor_seleccionado})")
+                debug_logger.info(f"Tipo documento seleccionado: {texto_seleccionado} (valor: {valor_seleccionado})")
+
+                # VALIDAR que contenga "W"
+                if "W" not in texto_seleccionado.upper():
+                    logger.error(f"⚠️ ADVERTENCIA: Se seleccionó '{texto_seleccionado}' pero se esperaba 'FACTURA CFDI - W'")
+                    debug_logger.error(f"Tipo documento incorrecto: {texto_seleccionado} - Se esperaba con 'W'")
+
+                    # Intentar buscar por texto que contenga "W"
+                    logger.info("🔄 Intentando seleccionar por texto que contenga 'W'...")
+                    for option in tipo_doc_select.options:
+                        if "W" in option.text.upper() and "FACTURA" in option.text.upper():
+                            option_value = option.get_attribute('value')
+                            logger.info(f"🎯 Encontrada opción: '{option.text}' (valor: {option_value})")
+                            tipo_doc_select.select_by_value(option_value)
+                            time.sleep(1)
+
+                            # Verificar de nuevo
+                            seleccionado_nuevo = tipo_doc_select.first_selected_option
+                            logger.info(f"✅ Ahora seleccionado: '{seleccionado_nuevo.text}'")
+                            debug_logger.info(f"Selección corregida a: {seleccionado_nuevo.text}")
+                            break
+                    else:
+                        logger.error("❌ No se encontró opción con 'FACTURA' y 'W'")
+                        debug_logger.error("No se encontró opción de factura con W")
+                        return False
+
             except Exception as e:
                 logger.error(f"❌ Error al seleccionar tipo de documento: {e}")
+                debug_logger.error(f"Error seleccionando tipo documento: {e}")
+                debug_logger.error(f"Traceback: {traceback.format_exc()}")
                 return False
             
             # Hacer clic en "Aceptar" para confirmar la facturación
