@@ -292,14 +292,15 @@ class PDFExtractor:
                         break
             
             # NUEVO: Buscar Número de Factura
+            # ACTUALIZADO: PyPDF2 extrae texto concatenado en orden inverso
             numero_factura = None
-            # Buscar lo que está entre "FACTURA" y "Folio Fiscal"
-            # Ejemplos: "W 160562", "CORP 2156"
             factura_patterns = [
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})\s*[\r\n]+\s*Folio\s+Fiscal",  # FACTURA\nCORP 2156\nFolio Fiscal
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})",                              # FACTURA\nCORP 2156
-                r"FACTURA\s+([A-Z]+\s+\d{4,6})",                                        # FACTURA CORP 2156 (con espacio)
-                r"(?:FACTURA[^\w]*)?([A-Z]+\s+\d{4,6})"                                 # Patrón flexible
+                # Formato actual: FolioFiscalCORP 2157FACTURA (concatenado)
+                r"FolioFiscal([A-Z]+\s+\d{4,6})FACTURA",        # FolioFiscalCORP 2157FACTURA
+                r"FolioFiscal([A-Z]+\d{4,6})FACTURA",           # Sin espacio
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})\s*[\r\n]+\s*Folio\s+Fiscal",  # Formato visual
+                r"FolioFiscal\s*([A-Z]+\s+\d{4,6})",            # Después de FolioFiscal
+                r"Folio\s+Fiscal([A-Z]+\s+\d{4,6})"             # Formato legacy
             ]
             
             for pattern in factura_patterns:
@@ -586,17 +587,24 @@ class PDFExtractor:
         try:
             logger.info("🔍 Buscando número de factura en el texto...")
             
-            # Patrones para capturar número de factura entre "FACTURA" y "Folio Fiscal"
-            # Ejemplos: "W 160562", "CORP 2156", etc.
+            # PATRONES ACTUALIZADOS: PyPDF2 extrae texto en orden inverso concatenado
+            # Formato real extraído: "FolioFiscalCORP 2157FACTURA"
+            # El número está ENTRE "FolioFiscal" y "FACTURA"
             patrones_factura = [
-                # PATRÓN PRINCIPAL: Entre FACTURA y Folio Fiscal
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})\s*[\r\n]+\s*Folio\s+Fiscal",  # FACTURA\nCORP 2156\nFolio Fiscal
-                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})",                              # FACTURA\nCORP 2156 (más flexible)
+                # PATRÓN 1: Texto concatenado - entre FolioFiscal y FACTURA (formato actual)
+                r"FolioFiscal([A-Z]+\s+\d{4,6})FACTURA",        # FolioFiscalCORP 2157FACTURA
 
-                # Patrones alternativos por si el formato cambia
-                r"Folio\s+Fiscal([A-Z]+\s+\d{4,6})",     # FolioFiscalW 162390 (pegado)
-                r"FolioFiscal([A-Z]+\s+\d{4,6})",        # FolioFiscalW 162390
-                r"(?<=FACTURA\s)([A-Z]+\s+\d{4,6})"      # Después de FACTURA con espacio
+                # PATRÓN 2: Variación sin espacio en el número
+                r"FolioFiscal([A-Z]+\d{4,6})FACTURA",           # FolioFiscalCORP2157FACTURA
+
+                # PATRÓN 3: Con saltos de línea (formato visual esperado)
+                r"FACTURA\s*[\r\n]+\s*([A-Z]+\s+\d{4,6})\s*[\r\n]+\s*Folio\s+Fiscal",
+
+                # PATRÓN 4: Después de FolioFiscal (más genérico)
+                r"FolioFiscal\s*([A-Z]+\s+\d{4,6})",
+
+                # PATRÓN 5: Formato legacy (W 160562)
+                r"Folio\s+Fiscal([A-Z]+\s+\d{4,6})"
             ]
             
             for patron in patrones_factura:
