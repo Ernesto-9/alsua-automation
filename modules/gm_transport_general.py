@@ -154,44 +154,97 @@ class GMTransportAutomation:
             return None, None, "ERROR_LECTURA_CSV"
     
     def llenar_fecha(self, id_input, fecha_valor):
-        """Llena un campo de fecha de forma robusta"""
+        """
+        FUNCIÓN MEJORADA V2: Llena fecha usando JavaScript para EVITAR abrir calendarios
+
+        Args:
+            id_input: ID del campo de fecha
+            fecha_valor: Fecha en formato DD/MM/YYYY
+
+        Returns:
+            bool: True si se insertó correctamente, False si falló
+        """
         try:
             logger.info(f"Llenando {id_input} con fecha {fecha_valor}")
-            
+            debug_logger.info(f"Llenando fecha {id_input} con valor {fecha_valor}")
+
+            # Verificar que el elemento existe
             try:
                 elemento_existe = self.driver.find_element(By.ID, id_input)
             except Exception as e:
                 logger.error(f"Elemento {id_input} NO ENCONTRADO: {e}")
+                debug_logger.error(f"Campo {id_input} no encontrado: {e}")
                 return False
-            
-            campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
-            
-            valor_actual = campo.get_attribute("value")
-            
-            campo.click()
-            time.sleep(0.3)
-            campo.click()
-            time.sleep(0.2)
-            
-            campo.send_keys(Keys.HOME)
-            for _ in range(10):
-                campo.send_keys(Keys.DELETE)
-                
-            if valor_actual and " " in valor_actual:
-                hora = valor_actual.split(" ")[1]
-            else:
+
+            # Obtener valor actual para extraer la hora (si existe)
+            try:
+                valor_actual = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
+                if valor_actual and " " in valor_actual:
+                    hora = valor_actual.split(" ")[1]
+                else:
+                    hora = "14:00"
+            except:
                 hora = "14:00"
-                
+
+            # Construir nuevo valor con fecha y hora
             nuevo_valor = f"{fecha_valor} {hora}"
-            campo.send_keys(nuevo_valor)
-            time.sleep(0.3)
-            
-            valor_final = campo.get_attribute("value")
-            logger.info(f"Fecha insertada en {id_input}: {valor_final}")
-            return True
-            
+
+            # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
+            for intento in range(3):
+                try:
+                    logger.info(f"Intento {intento + 1}/3 de llenar fecha con JavaScript")
+
+                    # Usar JavaScript directo para llenar el campo SIN abrirlo
+                    script = f"""
+                    var campo = document.getElementById('{id_input}');
+                    if (campo) {{
+                        campo.value = '{nuevo_valor}';
+                        campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        campo.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                        return true;
+                    }}
+                    return false;
+                    """
+
+                    resultado = self.driver.execute_script(script)
+
+                    if not resultado:
+                        logger.warning(f"Campo {id_input} no encontrado en intento {intento + 1}")
+                        time.sleep(1)
+                        continue
+
+                    # Esperar un momento para que se procese
+                    time.sleep(0.5)
+
+                    # Verificar que se llenó correctamente
+                    valor_final = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
+
+                    if valor_final and fecha_valor in valor_final:
+                        logger.info(f"✅ Fecha insertada correctamente con JavaScript: {valor_final}")
+                        debug_logger.info(f"✅ Fecha {id_input} = {valor_final}")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ Verificación falló. Esperado: {nuevo_valor}, Actual: {valor_final}")
+                        time.sleep(1)
+                        continue
+
+                except Exception as e:
+                    logger.error(f"❌ Error en intento {intento + 1}: {e}")
+                    debug_logger.error(f"Error llenando fecha {id_input} intento {intento + 1}: {e}")
+                    time.sleep(1)
+                    continue
+
+            # Si llegamos aquí, fallaron todos los intentos
+            logger.error(f"❌ ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
+            debug_logger.error(f"FALLO CRÍTICO llenando fecha {id_input} con valor {fecha_valor}")
+            return False
+
         except Exception as e:
-            logger.error(f"Error al llenar fecha en {id_input}: {e}")
+            logger.error(f"❌ Error en llenar_fecha: {e}")
+            debug_logger.error(f"Excepción en llenar_fecha para {id_input}: {e}")
+            import traceback
+            debug_logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def llenar_campo_texto(self, id_input, valor, descripcion=""):
