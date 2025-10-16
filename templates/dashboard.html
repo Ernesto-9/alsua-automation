@@ -204,6 +204,30 @@
             margin-bottom: 16px;
         }
 
+        .table-wrapper {
+            max-height: 400px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -305,50 +329,56 @@
 
         <div class="table-container">
             <h2>📋 Cola de Viajes Pendientes</h2>
-            <table id="tablaCola">
-                <thead>
-                    <tr>
-                        <th>Prefactura</th>
-                        <th>Fecha</th>
-                        <th>Placa Tractor</th>
-                        <th>Placa Remolque</th>
-                    </tr>
-                </thead>
-                <tbody id="colaBody">
-                    <tr><td colspan="4" class="empty-state">No hay viajes pendientes</td></tr>
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table id="tablaCola">
+                    <thead>
+                        <tr>
+                            <th>Prefactura</th>
+                            <th>Fecha</th>
+                            <th>Placa Tractor</th>
+                            <th>Placa Remolque</th>
+                        </tr>
+                    </thead>
+                    <tbody id="colaBody">
+                        <tr><td colspan="4" class="empty-state">No hay viajes pendientes</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="table-container">
             <h2>✅ Viajes Exitosos Recientes</h2>
-            <table id="tablaExitosos">
-                <thead>
-                    <tr>
-                        <th>Prefactura</th>
-                        <th>Fecha/Hora</th>
-                    </tr>
-                </thead>
-                <tbody id="exitososBody">
-                    <tr><td colspan="2" class="empty-state">No hay viajes exitosos</td></tr>
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table id="tablaExitosos">
+                    <thead>
+                        <tr>
+                            <th>Prefactura</th>
+                            <th>Fecha/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody id="exitososBody">
+                        <tr><td colspan="2" class="empty-state">No hay viajes exitosos</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="table-container">
             <h2>❌ Viajes Fallidos Recientes</h2>
-            <table id="tablaFallidos">
-                <thead>
-                    <tr>
-                        <th>Prefactura</th>
-                        <th>Motivo</th>
-                        <th>Fecha/Hora</th>
-                    </tr>
-                </thead>
-                <tbody id="fallidosBody">
-                    <tr><td colspan="3" class="empty-state">No hay viajes fallidos</td></tr>
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table id="tablaFallidos">
+                    <thead>
+                        <tr>
+                            <th>Prefactura</th>
+                            <th>Motivo</th>
+                            <th>Fecha/Hora</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fallidosBody">
+                        <tr><td colspan="3" class="empty-state">No hay viajes fallidos</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -364,7 +394,7 @@
                 statusDot.className = `status-dot ${data.robot.estado}`;
 
                 const estadoTexto = {
-                    'ejecutando': 'Ejecutando',
+                    'ejecutando': 'Buscando viaje',
                     'detenido': 'Detenido',
                     'procesando': 'Procesando Viaje'
                 };

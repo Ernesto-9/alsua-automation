@@ -451,8 +451,29 @@ class AlsuaMailAutomation:
                     return 'EXITOSO', ''
                 else:
                     logger.error(f"Error en automatización GM: {prefactura}")
-                    robot_state_manager.incrementar_fallidos(prefactura, "Error en automatización GM")
-                    debug_logger.log_viaje_fallo(prefactura, "gm_transport_general", "Error en automatización")
+
+                    # Buscar último error en debug log para mensaje más descriptivo
+                    mensaje_error = "Error durante creación del viaje"
+                    try:
+                        with open('debug.log', 'r', encoding='utf-8') as f:
+                            ultimas_lineas = f.readlines()[-50:]
+                            for linea in reversed(ultimas_lineas):
+                                if prefactura in linea and ('FALLO CRÍTICO' in linea or 'ERROR CRÍTICO' in linea):
+                                    # Extraer descripción del error
+                                    if 'EDT_' in linea:
+                                        campo = linea.split('EDT_')[1].split()[0]
+                                        mensaje_error = f"Error llenando campo {campo}"
+                                    elif 'Determinante' in linea and 'no encontrada' in linea:
+                                        det = linea.split('Determinante')[1].split()[0]
+                                        mensaje_error = f"Determinante {det} no encontrada en CSV"
+                                    elif 'Alert' in linea:
+                                        mensaje_error = "Alert 'Valor no válido' bloqueó formulario"
+                                    break
+                    except:
+                        pass
+
+                    robot_state_manager.incrementar_fallidos(prefactura, mensaje_error)
+                    debug_logger.log_viaje_fallo(prefactura, "gm_transport_general", mensaje_error)
                     return 'VIAJE_FALLIDO', 'gm_transport_general'
                     
             except Exception as automation_error:
