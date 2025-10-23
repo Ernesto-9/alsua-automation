@@ -292,51 +292,15 @@ class ProcesadorLlegadaFactura:
                 logger.info(f"🔍 Tipo documento por defecto: '{seleccionado_actual.text}' (valor: {seleccionado_actual.get_attribute('value')})")
                 debug_logger.info(f"Tipo documento por defecto: {seleccionado_actual.text}")
 
-                # Buscar opción con "FACTURA" y "W"
-                opcion_encontrada = None
-                for option in tipo_doc_select.options:
-                    if "W" in option.text.upper() and "FACTURA" in option.text.upper():
-                        opcion_encontrada = option
-                        break
+                # Seleccionar directamente "FACTURA CFDI - W" (valor 8)
+                logger.info("🎯 Seleccionando 'FACTURA CFDI - W' (valor: 8)...")
+                tipo_doc_select.select_by_value("8")
+                time.sleep(1)
 
-                # Si encontró la opción con "W", mostrar y pausar para verificación
-                if opcion_encontrada:
-                    option_value = opcion_encontrada.get_attribute('value')
-                    logger.info("=" * 70)
-                    logger.info(f"🎯 Opción encontrada: '{opcion_encontrada.text}' (valor: {option_value})")
-                    logger.info("⏸️  PAUSA PARA VERIFICACIÓN")
-                    logger.info(f"⏸️  Revisa la pantalla - ¿Es correcta esta opción?")
-                    logger.info(f"⏸️  Presiona ENTER para continuar y seleccionar...")
-                    logger.info("=" * 70)
-
-                    debug_logger.info(f"Pausa - Opción encontrada: {opcion_encontrada.text} (valor: {option_value})")
-
-                    # PAUSAR - Esperar ENTER del usuario
-                    input()
-
-                    logger.info("▶️  Continuando - Seleccionando opción...")
-                    debug_logger.info("Reanudando - Usuario confirmó continuar")
-
-                    # Seleccionar la opción
-                    tipo_doc_select.select_by_value(option_value)
-                    time.sleep(1)
-
-                    # Verificar selección
-                    seleccionado = tipo_doc_select.first_selected_option
-                    logger.info(f"✅ Tipo de documento seleccionado: '{seleccionado.text}'")
-                    debug_logger.info(f"Tipo documento seleccionado exitosamente: {seleccionado.text} (valor: {option_value})")
-
-                else:
-                    # No encontró opción con "W" - Mostrar todas las opciones disponibles
-                    logger.error("❌ No se encontró opción con 'FACTURA' y 'W'")
-                    logger.error("📋 Opciones disponibles en combo tipo documento:")
-
-                    opciones_disponibles = [(opt.get_attribute('value'), opt.text) for opt in tipo_doc_select.options]
-                    for i, (valor, texto) in enumerate(opciones_disponibles, 1):
-                        logger.error(f"   {i}. valor='{valor}' | texto='{texto}'")
-
-                    debug_logger.error(f"No se encontró opción de factura con W. Opciones: {opciones_disponibles}")
-                    return False
+                # Verificar selección
+                seleccionado = tipo_doc_select.first_selected_option
+                logger.info(f"✅ Tipo de documento seleccionado: '{seleccionado.text}' (valor: 8)")
+                debug_logger.info(f"Tipo documento seleccionado: {seleccionado.text} (valor: 8)")
 
             except Exception as e:
                 logger.error(f"❌ Error al seleccionar tipo de documento: {e}")
