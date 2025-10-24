@@ -192,6 +192,18 @@ class GMTransportAutomation:
             # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
             for intento in range(3):
                 try:
+                    # PRIMERO: Cerrar cualquier alert que pueda estar bloqueando
+                    try:
+                        alert = self.driver.switch_to.alert
+                        alert_text = alert.text
+                        logger.warning(f"⚠️ Alert detectado ANTES de llenar campo: '{alert_text}' - Cerrando...")
+                        debug_logger.warning(f"Alert previo en {id_input}: {alert_text}")
+                        alert.accept()
+                        logger.info("✅ Alert previo cerrado")
+                        time.sleep(0.3)
+                    except:
+                        pass  # No había alert, continuamos normal
+
                     logger.info(f"Intento {intento + 1}/3 de llenar fecha con JavaScript")
 
                     # Usar JavaScript directo para llenar el campo SIN abrirlo
