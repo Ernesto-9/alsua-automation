@@ -54,47 +54,39 @@ class AlsuaMailAutomation:
         try:
             if not os.path.exists(self.carpeta_descarga):
                 os.makedirs(self.carpeta_descarga)
-                logger.info(f"Carpeta creada: {self.carpeta_descarga}")
-            else:
-                logger.info(f"Carpeta existe: {self.carpeta_descarga}")
-                
+
             test_file = os.path.join(self.carpeta_descarga, "test_permisos.tmp")
             try:
                 with open(test_file, 'w') as f:
                     f.write("test")
                 os.remove(test_file)
-                logger.info("Permisos de escritura verificados")
             except Exception as e:
                 logger.error(f"Error de permisos en carpeta: {e}")
                 self.carpeta_descarga = os.path.join(os.path.expanduser("~"), "Downloads", "alsua_archivos")
                 os.makedirs(self.carpeta_descarga, exist_ok=True)
-                logger.info(f"Usando carpeta alternativa: {self.carpeta_descarga}")
-                
+                logger.warning(f"Usando carpeta alternativa: {self.carpeta_descarga}")
+
         except Exception as e:
             logger.error(f"Error al crear carpeta: {e}")
             self.carpeta_descarga = os.path.join(os.path.expanduser("~"), "Downloads", "alsua_archivos")
             os.makedirs(self.carpeta_descarga, exist_ok=True)
-            logger.info(f"Carpeta fallback: {self.carpeta_descarga}")
+            logger.warning(f"Carpeta fallback: {self.carpeta_descarga}")
     
     def inicializar_com(self):
         try:
             if not self.com_inicializado:
-                logger.info("Inicializando COM para thread actual...")
                 pythoncom.CoInitialize()
                 self.com_inicializado = True
-                logger.info("COM inicializado exitosamente")
                 return True
         except Exception as e:
             logger.error(f"Error inicializando COM: {e}")
             return False
-    
+
     def limpiar_com(self):
         try:
             if self.com_inicializado:
-                logger.info("Limpiando inicialización COM...")
                 pythoncom.CoUninitialize()
                 self.com_inicializado = False
-                logger.info("COM limpiado exitosamente")
         except Exception as e:
             logger.warning(f"Error limpiando COM: {e}")
     
@@ -105,13 +97,11 @@ class AlsuaMailAutomation:
                 return False
             
             viaje_existente = viajes_log.verificar_viaje_existe(prefactura)
-            
+
             if viaje_existente:
-                logger.info(f"Correo ya procesado (encontrado en CSV): {prefactura}")
-                logger.info(f"   Estatus en CSV: {viaje_existente.get('estatus')}")
-                logger.info(f"   Timestamp: {viaje_existente.get('timestamp')}")
+                logger.info(f"Correo duplicado: {prefactura} ({viaje_existente.get('estatus')} @ {viaje_existente.get('timestamp')})")
                 return True
-            
+
             return False
             
         except Exception as e:
@@ -239,15 +229,11 @@ class AlsuaMailAutomation:
                 resultado["prefactura"] = prefactura
                 resultado["fecha"] = self.convertir_fecha_formato(resultado.get("fecha"))
                 resultado["archivo_descargado"] = ruta_local
-                
-                logger.info("Viaje VACIO válido extraído:")
-                logger.info(f"   Prefactura: {resultado['prefactura']}")
-                logger.info(f"   Fecha: {resultado['fecha']}")
-                logger.info(f"   Placa Tractor: {resultado['placa_tractor']}")
-                logger.info(f"   Placa Remolque: {resultado['placa_remolque']}")
-                logger.info(f"   Determinante: {resultado['clave_determinante']}")
-                logger.info(f"   Importe: ${resultado['importe']}")
-                
+
+                logger.info(f"Viaje extraído: {resultado['prefactura']} | "
+                           f"Fecha:{resultado['fecha']} | Tractor:{resultado['placa_tractor']} | "
+                           f"Remolque:{resultado['placa_remolque']} | Det:{resultado['clave_determinante']} | ${resultado['importe']}")
+
                 return resultado
                 
         except KeyboardInterrupt:
@@ -620,6 +606,10 @@ class AlsuaMailAutomation:
 
         try:
             contador_ciclos = 0
+            contador_sync_mysql = 0
+            ultimo_sync_mysql = time.time()
+            ultima_cant_viajes = -1  # Para tracking de cambios en cola
+
             while AlsuaMailAutomation.continuar_ejecutando:
                 # La variable de clase controla la ejecución
 
@@ -630,24 +620,31 @@ class AlsuaMailAutomation:
                     
                     viaje_registro = obtener_siguiente_viaje_cola()
 
-                    # Actualizar cola en estado_robots.json
+                    # Actualizar cola en estado_robots.json (solo si cambia)
                     try:
-                        stats = obtener_estadisticas_cola()
-                        if stats.get('total_viajes', 0) > 0:
-                            # Obtener lista de viajes pendientes para el panel
-                            from cola_viajes import leer_cola
-                            cola_actual = leer_cola()
-                            viajes_pendientes = [
-                                {
-                                    'prefactura': v.get('datos_viaje', {}).get('prefactura', 'N/A'),
-                                    'fecha': v.get('datos_viaje', {}).get('fecha', 'N/A'),
-                                    'placa_tractor': v.get('datos_viaje', {}).get('placa_tractor', 'N/A'),
-                                    'placa_remolque': v.get('datos_viaje', {}).get('placa_remolque', 'N/A')
-                                }
-                                for v in cola_actual.get('viajes', [])
-                                if v.get('estatus') in ['pendiente', 'procesando']
-                            ]
-                            robot_state_manager.actualizar_cola(viajes_pendientes)
+                        from cola_viajes import leer_cola
+                        cola_actual = leer_cola()
+                        viajes = cola_actual.get('viajes', [])
+                        cant_actual = len(viajes)
+
+                        # Solo actualizar si la cantidad cambió
+                        if cant_actual != ultima_cant_viajes:
+                            if cant_actual > 0:
+                                viajes_pendientes = [
+                                    {
+                                        'prefactura': v.get('datos_viaje', {}).get('prefactura', 'N/A'),
+                                        'fecha': v.get('datos_viaje', {}).get('fecha', 'N/A'),
+                                        'placa_tractor': v.get('datos_viaje', {}).get('placa_tractor', 'N/A'),
+                                        'placa_remolque': v.get('datos_viaje', {}).get('placa_remolque', 'N/A')
+                                    }
+                                    for v in viajes
+                                    if v.get('estado') in ['pendiente', 'procesando']
+                                ]
+                                robot_state_manager.actualizar_cola(viajes_pendientes)
+                            else:
+                                robot_state_manager.actualizar_cola([])
+
+                            ultima_cant_viajes = cant_actual
                     except:
                         pass
 
@@ -663,39 +660,51 @@ class AlsuaMailAutomation:
                         if resultado == 'EXITOSO':
                             marcar_viaje_exitoso_cola(viaje_id)
                             logger.info(f"Viaje {prefactura} COMPLETADO - removido de cola")
-                            logger.info("Esperando 1 minuto antes de continuar...")
+                            contador_sync_mysql += 1
                             time.sleep(60)
-                            
+
                         elif resultado == 'LOGIN_LIMIT':
                             registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
                             logger.warning(f"LOGIN LÍMITE - {prefactura} reintentará en 15 minutos")
-                            logger.info("Esperando 15 minutos por límite de usuarios...")
                             time.sleep(15 * 60)
-                            
+
                         elif resultado == 'DRIVER_CORRUPTO':
                             registrar_error_reintentable_cola(viaje_id, 'DRIVER_CORRUPTO', f'Driver corrupto en {modulo_error}')
                             logger.warning(f"DRIVER CORRUPTO - {prefactura} reintentará inmediatamente")
-                            
+
                         else:
                             motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                             marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
                             logger.error(f"{prefactura} FALLÓ EN: {modulo_error} - removido de cola")
-                            logger.info("Esperando 30 segundos después de viaje fallido...")
+                            contador_sync_mysql += 1
                             time.sleep(30)
+
+                        # Batch MySQL sync: cada 5 viajes o cada 10 minutos
+                        ahora = time.time()
+                        if contador_sync_mysql >= 5 or (ahora - ultimo_sync_mysql) > 600:
+                            from modules.mysql_simple import sincronizar_csv_a_mysql
+                            sincronizar_csv_a_mysql()
+                            contador_sync_mysql = 0
+                            ultimo_sync_mysql = ahora
                     
                     else:
-                        if mostrar_debug:
-                            logger.info("Cola vacía - buscando nuevos correos...")
-                        
                         viajes_encontrados = self.revisar_y_extraer_correos(limite_viajes=3)
-                        
+
                         if viajes_encontrados:
-                            logger.info("Nuevos viajes VACIO encontrados y agregados a cola")
+                            logger.info(f"Nuevos viajes agregados a cola: {viajes_encontrados}")
                         else:
-                            if mostrar_debug:
-                                logger.info("No se encontraron nuevos viajes VACIO")
                             time.sleep(10)
                     
+                    # Limpieza zombie automática cada 100 ciclos (~1 hora)
+                    if contador_ciclos % 100 == 0:
+                        try:
+                            from cola_viajes import limpiar_viajes_zombie
+                            eliminados = limpiar_viajes_zombie()
+                            if eliminados > 0:
+                                logger.warning(f"Limpieza zombie: {eliminados} viajes eliminados")
+                        except:
+                            pass
+
                     if contador_ciclos % 10 == 0:
                         try:
                             stats = obtener_estadisticas_cola()
@@ -717,6 +726,13 @@ class AlsuaMailAutomation:
             logger.info("Sistema detenido por usuario")
 
         finally:
+            # Sync final de MySQL antes de cerrar
+            try:
+                from modules.mysql_simple import sincronizar_csv_a_mysql
+                sincronizar_csv_a_mysql()
+            except:
+                pass
+
             # Marcar robot como detenido
             robot_state_manager.actualizar_estado_robot("detenido")
             debug_logger.info("Bucle continuo finalizado")

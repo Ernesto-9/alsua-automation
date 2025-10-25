@@ -185,24 +185,7 @@ class ViajesLogManager:
             with open(self.archivo_csv, 'a', newline='', encoding='utf-8') as f:
                 writer = csv.DictWriter(f, fieldnames=self.campos)
                 writer.writerow(registro)
-            
-            # SINCRONIZACIÓN AUTOMÁTICA CON MySQL
-            try:
-                from modules.mysql_simple import sincronizar_csv_a_mysql
-                resultado_sync = sincronizar_csv_a_mysql()
-                
-                if resultado_sync:
-                    exitosos = resultado_sync.get('exitosos', 0)
-                    fallidos = resultado_sync.get('fallidos', 0) 
-                    errores = resultado_sync.get('errores', 0)
-                    
-                    if exitosos > 0 or fallidos > 0:
-                        logger.info(f"Sincronización MySQL: {exitosos} exitosos, {fallidos} fallidos, {errores} errores")
-                    
-            except Exception as sync_error:
-                logger.warning(f"Error en sincronización MySQL: {sync_error}")
-                logger.info("El registro se procesará en la próxima sincronización manual")
-            
+
             # Log del registro en CSV
             estatus = registro['estatus']
             prefactura = registro['prefactura']

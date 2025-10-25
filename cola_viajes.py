@@ -47,27 +47,65 @@ class ColaViajes:
         try:
             datos = self._leer_cola()
             viajes_reseteados = 0
-            
+
             for viaje in datos.get("viajes", []):
                 if viaje.get("estado") == "procesando":
                     viaje["estado"] = "pendiente"
                     if "intentos" not in viaje:
                         viaje["intentos"] = 0
                     viajes_reseteados += 1
-                    
+
                     prefactura = viaje.get("datos_viaje", {}).get("prefactura", "DESCONOCIDA")
                     logger.warning(f"Viaje atascado reseteado: {prefactura}")
-            
+
             if viajes_reseteados > 0:
                 self._guardar_cola(datos)
                 logger.info(f"Total viajes reseteados: {viajes_reseteados}")
             else:
                 logger.info("No hay viajes atascados para resetear")
-            
+
             return viajes_reseteados
-            
+
         except Exception as e:
             logger.error(f"Error reseteando viajes atascados: {e}")
+            return 0
+
+    def limpiar_viajes_zombie(self):
+        """
+        Elimina SILENCIOSAMENTE de la cola los viajes que ya fueron procesados (zombie)
+        Un viaje zombie es aquel que está en cola_viajes.json pero ya existe en viajes_log.csv
+
+        Returns:
+            int: Número de viajes zombie eliminados
+        """
+        try:
+            from viajes_log import verificar_viaje_existe
+
+            datos = self._leer_cola()
+            viajes_originales = datos.get("viajes", [])
+            viajes_limpios = []
+            eliminados = 0
+
+            for viaje in viajes_originales:
+                prefactura = viaje.get("datos_viaje", {}).get("prefactura", "DESCONOCIDA")
+
+                # Verificar si el viaje ya existe en el log
+                if verificar_viaje_existe(prefactura):
+                    # Es un viaje zombie - eliminar silenciosamente
+                    eliminados += 1
+                else:
+                    # Viaje válido - mantener en cola
+                    viajes_limpios.append(viaje)
+
+            # Guardar cola limpia si hubo cambios
+            if eliminados > 0:
+                datos["viajes"] = viajes_limpios
+                self._guardar_cola(datos)
+
+            return eliminados
+
+        except Exception as e:
+            logger.error(f"Error limpiando viajes zombie: {e}")
             return 0
     
     def agregar_viaje(self, datos_viaje):
@@ -108,19 +146,19 @@ class ColaViajes:
     def obtener_siguiente_viaje(self):
         try:
             datos = self._leer_cola()
-            
+
             for viaje in datos.get("viajes", []):
                 if viaje.get("estado") == "pendiente":
                     viaje["estado"] = "procesando"
                     viaje["fecha_inicio_procesamiento"] = datetime.now().isoformat()
-                    
+
                     if self._guardar_cola(datos):
                         return viaje
                     else:
                         return None
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error obteniendo siguiente viaje: {e}")
             return None
@@ -238,6 +276,9 @@ cola_viajes = ColaViajes()
 def resetear_viajes_atascados():
     return cola_viajes.resetear_viajes_atascados()
 
+def limpiar_viajes_zombie():
+    return cola_viajes.limpiar_viajes_zombie()
+
 def agregar_viaje_a_cola(datos_viaje):
     return cola_viajes.agregar_viaje(datos_viaje)
 
@@ -255,6 +296,9 @@ def registrar_error_reintentable_cola(viaje_id, tipo_error, detalle):
 
 def obtener_estadisticas_cola():
     return cola_viajes.obtener_estadisticas()
+
+def leer_cola():
+    return cola_viajes._leer_cola()
 
 if __name__ == "__main__":
     print("Probando sistema de cola...")

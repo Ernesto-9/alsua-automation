@@ -100,6 +100,24 @@ def detener_robot():
     return redirect(url_for('index'))
 
 
+@app.route("/api/limpiar_zombies")
+def api_limpiar_zombies():
+    """Endpoint para limpiar viajes zombie manualmente"""
+    try:
+        from cola_viajes import limpiar_viajes_zombie
+        eliminados = limpiar_viajes_zombie()
+        return jsonify({
+            'success': True,
+            'eliminados': eliminados,
+            'mensaje': f'{eliminados} viaje(s) zombie eliminado(s)' if eliminados > 0 else 'No hay zombies'
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+
 @app.route("/screenshots")
 def listar_screenshots():
     """Lista los screenshots disponibles"""
