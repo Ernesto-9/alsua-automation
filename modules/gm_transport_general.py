@@ -153,20 +153,21 @@ class GMTransportAutomation:
             logger.error(f"Error al leer CSV: {e}")
             return None, None, "ERROR_LECTURA_CSV"
     
-    def llenar_fecha(self, id_input, fecha_valor):
+    def llenar_fecha(self, id_input, fecha_valor, incluir_hora=True):
         """
         FUNCIÓN MEJORADA V2: Llena fecha usando JavaScript para EVITAR abrir calendarios
 
         Args:
             id_input: ID del campo de fecha
             fecha_valor: Fecha en formato DD/MM/YYYY
+            incluir_hora: Si True, incluye hora (por defecto True para compatibilidad)
 
         Returns:
             bool: True si se insertó correctamente, False si falló
         """
         try:
-            logger.info(f"Llenando {id_input} con fecha {fecha_valor}")
-            debug_logger.info(f"Llenando fecha {id_input} con valor {fecha_valor}")
+            logger.info(f"Llenando {id_input} con fecha {fecha_valor} (hora={'sí' if incluir_hora else 'no'})")
+            debug_logger.info(f"Llenando fecha {id_input} con valor {fecha_valor}, incluir_hora={incluir_hora}")
 
             # Verificar que el elemento existe
             try:
@@ -176,18 +177,22 @@ class GMTransportAutomation:
                 debug_logger.error(f"Campo {id_input} no encontrado: {e}")
                 return False
 
-            # Obtener valor actual para extraer la hora (si existe)
-            try:
-                valor_actual = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
-                if valor_actual and " " in valor_actual:
-                    hora = valor_actual.split(" ")[1]
-                else:
+            # Determinar si incluir hora
+            if incluir_hora:
+                # Obtener valor actual para extraer la hora (si existe)
+                try:
+                    valor_actual = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
+                    if valor_actual and " " in valor_actual:
+                        hora = valor_actual.split(" ")[1]
+                    else:
+                        hora = "14:00"
+                except:
                     hora = "14:00"
-            except:
-                hora = "14:00"
-
-            # Construir nuevo valor con fecha y hora
-            nuevo_valor = f"{fecha_valor} {hora}"
+                # Construir nuevo valor con fecha y hora
+                nuevo_valor = f"{fecha_valor} {hora}"
+            else:
+                # Solo fecha, sin hora
+                nuevo_valor = fecha_valor
 
             # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
             for intento in range(3):
@@ -409,10 +414,11 @@ class GMTransportAutomation:
             exito, error = self.buscar_y_seleccionar_placa('tractor', placa_tractor)
             if not exito:
                 return False, error
-            
+
             fecha_valor = self.datos_viaje['fecha']
-            self.llenar_fecha("EDT_FECHACARGATRAYECTO", fecha_valor)
-            self.llenar_fecha("EDT_FECHAESTIMADACARGA", fecha_valor)
+            # Estos campos del modal NO aceptan hora, solo fecha
+            self.llenar_fecha("EDT_FECHACARGATRAYECTO", fecha_valor, incluir_hora=False)
+            self.llenar_fecha("EDT_FECHAESTIMADACARGA", fecha_valor, incluir_hora=False)
             
             logger.info("Esperando asignación automática de operador...")
             time.sleep(5)
