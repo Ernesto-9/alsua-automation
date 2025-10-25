@@ -606,6 +606,12 @@ class AlsuaMailAutomation:
         logger.info("   RESULTADO: 1 viaje a la vez, sin acumulación")
         logger.info("=" * 70)
 
+        # Resetear viajes atascados al inicio (previene bloqueos por cierre abrupto)
+        from cola_viajes import resetear_viajes_atascados
+        viajes_reseteados = resetear_viajes_atascados()
+        if viajes_reseteados > 0:
+            logger.warning(f"⚠️ Se resetearon {viajes_reseteados} viajes atascados al inicio")
+
         # Marcar robot como ejecutando
         robot_state_manager.actualizar_estado_robot("ejecutando")
         debug_logger.info("Iniciando bucle continuo de automatización")

@@ -664,14 +664,36 @@ def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
         elif resultado:
             logger.info(f"✅ VIAJE {prefactura} PROCESADO: Salida completada exitosamente")
         else:  # resultado == False - CUALQUIER ERROR
-            logger.error(f"❌ VIAJE {prefactura} FALLÓ: Error en proceso de salida")
-            
-            # NUEVO: Registrar error genérico en CSV para CUALQUIER fallo
+            # Intentar extraer detalles del error del debug.log
+            detalle_error = "Error en proceso de salida"
+            try:
+                with open('debug.log', 'r', encoding='utf-8') as f:
+                    ultimas_lineas = f.readlines()[-30:]
+                    for linea in reversed(ultimas_lineas):
+                        if prefactura in linea:
+                            if 'FALLO CRÍTICO' in linea or 'ERROR' in linea:
+                                # Extraer descripción del error
+                                if 'BTN_' in linea or 'EDT_' in linea:
+                                    elemento = linea.split('BTN_')[1].split()[0] if 'BTN_' in linea else linea.split('EDT_')[1].split()[0]
+                                    detalle_error = f"Error en salida - Elemento {elemento} no accesible"
+                                elif 'not clickable' in linea:
+                                    detalle_error = "Error en salida - Elemento no clickable"
+                                elif 'Timeout' in linea:
+                                    detalle_error = "Error en salida - Timeout esperando elemento"
+                                elif 'Alert' in linea:
+                                    detalle_error = "Error en salida - Alert bloqueó el proceso"
+                                break
+            except:
+                pass  # Si no se puede leer debug.log, usar mensaje genérico
+
+            logger.error(f"❌ VIAJE {prefactura} FALLÓ: {detalle_error}")
+
+            # Registrar error con detalles específicos en CSV
             if datos_viaje:
                 try:
                     log_viaje_fallido(
                         prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
-                        motivo_fallo="Error en proceso de salida",  # MENSAJE ACORTADO
+                        motivo_fallo=detalle_error,
                         determinante=datos_viaje.get('clave_determinante', ''),
                         fecha_viaje=datos_viaje.get('fecha', ''),
                         placa_tractor=datos_viaje.get('placa_tractor', ''),
@@ -686,14 +708,16 @@ def procesar_salida_viaje(driver, datos_viaje=None, configurar_filtros=True):
         return resultado
         
     except Exception as e:
-        logger.error(f"❌ Error en procesar_salida_viaje: {e}")
-        
-        # NUEVO: También registrar errores de excepción general
+        # Crear mensaje de error específico con la excepción
+        error_detallado = f"Error en salida - {str(e)[:100]}"
+        logger.error(f"❌ Error en procesar_salida_viaje: {error_detallado}")
+
+        # Registrar errores de excepción general con detalles específicos
         if datos_viaje:
             try:
                 log_viaje_fallido(
                     prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
-                    motivo_fallo="Error en proceso de salida",  # MENSAJE ACORTADO
+                    motivo_fallo=error_detallado,
                     determinante=datos_viaje.get('clave_determinante', ''),
                     fecha_viaje=datos_viaje.get('fecha', ''),
                     placa_tractor=datos_viaje.get('placa_tractor', ''),

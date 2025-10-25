@@ -528,14 +528,36 @@ def procesar_llegada_factura(driver, datos_viaje):
                 datos_viaje['viajegm'] = datos_extraidos['viajegm']
                 
         else:  # resultado == False - CUALQUIER ERROR
-            logger.error(f"❌ VIAJE {prefactura} FALLÓ: Error en llegada y facturación")
-            
-            # NUEVO: Registrar error genérico en CSV para CUALQUIER fallo
+            # Intentar extraer detalles del error del debug.log
+            detalle_error = "Error en llegada y facturación"
+            try:
+                with open('debug.log', 'r', encoding='utf-8') as f:
+                    ultimas_lineas = f.readlines()[-30:]
+                    for linea in reversed(ultimas_lineas):
+                        if prefactura in linea:
+                            if 'FALLO CRÍTICO' in linea or 'ERROR' in linea:
+                                # Extraer descripción del error
+                                if 'BTN_' in linea or 'EDT_' in linea:
+                                    elemento = linea.split('BTN_')[1].split()[0] if 'BTN_' in linea else linea.split('EDT_')[1].split()[0]
+                                    detalle_error = f"Error en llegada - Elemento {elemento} no accesible"
+                                elif 'not clickable' in linea:
+                                    detalle_error = "Error en llegada - Elemento no clickable"
+                                elif 'Timeout' in linea:
+                                    detalle_error = "Error en llegada - Timeout esperando elemento"
+                                elif 'PDF' in linea or 'pdf' in linea:
+                                    detalle_error = "Error en llegada - Problema con PDF"
+                                break
+            except:
+                pass  # Si no se puede leer debug.log, usar mensaje genérico
+
+            logger.error(f"❌ VIAJE {prefactura} FALLÓ: {detalle_error}")
+
+            # Registrar error con detalles específicos en CSV
             if datos_viaje:
                 try:
                     log_viaje_fallido(
                         prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
-                        motivo_fallo="FALLO_EN_GM_LLEGADAYFACTURA2 - Error en proceso de llegada y facturación",
+                        motivo_fallo=detalle_error,
                         determinante=datos_viaje.get('clave_determinante', ''),
                         fecha_viaje=datos_viaje.get('fecha', ''),
                         placa_tractor=datos_viaje.get('placa_tractor', ''),
@@ -550,17 +572,18 @@ def procesar_llegada_factura(driver, datos_viaje):
         return resultado
         
     except Exception as e:
-        logger.error(f"❌ Error en procesar_llegada_factura: {e}")
-        
+        # Crear mensaje de error específico con la excepción
         prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA') if datos_viaje else 'DESCONOCIDA'
-        logger.error(f"❌ VIAJE {prefactura} FALLÓ: Excepción en llegada y facturación")
-        
-        # NUEVO: También registrar errores de excepción general
+        error_detallado = f"Error en llegada - {str(e)[:100]}"
+        logger.error(f"❌ Error en procesar_llegada_factura: {error_detallado}")
+        logger.error(f"❌ VIAJE {prefactura} FALLÓ: {error_detallado}")
+
+        # Registrar errores de excepción general con detalles específicos
         if datos_viaje:
             try:
                 log_viaje_fallido(
                     prefactura=datos_viaje.get('prefactura', 'DESCONOCIDA'),
-                    motivo_fallo=f"EXCEPCION_EN_GM_LLEGADAYFACTURA2 - {str(e)}",
+                    motivo_fallo=error_detallado,
                     determinante=datos_viaje.get('clave_determinante', ''),
                     fecha_viaje=datos_viaje.get('fecha', ''),
                     placa_tractor=datos_viaje.get('placa_tractor', ''),
