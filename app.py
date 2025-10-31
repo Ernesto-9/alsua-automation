@@ -95,7 +95,7 @@ def detener_robot():
     AlsuaMailAutomation.continuar_ejecutando = False  # Señal para detener
     robot_state_manager.actualizar_estado_robot("detenido")
 
-    logger.info("🛑 Señal de detención enviada al robot")
+    logger.info(" Señal de detención enviada al robot")
 
     return redirect(url_for('index'))
 
@@ -145,11 +145,11 @@ def ver_screenshot(nombre):
 
 if __name__ == "__main__":
     print("\n" + "="*60)
-    print("🚀 PANEL WEB ALSUA - INICIANDO")
+    print("PANEL WEB ALSUA - INICIANDO")
     print("="*60)
-    print("📡 Servidor: http://localhost:5051")
-    print("🌐 Acceso local: http://127.0.0.1:5051")
-    print("📱 Acceso red: http://<IP_COMPUTADORA>:5051")
+    print("Servidor: http://localhost:5051")
+    print("Acceso local: http://127.0.0.1:5051")
+    print("Acceso red: http://<IP_COMPUTADORA>:5051")
     print("="*60 + "\n")
 
     app.run(host='0.0.0.0', port=5051, debug=True, use_reloader=False)

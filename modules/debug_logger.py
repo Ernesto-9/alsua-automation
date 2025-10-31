@@ -73,7 +73,7 @@ class DebugLogger:
             uuid: UUID generado (opcional)
             viajegm: Número de viaje GM (opcional)
         """
-        mensaje = f"✓ VIAJE EXITOSO: {prefactura}"
+        mensaje = f" VIAJE EXITOSO: {prefactura}"
         if uuid:
             mensaje += f" | UUID: {uuid}"
         if viajegm:
@@ -90,7 +90,7 @@ class DebugLogger:
             detalle_error: Descripción del error
         """
         self.logger.error("-" * 80)
-        self.logger.error(f"✗ VIAJE FALLIDO: {prefactura}")
+        self.logger.error(f" VIAJE FALLIDO: {prefactura}")
         self.logger.error(f"  Módulo: {modulo}")
         self.logger.error(f"  Error: {detalle_error}")
         self.logger.error("-" * 80)
@@ -184,4 +184,4 @@ if __name__ == "__main__":
     # Test básico
     debug_logger.info("Sistema de logging inicializado correctamente")
     debug_logger.debug("Modo debug activado")
-    print("\n✓ Sistema de logging listo para usar")
+    print("\n Sistema de logging listo para usar")

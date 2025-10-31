@@ -49,33 +49,33 @@ def login(driver):
         contrasena_input.send_keys(CONTRASENA)
 
         login_button.click()
-        print("🕒 Esperando post-login...")
+        print(" Esperando post-login...")
         time.sleep(5)
 
         # Manejo de alerta por sesión duplicada
         try:
             alert = driver.switch_to.alert
-            print(f"⚠️ Alerta detectada: {alert.text}")
+            print(f" Alerta detectada: {alert.text}")
             alert.accept()
-            print("✅ Alerta aceptada")
+            print(" Alerta aceptada")
             time.sleep(5)
         except:
             print("🟢 No hubo alerta de sesión duplicada")
 
         # Manejo de popup molesto de bienvenida
         try:
-            print("🔍 Buscando popup de bienvenida...")
+            print(" Buscando popup de bienvenida...")
             popup_checkbox = WebDriverWait(driver, 2).until(
                 EC.presence_of_element_located((By.ID, "CBOX_CHECKBOX1_1"))
             )
             popup_checkbox.click()
-            print("☑️ Casilla 'No volver a mostrar' marcada")
+            print(" Casilla 'No volver a mostrar' marcada")
 
             ok_button = WebDriverWait(driver, 2).until(
                 EC.element_to_be_clickable((By.CLASS_NAME, "btnvalignmiddle"))
             )
             ok_button.click()
-            print("✅ Popup cerrado correctamente")
+            print(" Popup cerrado correctamente")
             time.sleep(2)
         except:
             print("🟢 No apareció popup de bienvenida")
@@ -83,14 +83,14 @@ def login(driver):
         # Confirmación de login exitoso
         try:
             # Esperar más tiempo para que cargue el menú
-            print("🔍 Buscando menú de tráfico...")
+            print(" Buscando menú de tráfico...")
             WebDriverWait(driver, 15).until(
                 EC.presence_of_element_located((By.XPATH, "//img[contains(@src, 'TRAFICO')]"))
             )
-            print("✅ Login exitoso detectado")
+            print(" Login exitoso detectado")
             return True
         except Exception as e:
-            print("⚠️ No se detectó menú de tráfico. Posible fallo en login.")
+            print(" No se detectó menú de tráfico. Posible fallo en login.")
             print(f"   Error: {e}")
 
             # Capturar screenshot para diagnóstico
@@ -102,32 +102,32 @@ def login(driver):
                     modulo="gm_login",
                     detalle_error="No se encontro menu trafico"
                 )
-                print(f"📸 Screenshot guardado: {screenshot_path}")
+                print(f" Screenshot guardado: {screenshot_path}")
             except Exception as ss_error:
-                print(f"⚠️ No se pudo capturar screenshot: {ss_error}")
+                print(f" No se pudo capturar screenshot: {ss_error}")
 
             return False
 
     except Exception as e:
-        print(f"❌ Error en login: {e}")
+        print(f" Error en login: {e}")
         return False
 
 def login_to_gm():
-    print("🚀 Iniciando login con perfil temporal...")
+    print(" Iniciando login con perfil temporal...")
     try:
         driver = launch_driver()
-        print("✅ Chrome lanzado")
+        print(" Chrome lanzado")
     except Exception as e:
-        print(f"❌ Error al lanzar Chrome: {e}")
+        print(f" Error al lanzar Chrome: {e}")
         return None
 
-    print("🔐 Realizando login...")
+    print(" Realizando login...")
     success = login(driver)
     if success:
-        print("🎉 Login exitoso y sesión iniciada")
+        print(" Login exitoso y sesión iniciada")
         return driver
     else:
-        print("❌ Falló el login")
+        print(" Falló el login")
         driver.quit()
         return None
 

@@ -40,9 +40,9 @@ class PDFExtractor:
         """Verifica que la carpeta de PDFs existe"""
         if not os.path.exists(self.carpeta_pdfs):
             os.makedirs(self.carpeta_pdfs, exist_ok=True)
-            logger.info(f"✅ Carpeta PDFs creada: {self.carpeta_pdfs}")
+            logger.info(f" Carpeta PDFs creada: {self.carpeta_pdfs}")
         else:
-            logger.info(f"✅ Carpeta PDFs verificada: {self.carpeta_pdfs}")
+            logger.info(f" Carpeta PDFs verificada: {self.carpeta_pdfs}")
     
     def interceptar_url_pdf(self, driver, timeout=10):
         """
@@ -52,7 +52,7 @@ class PDFExtractor:
             str: URL del PDF o None
         """
         try:
-            logger.info("🎯 Interceptando URL del PDF...")
+            logger.info(" Interceptando URL del PDF...")
             
             # Método 1: Buscar iframes con PDF
             try:
@@ -60,10 +60,10 @@ class PDFExtractor:
                 for iframe in iframes:
                     src = iframe.get_attribute("src")
                     if src and (".pdf" in src.lower() or "pdf" in src.lower()):
-                        logger.info(f"✅ PDF encontrado en iframe: {src}")
+                        logger.info(f" PDF encontrado en iframe: {src}")
                         return src
             except Exception as e:
-                logger.warning(f"⚠️ No se encontró PDF en iframes: {e}")
+                logger.warning(f" No se encontró PDF en iframes: {e}")
             
             # Método 2: Buscar elementos embed/object
             try:
@@ -72,7 +72,7 @@ class PDFExtractor:
                     src = embed.get_attribute("src")
                     type_attr = embed.get_attribute("type")
                     if src and (type_attr == "application/pdf" or ".pdf" in src.lower()):
-                        logger.info(f"✅ PDF encontrado en embed: {src}")
+                        logger.info(f" PDF encontrado en embed: {src}")
                         return src
                 
                 objects = driver.find_elements(By.TAG_NAME, "object")
@@ -80,10 +80,10 @@ class PDFExtractor:
                     data = obj.get_attribute("data")
                     type_attr = obj.get_attribute("type")
                     if data and (type_attr == "application/pdf" or ".pdf" in data.lower()):
-                        logger.info(f"✅ PDF encontrado en object: {data}")
+                        logger.info(f" PDF encontrado en object: {data}")
                         return data
             except Exception as e:
-                logger.warning(f"⚠️ No se encontró PDF en embed/object: {e}")
+                logger.warning(f" No se encontró PDF en embed/object: {e}")
             
             # Método 3: Interceptar peticiones de red
             try:
@@ -95,10 +95,10 @@ class PDFExtractor:
                         # Buscar URLs en el log
                         urls = re.findall(r'https?://[^\s"]+\.pdf[^\s"]*', message)
                         if urls:
-                            logger.info(f"✅ PDF encontrado en logs de red: {urls[0]}")
+                            logger.info(f" PDF encontrado en logs de red: {urls[0]}")
                             return urls[0]
             except Exception as e:
-                logger.warning(f"⚠️ No se pudo acceder a logs de red: {e}")
+                logger.warning(f" No se pudo acceder a logs de red: {e}")
             
             # Método 4: Buscar en ventanas nuevas
             try:
@@ -109,7 +109,7 @@ class PDFExtractor:
                     current_url = driver.current_url
                     
                     if ".pdf" in current_url.lower():
-                        logger.info(f"✅ PDF abierto en nueva ventana: {current_url}")
+                        logger.info(f" PDF abierto en nueva ventana: {current_url}")
                         # Volver a la ventana original
                         driver.switch_to.window(ventanas_originales[0])
                         return current_url
@@ -117,12 +117,12 @@ class PDFExtractor:
                     # Volver a la ventana original
                     driver.switch_to.window(ventanas_originales[0])
             except Exception as e:
-                logger.warning(f"⚠️ Error verificando ventanas: {e}")
+                logger.warning(f" Error verificando ventanas: {e}")
                 
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error interceptando URL del PDF: {e}")
+            logger.error(f" Error interceptando URL del PDF: {e}")
             return None
     
     def extraer_datos_del_dom(self, driver):
@@ -134,7 +134,7 @@ class PDFExtractor:
             dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} o valores None
         """
         try:
-            logger.info("🔍 Extrayendo datos directamente del DOM...")
+            logger.info(" Extrayendo datos directamente del DOM...")
             
             # Esperar un momento para que el contenido se cargue
             time.sleep(3)
@@ -151,7 +151,7 @@ class PDFExtractor:
                         frame_type = frame.get_attribute("type") or ""
                         
                         if "pdf" in frame_src.lower() or frame_type == "application/pdf":
-                            logger.info(f"📄 PDF embebido encontrado: {frame.tag_name}")
+                            logger.info(f" PDF embebido encontrado: {frame.tag_name}")
                             
                             # Cambiar al contexto del iframe
                             driver.switch_to.frame(frame)
@@ -168,13 +168,13 @@ class PDFExtractor:
                                 # Intento 1: Buscar en elementos del visor
                                 text_elements = driver.find_elements(By.XPATH, "//div[@class='textLayer']//span")
                                 if text_elements:
-                                    logger.info(f"✅ Encontrados {len(text_elements)} elementos de texto en PDF viewer")
+                                    logger.info(f" Encontrados {len(text_elements)} elementos de texto en PDF viewer")
                                     for elem in text_elements:
                                         pdf_text += elem.text + " "
                                 
                                 # Intento 2: Si no hay textLayer, buscar cualquier texto
                                 if not pdf_text:
-                                    logger.info("🔍 Buscando texto alternativo en PDF viewer...")
+                                    logger.info(" Buscando texto alternativo en PDF viewer...")
                                     body = driver.find_element(By.TAG_NAME, "body")
                                     pdf_text = body.text
                                 
@@ -182,7 +182,7 @@ class PDFExtractor:
                                 driver.switch_to.default_content()
                                 
                                 if pdf_text:
-                                    logger.info(f"📋 Texto extraído del PDF embebido: {len(pdf_text)} caracteres")
+                                    logger.info(f" Texto extraído del PDF embebido: {len(pdf_text)} caracteres")
                                     
                                     # Buscar UUID, Viaje GM y Número de Factura en el texto extraído
                                     resultado = self._buscar_datos_en_texto(pdf_text)
@@ -190,18 +190,18 @@ class PDFExtractor:
                                         return resultado
                                         
                             except Exception as e:
-                                logger.warning(f"⚠️ Error extrayendo de iframe: {e}")
+                                logger.warning(f" Error extrayendo de iframe: {e}")
                                 driver.switch_to.default_content()
                                 
                     except Exception as e:
-                        logger.warning(f"⚠️ Error procesando frame: {e}")
+                        logger.warning(f" Error procesando frame: {e}")
                         try:
                             driver.switch_to.default_content()
                         except:
                             pass
                             
             except Exception as e:
-                logger.warning(f"⚠️ Error buscando en frames: {e}")
+                logger.warning(f" Error buscando en frames: {e}")
             
             # MÉTODO 2: Buscar en el DOM principal (fuera de iframes)
             try:
@@ -210,7 +210,7 @@ class PDFExtractor:
                 
                 # Obtener todo el texto visible en la página
                 body_text = driver.find_element(By.TAG_NAME, "body").text
-                logger.info(f"📋 Texto del DOM principal: {len(body_text)} caracteres")
+                logger.info(f" Texto del DOM principal: {len(body_text)} caracteres")
                 
                 # Buscar datos en el texto
                 resultado = self._buscar_datos_en_texto(body_text)
@@ -218,7 +218,7 @@ class PDFExtractor:
                     return resultado
                     
             except Exception as e:
-                logger.warning(f"⚠️ Error extrayendo del DOM principal: {e}")
+                logger.warning(f" Error extrayendo del DOM principal: {e}")
             
             # MÉTODO 3: Buscar en elementos específicos que podrían contener los datos
             try:
@@ -231,17 +231,17 @@ class PDFExtractor:
                     if texto:
                         resultado = self._buscar_datos_en_texto(texto)
                         if resultado["uuid"] or resultado["viaje_gm"] or resultado["numero_factura"]:
-                            logger.info(f"✅ Datos encontrados en elemento: {elem.tag_name}")
+                            logger.info(f" Datos encontrados en elemento: {elem.tag_name}")
                             return resultado
                             
             except Exception as e:
-                logger.warning(f"⚠️ Error buscando en elementos específicos: {e}")
+                logger.warning(f" Error buscando en elementos específicos: {e}")
             
-            logger.warning("⚠️ No se encontraron datos en el DOM")
+            logger.warning(" No se encontraron datos en el DOM")
             return {"uuid": None, "viaje_gm": None, "numero_factura": None}
             
         except Exception as e:
-            logger.error(f"❌ Error extrayendo datos del DOM: {e}")
+            logger.error(f" Error extrayendo datos del DOM: {e}")
             # Asegurarse de volver al contexto principal
             try:
                 driver.switch_to.default_content()
@@ -267,7 +267,7 @@ class PDFExtractor:
             
             if uuid_matches:
                 uuid = uuid_matches[0].upper()
-                logger.info(f"✅ UUID encontrado: {uuid}")
+                logger.info(f" UUID encontrado: {uuid}")
             
             # Buscar Viaje GM
             viaje_gm = None
@@ -286,7 +286,7 @@ class PDFExtractor:
                     for match in matches:
                         if match.startswith(('COB-', 'HMO-', 'OBR-', 'HER-')):
                             viaje_gm = match.strip()
-                            logger.info(f"✅ Viaje GM encontrado: {viaje_gm}")
+                            logger.info(f" Viaje GM encontrado: {viaje_gm}")
                             break
                     if viaje_gm:
                         break
@@ -307,7 +307,7 @@ class PDFExtractor:
                 matches = re.findall(pattern, texto, re.IGNORECASE | re.MULTILINE)
                 if matches:
                     numero_factura = matches[0].strip()
-                    logger.info(f"✅ Número de factura encontrado: {numero_factura}")
+                    logger.info(f" Número de factura encontrado: {numero_factura}")
                     break
             
             return {
@@ -317,7 +317,7 @@ class PDFExtractor:
             }
             
         except Exception as e:
-            logger.error(f"❌ Error buscando datos en texto: {e}")
+            logger.error(f" Error buscando datos en texto: {e}")
             return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def descargar_pdf_desde_url(self, url, nombre_archivo=None):
@@ -332,7 +332,7 @@ class PDFExtractor:
             str: Ruta del archivo descargado o None
         """
         try:
-            logger.info(f"📥 Descargando PDF desde URL: {url}")
+            logger.info(f" Descargando PDF desde URL: {url}")
             
             # Generar nombre de archivo si no se proporciona
             if not nombre_archivo:
@@ -349,24 +349,24 @@ class PDFExtractor:
             with open(ruta_completa, 'wb') as f:
                 f.write(response.content)
             
-            logger.info(f"✅ PDF descargado exitosamente: {nombre_archivo}")
+            logger.info(f" PDF descargado exitosamente: {nombre_archivo}")
             return ruta_completa
             
         except Exception as e:
-            logger.error(f"❌ Error descargando PDF: {e}")
+            logger.error(f" Error descargando PDF: {e}")
             return None
     
     def configurar_descarga_chrome(self, driver):
         """Configuración SIMPLE: Configura Chrome para descargar PDFs directamente sin abrirlos"""
         try:
-            logger.info("🔧 Configurando Chrome para descarga directa de PDFs...")
+            logger.info(" Configurando Chrome para descarga directa de PDFs...")
             
             # Configuración 1: Comportamiento básico de descarga
             driver.execute_cdp_cmd('Page.setDownloadBehavior', {
                 'behavior': 'allow',
                 'downloadPath': self.carpeta_pdfs
             })
-            logger.info("✅ Directorio de descarga configurado")
+            logger.info(" Directorio de descarga configurado")
             
             # Configuración 2: Preferencias para abrir PDFs externamente (descargar en lugar de mostrar)
             try:
@@ -377,9 +377,9 @@ class PDFExtractor:
                         chrome.settingsPrivate.setPref('download.prompt_for_download', false);
                     '''
                 })
-                logger.info("✅ Preferencias de PDF configuradas para descarga directa")
+                logger.info(" Preferencias de PDF configuradas para descarga directa")
             except Exception as e:
-                logger.warning(f"⚠️ No se pudieron configurar preferencias directamente: {e}")
+                logger.warning(f" No se pudieron configurar preferencias directamente: {e}")
                 
                 # Fallback: Configurar mediante CDP
                 try:
@@ -387,9 +387,9 @@ class PDFExtractor:
                         'behavior': 'allow',
                         'downloadPath': self.carpeta_pdfs
                     })
-                    logger.info("✅ Configuración alternativa aplicada")
+                    logger.info(" Configuración alternativa aplicada")
                 except Exception as e2:
-                    logger.warning(f"⚠️ Configuración alternativa falló: {e2}")
+                    logger.warning(f" Configuración alternativa falló: {e2}")
             
             # Configuración 3: Deshabilitar visor de PDF interno de forma simple
             try:
@@ -403,15 +403,15 @@ class PDFExtractor:
                         });
                     '''
                 })
-                logger.info("✅ Visor interno de PDF deshabilitado")
+                logger.info(" Visor interno de PDF deshabilitado")
             except Exception as e:
-                logger.warning(f"⚠️ No se pudo deshabilitar visor interno: {e}")
+                logger.warning(f" No se pudo deshabilitar visor interno: {e}")
             
-            logger.info("🚀 Configuración simple de descarga completada")
+            logger.info(" Configuración simple de descarga completada")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Error en configuración de descarga: {e}")
+            logger.error(f" Error en configuración de descarga: {e}")
             return False
     
     def buscar_pdf_mas_reciente(self, timeout=10):
@@ -437,16 +437,16 @@ class PDFExtractor:
                     # Verificar que es realmente reciente (último minuto)
                     tiempo_modificacion = os.path.getmtime(pdf_mas_reciente)
                     if time.time() - tiempo_modificacion < 60:  # Último minuto
-                        logger.info(f"📄 PDF reciente encontrado: {os.path.basename(pdf_mas_reciente)}")
+                        logger.info(f" PDF reciente encontrado: {os.path.basename(pdf_mas_reciente)}")
                         return pdf_mas_reciente
                 
                 time.sleep(1)  # Esperar 1 segundo antes de revisar de nuevo
             
-            logger.warning(f"⚠️ No se encontró PDF reciente en {timeout} segundos")
+            logger.warning(f" No se encontró PDF reciente en {timeout} segundos")
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error buscando PDF más reciente: {e}")
+            logger.error(f" Error buscando PDF más reciente: {e}")
             return None
     
     def extraer_texto_pdf(self, ruta_pdf):
@@ -460,7 +460,7 @@ class PDFExtractor:
             str: Texto extraído del PDF
         """
         try:
-            logger.info(f"📄 Extrayendo texto de: {os.path.basename(ruta_pdf)}")
+            logger.info(f" Extrayendo texto de: {os.path.basename(ruta_pdf)}")
             
             with open(ruta_pdf, 'rb') as file:
                 pdf_reader = PyPDF2.PdfReader(file)
@@ -470,13 +470,13 @@ class PDFExtractor:
                 for i, page in enumerate(pdf_reader.pages):
                     texto_pagina = page.extract_text()
                     texto_completo += texto_pagina + "\n"  # Agregar salto de línea entre páginas
-                    logger.info(f"📋 Página {i+1}: {len(texto_pagina)} caracteres extraídos")
+                    logger.info(f" Página {i+1}: {len(texto_pagina)} caracteres extraídos")
                 
-                logger.info(f"✅ Texto total extraído: {len(texto_completo)} caracteres")
+                logger.info(f" Texto total extraído: {len(texto_completo)} caracteres")
                 return texto_completo
                 
         except Exception as e:
-            logger.error(f"❌ Error extrayendo texto del PDF: {e}")
+            logger.error(f" Error extrayendo texto del PDF: {e}")
             return None
     
     def extraer_folio_fiscal(self, texto_pdf):
@@ -490,10 +490,10 @@ class PDFExtractor:
             str: Folio fiscal encontrado o None
         """
         try:
-            logger.info("🔍 Buscando folio fiscal (UUID) en el texto...")
+            logger.info(" Buscando folio fiscal (UUID) en el texto...")
             
             # Mostrar una muestra del texto para debug
-            logger.info(f"📋 Muestra del texto (primeros 500 chars): {texto_pdf[:500]}...")
+            logger.info(f" Muestra del texto (primeros 500 chars): {texto_pdf[:500]}...")
             
             # Patrón principal: UUID estándar con guiones (8-4-4-4-12 caracteres hexadecimales)
             patron_uuid = r"([A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12})"
@@ -502,22 +502,22 @@ class PDFExtractor:
             if matches_uuid:
                 # Tomar el primer UUID encontrado (normalmente es el folio fiscal)
                 folio_fiscal = matches_uuid[0].upper()
-                logger.info(f"✅ Folio fiscal encontrado: {folio_fiscal}")
+                logger.info(f" Folio fiscal encontrado: {folio_fiscal}")
                 return folio_fiscal
             else:
-                logger.warning("⚠️ No se encontró folio fiscal con patrón UUID")
+                logger.warning(" No se encontró folio fiscal con patrón UUID")
                 
                 # Debug: buscar texto que contenga "folio"
                 lineas_folio = [linea for linea in texto_pdf.split('\n') if 'folio' in linea.lower()]
                 if lineas_folio:
-                    logger.info("🔍 Líneas que contienen 'folio':")
+                    logger.info(" Líneas que contienen 'folio':")
                     for linea in lineas_folio[:3]:  # Mostrar máximo 3 líneas
                         logger.info(f"   - {linea.strip()}")
                 
                 return None
                 
         except Exception as e:
-            logger.error(f"❌ Error buscando folio fiscal: {e}")
+            logger.error(f" Error buscando folio fiscal: {e}")
             return None
     
     def extraer_viaje_gm(self, texto_pdf):
@@ -531,7 +531,7 @@ class PDFExtractor:
             str: Viaje GM encontrado o None
         """
         try:
-            logger.info("🔍 Buscando Viaje GM en el texto...")
+            logger.info(" Buscando Viaje GM en el texto...")
             
             # Patrones para buscar Viaje GM
             patrones_viaje_gm = [
@@ -546,16 +546,16 @@ class PDFExtractor:
                 matches = re.findall(patron, texto_pdf, re.IGNORECASE)
                 if matches:
                     viaje_gm = matches[0].strip()
-                    logger.info(f"✅ Viaje GM encontrado con patrón '{patron}': {viaje_gm}")
+                    logger.info(f" Viaje GM encontrado con patrón '{patron}': {viaje_gm}")
                     return viaje_gm
             
             # Si no encuentra con patrones específicos, buscar líneas que contengan "viaje"
-            logger.warning("⚠️ No se encontró Viaje GM con patrones específicos")
-            logger.info("🔍 Buscando líneas que contengan 'viaje'...")
+            logger.warning(" No se encontró Viaje GM con patrones específicos")
+            logger.info(" Buscando líneas que contengan 'viaje'...")
             
             lineas_viaje = [linea for linea in texto_pdf.split('\n') if 'viaje' in linea.lower()]
             if lineas_viaje:
-                logger.info("🔍 Líneas que contienen 'viaje':")
+                logger.info(" Líneas que contienen 'viaje':")
                 for linea in lineas_viaje[:5]:  # Mostrar máximo 5 líneas
                     linea_limpia = linea.strip()
                     logger.info(f"   - {linea_limpia}")
@@ -564,14 +564,14 @@ class PDFExtractor:
                     codigo_match = re.search(r"([A-Z]{2,4}-\d{4,6})", linea_limpia)
                     if codigo_match:
                         codigo_encontrado = codigo_match.group(1)
-                        logger.info(f"✅ Posible Viaje GM encontrado en línea: {codigo_encontrado}")
+                        logger.info(f" Posible Viaje GM encontrado en línea: {codigo_encontrado}")
                         return codigo_encontrado
             
-            logger.warning("⚠️ No se encontró Viaje GM en el PDF")
+            logger.warning(" No se encontró Viaje GM en el PDF")
             return None
                 
         except Exception as e:
-            logger.error(f"❌ Error buscando Viaje GM: {e}")
+            logger.error(f" Error buscando Viaje GM: {e}")
             return None
     
     def extraer_numero_factura(self, texto_pdf):
@@ -585,7 +585,7 @@ class PDFExtractor:
             str: Número de factura encontrado o None
         """
         try:
-            logger.info("🔍 Buscando número de factura en el texto...")
+            logger.info(" Buscando número de factura en el texto...")
             
             # PATRONES ACTUALIZADOS: PyPDF2 extrae texto en orden inverso concatenado
             # Formato real extraído: "FolioFiscalCORP 2157FACTURA"
@@ -611,11 +611,11 @@ class PDFExtractor:
                 matches = re.findall(patron, texto_pdf, re.IGNORECASE | re.MULTILINE)
                 if matches:
                     numero_factura = matches[0].strip()
-                    logger.info(f"✅ Número de factura encontrado: {numero_factura}")
+                    logger.info(f" Número de factura encontrado: {numero_factura}")
                     return numero_factura
             
             # Si no encuentra con patrones específicos, buscar manualmente
-            logger.warning("⚠️ No se encontró con patrones específicos, buscando manualmente...")
+            logger.warning(" No se encontró con patrones específicos, buscando manualmente...")
             
             # Buscar específicamente el patrón W + números después de cualquier mención de fiscal/factura
             patron_generico = r"([A-Z]\s+\d{5,6})"
@@ -624,14 +624,14 @@ class PDFExtractor:
             for match in matches_genericos:
                 # Filtrar solo los que empiecen con W
                 if match.strip().startswith('W '):
-                    logger.info(f"✅ Número de factura encontrado (búsqueda genérica): {match.strip()}")
+                    logger.info(f" Número de factura encontrado (búsqueda genérica): {match.strip()}")
                     return match.strip()
             
-            logger.warning("⚠️ No se encontró número de factura en el PDF")
+            logger.warning(" No se encontró número de factura en el PDF")
             return None
                 
         except Exception as e:
-            logger.error(f"❌ Error buscando número de factura: {e}")
+            logger.error(f" Error buscando número de factura: {e}")
             return None
     
     def extraer_datos_completos(self, texto_pdf):
@@ -645,7 +645,7 @@ class PDFExtractor:
             dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} o valores None si no se encuentran
         """
         try:
-            logger.info("🚀 Extrayendo datos completos del PDF...")
+            logger.info(" Extrayendo datos completos del PDF...")
             
             # Extraer UUID
             uuid = self.extraer_folio_fiscal(texto_pdf)
@@ -663,15 +663,15 @@ class PDFExtractor:
                 "numero_factura": numero_factura
             }
             
-            logger.info("📊 Resultado de extracción:")
-            logger.info(f"   🆔 UUID: {uuid}")
-            logger.info(f"   🚛 Viaje GM: {viaje_gm}")
-            logger.info(f"   📄 Número de Factura: {numero_factura}")
+            logger.info(" Resultado de extracción:")
+            logger.info(f"    UUID: {uuid}")
+            logger.info(f"    Viaje GM: {viaje_gm}")
+            logger.info(f"    Número de Factura: {numero_factura}")
             
             return resultado
             
         except Exception as e:
-            logger.error(f"❌ Error en extracción completa: {e}")
+            logger.error(f" Error en extracción completa: {e}")
             return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def extraer_de_pdf_automatico(self, driver, timeout=15):
@@ -686,18 +686,18 @@ class PDFExtractor:
             dict: {"uuid": str, "viaje_gm": str, "numero_factura": str} con los datos extraídos
         """
         try:
-            logger.info("🚀 Iniciando extracción automática completa MEJORADA")
+            logger.info(" Iniciando extracción automática completa MEJORADA")
             
             # MÉTODO 1: Intentar extraer directamente del DOM
-            logger.info("📄 Método 1: Extrayendo datos del DOM...")
+            logger.info(" Método 1: Extrayendo datos del DOM...")
             datos_dom = self.extraer_datos_del_dom(driver)
             
             if datos_dom["uuid"] and datos_dom["viaje_gm"] and datos_dom["numero_factura"]:
-                logger.info("🎉 Datos extraídos exitosamente del DOM")
+                logger.info(" Datos extraídos exitosamente del DOM")
                 return datos_dom
             
             # MÉTODO 2: Interceptar URL del PDF y descargarlo
-            logger.info("📄 Método 2: Interceptando URL del PDF...")
+            logger.info(" Método 2: Interceptando URL del PDF...")
             pdf_url = self.interceptar_url_pdf(driver)
             
             if pdf_url:
@@ -721,11 +721,11 @@ class PDFExtractor:
                             datos_dom["numero_factura"] = datos_pdf["numero_factura"]
                         
                         if datos_dom["uuid"] or datos_dom["viaje_gm"] or datos_dom["numero_factura"]:
-                            logger.info("🎉 Datos extraídos exitosamente combinando métodos")
+                            logger.info(" Datos extraídos exitosamente combinando métodos")
                             return datos_dom
             
             # MÉTODO 3: Método original - esperar descarga automática
-            logger.info("📄 Método 3: Esperando descarga automática...")
+            logger.info(" Método 3: Esperando descarga automática...")
             self.configurar_descarga_chrome(driver)
             
             pdf_path = self.buscar_pdf_mas_reciente(timeout)
@@ -748,14 +748,14 @@ class PDFExtractor:
             
             # Si llegamos aquí, retornar lo que hayamos podido extraer del DOM
             if datos_dom["uuid"] or datos_dom["viaje_gm"] or datos_dom["numero_factura"]:
-                logger.warning("⚠️ Extracción parcial - solo algunos datos encontrados")
+                logger.warning(" Extracción parcial - solo algunos datos encontrados")
                 return datos_dom
             
-            logger.error("❌ No se pudieron extraer los datos con ningún método")
+            logger.error(" No se pudieron extraer los datos con ningún método")
             return {"uuid": None, "viaje_gm": None, "numero_factura": None}
             
         except Exception as e:
-            logger.error(f"❌ Error en extracción automática mejorada: {e}")
+            logger.error(f" Error en extracción automática mejorada: {e}")
             return {"uuid": None, "viaje_gm": None, "numero_factura": None}
     
     def limpiar_pdfs_viejos(self):
@@ -770,14 +770,14 @@ class PDFExtractor:
                 
                 for pdf in pdfs_a_eliminar:
                     os.remove(pdf)
-                    logger.info(f"🗑️ PDF viejo eliminado: {os.path.basename(pdf)}")
+                    logger.info(f" PDF viejo eliminado: {os.path.basename(pdf)}")
                     
                 logger.info(f"🧹 Limpieza completada: {len(pdfs_a_eliminar)} PDFs eliminados, {self.max_pdfs} mantenidos")
             else:
-                logger.info(f"ℹ️ Limpieza no necesaria: {len(pdfs)} PDFs (máximo: {self.max_pdfs})")
+                logger.info(f"ℹ Limpieza no necesaria: {len(pdfs)} PDFs (máximo: {self.max_pdfs})")
                 
         except Exception as e:
-            logger.warning(f"⚠️ Error limpiando PDFs viejos: {e}")
+            logger.warning(f" Error limpiando PDFs viejos: {e}")
     
     def obtener_estadisticas(self):
         """Obtiene estadísticas de la carpeta de PDFs"""
@@ -803,7 +803,7 @@ class PDFExtractor:
             }
             
         except Exception as e:
-            logger.error(f"❌ Error obteniendo estadísticas: {e}")
+            logger.error(f" Error obteniendo estadísticas: {e}")
             return {'error': str(e)}
 
 # Funciones de conveniencia para uso rápido
@@ -838,15 +838,15 @@ if __name__ == "__main__":
         extractor = PDFExtractor()
         stats = extractor.obtener_estadisticas()
         
-        print("📊 Estadísticas:")
+        print(" Estadísticas:")
         for key, value in stats.items():
             print(f"   {key}: {value}")
             
         # Limpiar PDFs viejos
         extractor.limpiar_pdfs_viejos()
         
-        print("✅ PDFExtractor funcionando correctamente")
+        print(" PDFExtractor funcionando correctamente")
         
     except Exception as e:
-        print(f"❌ Error: {e}")
-        print("💡 Asegúrate de que la carpeta 'pdfs_temporales' existe")
+        print(f" Error: {e}")
+        print(" Asegúrate de que la carpeta 'pdfs_temporales' existe")

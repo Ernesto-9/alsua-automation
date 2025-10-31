@@ -56,7 +56,7 @@ def _leer_estado():
         with open(ARCHIVO_ESTADO, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f"⚠️ Error al leer estado: {e}")
+        print(f" Error al leer estado: {e}")
         # Retornar estructura vacía en caso de error
         return _leer_estado()  # Recursión para crear nuevo archivo
 
@@ -72,7 +72,7 @@ def _guardar_estado(estado):
         with open(ARCHIVO_ESTADO, 'w', encoding='utf-8') as f:
             json.dump(estado, f, indent=2, ensure_ascii=False)
     except Exception as e:
-        print(f"❌ Error al guardar estado: {e}")
+        print(f" Error al guardar estado: {e}")
 
 
 def actualizar_estado_robot(nuevo_estado):
@@ -260,7 +260,7 @@ def verificar_si_trabado():
                 return True, mensaje
 
     except Exception as e:
-        print(f"⚠️ Error al verificar si trabado: {e}")
+        print(f" Error al verificar si trabado: {e}")
 
     return False, None
 
@@ -312,6 +312,6 @@ if __name__ == "__main__":
 
     # Test básico
     estado = obtener_estado_completo()
-    print(f"\n✓ Estado actual: {estado['robots']['robot_1']['estado']}")
-    print(f"✓ Viajes exitosos: {estado['robots']['robot_1']['estadisticas']['viajes_exitosos']}")
-    print(f"✓ Viajes fallidos: {estado['robots']['robot_1']['estadisticas']['viajes_fallidos']}")
+    print(f"\n Estado actual: {estado['robots']['robot_1']['estado']}")
+    print(f" Viajes exitosos: {estado['robots']['robot_1']['estadisticas']['viajes_exitosos']}")
+    print(f" Viajes fallidos: {estado['robots']['robot_1']['estadisticas']['viajes_fallidos']}")
