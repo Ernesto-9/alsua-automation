@@ -120,10 +120,45 @@ class GMTransportAutomation:
             logger.error(f"Error registrando determinante faltante: {e}")
             return False
     
+    def cerrar_todos_los_alerts(self, max_intentos=5):
+        alerts_cerrados = 0
+        for i in range(max_intentos):
+            try:
+                alert = self.driver.switch_to.alert
+                alert.accept()
+                alerts_cerrados += 1
+                time.sleep(0.2)
+            except:
+                break
+        return alerts_cerrados
+
+    def cerrar_calendarios_abiertos(self):
+        try:
+            for _ in range(3):
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                time.sleep(0.3)
+        except:
+            pass
+
+    def reset_formulario(self):
+        try:
+            self.cerrar_todos_los_alerts()
+            self.cerrar_calendarios_abiertos()
+            for _ in range(3):
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                time.sleep(0.5)
+            from .navigate_to_create_viaje import navigate_to_create_viaje
+            time.sleep(1)
+            navigate_to_create_viaje(self.driver)
+            return True
+        except Exception as e:
+            logger.error(f"Error en reset_formulario: {e}")
+            return False
+
     def obtener_ruta_y_base(self, determinante):
         """Obtiene la ruta GM y base origen desde el CSV"""
         csv_path = 'modules/clave_ruta_base.csv'
-        
+
         logger.info(f"Buscando ruta para determinante: {determinante}")
         
         try:
@@ -154,22 +189,25 @@ class GMTransportAutomation:
             return None, None, "ERROR_LECTURA_CSV"
     
     def llenar_fecha(self, id_input, fecha_valor, incluir_hora=True):
-        """
-        FUNCIÓN MEJORADA V2: Llena fecha usando JavaScript para EVITAR abrir calendarios
-
-        Args:
-            id_input: ID del campo de fecha
-            fecha_valor: Fecha en formato DD/MM/YYYY
-            incluir_hora: Si True, incluye hora (por defecto True para compatibilidad)
-
-        Returns:
-            bool: True si se insertó correctamente, False si falló
-        """
         try:
-            logger.info(f"Llenando {id_input} con fecha {fecha_valor} (hora={'sí' if incluir_hora else 'no'})")
             debug_logger.info(f"Llenando fecha {id_input} con valor {fecha_valor}, incluir_hora={incluir_hora}")
 
-            # Verificar que el elemento existe
+            if id_input == "EDT_DESDE":
+                self.cerrar_todos_los_alerts()
+                self.cerrar_calendarios_abiertos()
+                time.sleep(1.5)
+
+            self.cerrar_todos_los_alerts()
+            self.cerrar_calendarios_abiertos()
+            time.sleep(0.5)
+
+            try:
+                estado_pagina = self.driver.execute_script("return document.readyState")
+                if estado_pagina != "complete":
+                    time.sleep(1)
+            except:
+                pass
+
             try:
                 elemento_existe = self.driver.find_element(By.ID, id_input)
             except Exception as e:
@@ -177,9 +215,7 @@ class GMTransportAutomation:
                 debug_logger.error(f"Campo {id_input} no encontrado: {e}")
                 return False
 
-            # Determinar si incluir hora
             if incluir_hora:
-                # Obtener valor actual para extraer la hora (si existe)
                 try:
                     valor_actual = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
                     if valor_actual and " " in valor_actual:
@@ -188,30 +224,14 @@ class GMTransportAutomation:
                         hora = "14:00"
                 except:
                     hora = "14:00"
-                # Construir nuevo valor con fecha y hora
                 nuevo_valor = f"{fecha_valor} {hora}"
             else:
-                # Solo fecha, sin hora
                 nuevo_valor = fecha_valor
 
-            # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
             for intento in range(3):
                 try:
-                    # PRIMERO: Cerrar cualquier alert que pueda estar bloqueando
-                    try:
-                        alert = self.driver.switch_to.alert
-                        alert_text = alert.text
-                        logger.warning(f"⚠️ Alert detectado ANTES de llenar campo: '{alert_text}' - Cerrando...")
-                        debug_logger.warning(f"Alert previo en {id_input}: {alert_text}")
-                        alert.accept()
-                        logger.info("✅ Alert previo cerrado")
-                        time.sleep(0.3)
-                    except:
-                        pass  # No había alert, continuamos normal
+                    self.cerrar_todos_los_alerts()
 
-                    logger.info(f"Intento {intento + 1}/3 de llenar fecha con JavaScript")
-
-                    # Usar JavaScript directo para llenar el campo SIN abrirlo
                     script = f"""
                     var campo = document.getElementById('{id_input}');
                     if (campo) {{
@@ -227,53 +247,33 @@ class GMTransportAutomation:
                     resultado = self.driver.execute_script(script)
 
                     if not resultado:
-                        logger.warning(f"Campo {id_input} no encontrado en intento {intento + 1}")
-                        time.sleep(1)
+                        time.sleep(2)
                         continue
 
-                    # Esperar un momento para que se procese
                     time.sleep(0.5)
 
-                    # Verificar que se llenó correctamente
                     valor_final = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
 
                     if valor_final and fecha_valor in valor_final:
-                        logger.info(f"✅ Fecha insertada correctamente con JavaScript: {valor_final}")
-                        debug_logger.info(f"✅ Fecha {id_input} = {valor_final}")
+                        debug_logger.info(f"Fecha {id_input} = {valor_final}")
                         return True
                     else:
-                        logger.warning(f"⚠️ Verificación falló. Esperado: {nuevo_valor}, Actual: {valor_final}")
-                        time.sleep(1)
+                        time.sleep(2)
                         continue
 
                 except Exception as e:
-                    # Manejar alerts de "Valor no válido" que bloquean la página
-                    try:
-                        alert = self.driver.switch_to.alert
-                        alert_text = alert.text
-                        logger.warning(f"⚠️ Alert detectado y cerrando: '{alert_text}'")
-                        debug_logger.warning(f"Alert en {id_input}: {alert_text}")
-                        alert.accept()  # Cerrar el alert
-                        logger.info("✅ Alert cerrado - reintentando")
-                        time.sleep(0.5)
-                    except:
-                        pass  # No había alert
-
-                    logger.error(f"❌ Error en intento {intento + 1}: {str(e)[:100]}")
+                    self.cerrar_todos_los_alerts()
                     debug_logger.error(f"Error llenando fecha {id_input} intento {intento + 1}: {e}")
-                    time.sleep(1)
+                    time.sleep(2)
                     continue
 
-            # Si llegamos aquí, fallaron todos los intentos
-            logger.error(f"❌ ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
+            logger.error(f"ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
             debug_logger.error(f"FALLO CRÍTICO llenando fecha {id_input} con valor {fecha_valor}")
             return False
 
         except Exception as e:
-            logger.error(f"❌ Error en llenar_fecha: {e}")
+            logger.error(f"Error en llenar_fecha: {e}")
             debug_logger.error(f"Excepción en llenar_fecha para {id_input}: {e}")
-            import traceback
-            debug_logger.error(f"Traceback: {traceback.format_exc()}")
             return False
     
     def llenar_campo_texto(self, id_input, valor, descripcion=""):
@@ -528,10 +528,9 @@ class GMTransportAutomation:
             return False, "ERROR_SELECCION_TRACTOR"
     
     def fill_viaje_form(self):
-        """Función principal para llenar formulario de viaje CON LOGGING Y SCREENSHOTS MEJORADOS"""
+        """Función principal para llenar formulario de viaje"""
         paso_actual = "Inicialización"
         try:
-            logger.info("Iniciando llenado de formulario de viaje")
             debug_logger.info("Iniciando fill_viaje_form")
 
             if not self.datos_viaje:
@@ -547,14 +546,12 @@ class GMTransportAutomation:
                 debug_logger.error(f"Campos faltantes en datos_viaje: {campos_faltantes}")
                 return False
 
-            logger.info("Datos del viaje validados correctamente")
             debug_logger.info(f"Datos del viaje validados: {self.datos_viaje.get('prefactura')}")
             
             paso_actual = "Navegación a crear viaje"
             debug_logger.debug(f"Paso actual: {paso_actual}")
 
             from .navigate_to_create_viaje import navigate_to_create_viaje
-            logger.info("Navegando al módulo de creación de viajes...")
             if not navigate_to_create_viaje(self.driver):
                 logger.error("Error al navegar al módulo de viajes")
                 debug_logger.error(f"Error en {paso_actual}")
@@ -580,18 +577,38 @@ class GMTransportAutomation:
             
             self.llenar_campo_texto("EDT_NOVIAJECLIENTE", prefactura_valor, "Prefactura")
             self.llenar_campo_texto("EDT_NUMEROCLIENTE", cliente_codigo, "Cliente")
-            
-            fechas_con_hora = [
+
+            fechas_con_hora_requeridas = [
                 "EDT_FECHA",
-                "EDT_FECHAESTATUS", 
+                "EDT_FECHAESTATUS",
+            ]
+
+            fechas_con_hora_opcionales = [
                 "EDT_FECHACARGA",
             ]
-            
-            logger.info("Llenando fechas 1-3 con hora...")
-            for i, fecha_id in enumerate(fechas_con_hora, 1):
-                self.llenar_fecha(fecha_id, fecha_valor)
-            
-            logger.info("Llenando fecha 4/4: EDT_FECHAENTREGA SIN hora")
+
+            inicio_fechas = time.time()
+            for fecha_id in fechas_con_hora_requeridas:
+                if time.time() - inicio_fechas > 15:
+                    logger.error("TIMEOUT llenando fechas - haciendo reset")
+                    if not self.reset_formulario():
+                        return False
+                    inicio_fechas = time.time()
+
+                exito = self.llenar_fecha(fecha_id, fecha_valor)
+                if not exito:
+                    logger.warning(f"Fallo en {fecha_id} - reintentando con reset")
+                    self.reset_formulario()
+                    self.llenar_fecha(fecha_id, fecha_valor)
+
+            for fecha_id in fechas_con_hora_opcionales:
+                try:
+                    elemento = self.driver.find_element(By.ID, fecha_id)
+                    self.llenar_fecha(fecha_id, fecha_valor)
+                except:
+                    logger.warning(f"Campo opcional {fecha_id} no encontrado - omitiendo")
+                    continue
+
             try:
                 self.driver.execute_script("""
                     var campo = document.getElementById('EDT_FECHAENTREGA');
@@ -600,21 +617,19 @@ class GMTransportAutomation:
                         campo.dispatchEvent(new Event('change', { bubbles: true }));
                     }
                 """, fecha_valor)
-                logger.info(f"Fecha 4 completada: {fecha_valor} (sin hora)")
             except Exception as e:
-                logger.error(f"Error en fecha 4: {e}")
-            
-            time.sleep(1)
-            
+                logger.error(f"Error en EDT_FECHAENTREGA: {e}")
+
+            time.sleep(3)
+            self.cerrar_todos_los_alerts()
+
             paso_actual = "Llenado de fechas del viaje"
             debug_logger.debug(f"Paso actual: {paso_actual}")
 
-            logger.info("Moviendo foco al campo de ruta...")
             try:
                 campo_ruta = self.wait.until(EC.element_to_be_clickable((By.ID, "EDT_FOLIORUTA")))
                 campo_ruta.click()
                 time.sleep(0.5)
-                logger.info("Enfoque movido al campo de ruta")
             except Exception as e:
                 logger.warning(f"No se pudo hacer clic en campo de ruta: {e}")
                 debug_logger.warning(f"No se pudo hacer clic en campo de ruta: {e}")
@@ -622,7 +637,6 @@ class GMTransportAutomation:
             paso_actual = "Obtención de ruta y determinante"
             debug_logger.debug(f"Paso actual: {paso_actual}")
 
-            logger.info("Obteniendo ruta GM...")
             ruta_gm, base_origen, estado_determinante = self.obtener_ruta_y_base(clave_determinante)
             
             if estado_determinante == "DETERMINANTE_NO_ENCONTRADA":
@@ -659,14 +673,19 @@ class GMTransportAutomation:
                 """
                 self.driver.execute_script(script)
                 time.sleep(1)
-                logger.info("Evento change disparado para ruta")
-                
+
                 self.seleccionar_base_origen(base_origen)
-            
+
+                time.sleep(2)
+                self.cerrar_todos_los_alerts()
+
             paso_actual = "Selección de remolque"
             debug_logger.debug(f"Paso actual: {paso_actual}")
 
-            logger.info("Seleccionando remolque...")
+            self.cerrar_todos_los_alerts()
+            self.cerrar_calendarios_abiertos()
+            time.sleep(1)
+
             exito_remolque, error_remolque = self.seleccionar_remolque()
             if not exito_remolque:
                 debug_logger.error(f"Error en {paso_actual}: {error_remolque}")
@@ -687,8 +706,24 @@ class GMTransportAutomation:
             paso_actual = "Selección de tractor y operador"
             debug_logger.debug(f"Paso actual: {paso_actual}")
 
-            logger.info("Seleccionando tractor y verificando operador...")
-            exito_tractor, error_tractor = self.seleccionar_tractor_y_operador()
+            self.cerrar_todos_los_alerts()
+            self.cerrar_calendarios_abiertos()
+            time.sleep(2)
+
+            try:
+                exito_tractor, error_tractor = self.seleccionar_tractor_y_operador()
+            except Exception as e:
+                logger.error(f"Excepción en selección de tractor: {e}")
+                logger.warning("Intentando reset y reintento...")
+                if self.reset_formulario():
+                    try:
+                        exito_tractor, error_tractor = self.seleccionar_tractor_y_operador()
+                    except Exception as e2:
+                        exito_tractor = False
+                        error_tractor = f"Error después de reset: {e2}"
+                else:
+                    exito_tractor = False
+                    error_tractor = f"Reset falló: {e}"
 
             if not exito_tractor:
                 debug_logger.error(f"Error en {paso_actual}: {error_tractor}")
@@ -720,18 +755,14 @@ class GMTransportAutomation:
                     except:
                         pass
                     return False
-            
-            logger.info("Ejecutando facturación inicial...")
+
             try:
                 resultado_facturacion = ir_a_facturacion(self.driver, total_factura_valor, self.datos_viaje)
-                if resultado_facturacion:
-                    logger.info("Facturación inicial completada")
-                else:
+                if not resultado_facturacion:
                     logger.warning("Problema en facturación inicial - continuando...")
             except Exception as e:
                 logger.warning(f"Error en facturación inicial: {e} - continuando...")
-            
-            logger.info("Ejecutando proceso de SALIDA...")
+
             try:
                 resultado_salida = procesar_salida_viaje(self.driver, self.datos_viaje, configurar_filtros=True)
                 if resultado_salida == "OPERADOR_OCUPADO":
@@ -746,8 +777,7 @@ class GMTransportAutomation:
                 logger.error(f"Error crítico en salida: {e}")
                 logger.error(f"VIAJE PARA REVISIÓN: Prefactura {prefactura_valor} - Error crítico en salida")
                 return False
-            
-            logger.info("Ejecutando proceso de LLEGADA y FACTURACIÓN FINAL...")
+
             try:
                 resultado_llegada = procesar_llegada_factura(self.driver, self.datos_viaje)
                 if not resultado_llegada:
