@@ -25,16 +25,26 @@ sistema_estado = {
 def ejecutar_robot_bucle():
     """Función que ejecuta el bucle del robot en un hilo separado"""
     try:
+        print(">>> ejecutar_robot_bucle() INICIADO <<<")
         robot_state_manager.actualizar_estado_robot("ejecutando")
-        AlsuaMailAutomation.continuar_ejecutando = True  # Habilitar ejecución
+        print(">>> Estado robot actualizado <<<")
+
+        AlsuaMailAutomation.continuar_ejecutando = True
+        print(">>> Creando instancia AlsuaMailAutomation <<<")
         sistema = AlsuaMailAutomation()
+        print(">>> Instancia creada <<<")
+
         sistema_estado["instancia"] = sistema
         print(">>> Robot iniciado desde panel web <<<")
+
         sistema.ejecutar_bucle_continuo()
     except Exception as e:
-        print(f"Error en ejecución del robot: {e}")
+        print(f">>> ERROR en ejecución del robot: {e} <<<")
+        import traceback
+        traceback.print_exc()
         robot_state_manager.actualizar_estado_robot("detenido")
     finally:
+        print(">>> ejecutar_robot_bucle() FINALIZANDO <<<")
         sistema_estado["ejecutando"] = False
         sistema_estado["instancia"] = None
 
@@ -78,14 +88,25 @@ def api_estado():
 @app.route("/iniciar")
 def iniciar_robot():
     """Inicia el robot de automatización en un hilo separado"""
-    if sistema_estado["ejecutando"]:
+    try:
+        print(">>> ENDPOINT /iniciar llamado <<<")
+
+        if sistema_estado["ejecutando"]:
+            print(">>> Robot ya está ejecutando <<<")
+            return redirect(url_for('index'))
+
+        print(">>> Creando thread del robot <<<")
+        sistema_estado["ejecutando"] = True
+        sistema_estado["hilo"] = threading.Thread(target=ejecutar_robot_bucle, daemon=True)
+        sistema_estado["hilo"].start()
+        print(">>> Thread iniciado <<<")
+
         return redirect(url_for('index'))
-
-    sistema_estado["ejecutando"] = True
-    sistema_estado["hilo"] = threading.Thread(target=ejecutar_robot_bucle, daemon=True)
-    sistema_estado["hilo"].start()
-
-    return redirect(url_for('index'))
+    except Exception as e:
+        print(f">>> ERROR en /iniciar: {e} <<<")
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for('index'))
 
 
 @app.route("/detener")
