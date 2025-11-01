@@ -89,21 +89,19 @@ def main():
     print(f"   • Flask usa: dashboard.html (el correcto)")
     print()
 
-    # Logs de Flask (GRANDES)
+    # Logs de Flask obsoletos (GRANDES - debug.log se conserva)
     flask_stderr_size = obtener_tamano_archivo("flask_stderr.log")
     flask_stdout_size = obtener_tamano_archivo("flask_stdout.log")
-    debug_log_size = obtener_tamano_archivo("debug.log")
-    logs_existen = os.path.exists("flask_stderr.log") or os.path.exists("flask_stdout.log") or os.path.exists("debug.log")
+    logs_existen = os.path.exists("flask_stderr.log") or os.path.exists("flask_stdout.log")
 
-    print(f"4. Logs de Flask (causa carga al sistema):")
+    print(f"4. Logs de Flask obsoletos (causa carga al sistema):")
     if os.path.exists("flask_stderr.log"):
         print(f"   • flask_stderr.log: {flask_stderr_size:.2f} MB")
     if os.path.exists("flask_stdout.log"):
         print(f"   • flask_stdout.log: {flask_stdout_size:.2f} MB")
-    if os.path.exists("debug.log"):
-        print(f"   • debug.log: {debug_log_size:.2f} MB")
     if not logs_existen:
-        print(f"   • No hay logs (esto es normal)")
+        print(f"   • No hay logs Flask para eliminar")
+    print(f"   ℹ️  debug.log se conserva (útil para diagnóstico)")
     print()
 
     # Archivos de análisis temporal (lista_*.txt)
@@ -122,7 +120,7 @@ def main():
 
     # Total
     total_archivos = xls_count + xlsx_count + pdf_count + (1 if index_exists else 0) + listas_count
-    total_size = archivos_desc_size + pdfs_size + flask_stderr_size + flask_stdout_size + debug_log_size
+    total_size = archivos_desc_size + pdfs_size + flask_stderr_size + flask_stdout_size
     print(f"📦 TOTAL A ELIMINAR:")
     print(f"   • {total_archivos} archivos")
     print(f"   • {total_size:.2f} MB liberados")
@@ -184,10 +182,10 @@ def main():
         print(f"   ⚠️  Archivo no existe")
     print()
 
-    # Eliminar logs de Flask
-    print("4. Eliminando logs de Flask")
+    # Eliminar logs de Flask obsoletos (debug.log se conserva)
+    print("4. Eliminando logs de Flask obsoletos")
     logs_eliminados = 0
-    for log_file in ["flask_stderr.log", "flask_stdout.log", "debug.log"]:
+    for log_file in ["flask_stderr.log", "flask_stdout.log"]:
         if os.path.exists(log_file):
             try:
                 os.remove(log_file)
@@ -197,7 +195,8 @@ def main():
             except Exception as e:
                 print(f"   ❌ Error eliminando {log_file}: {e}")
     if logs_eliminados == 0:
-        print(f"   ⚠️  No hay logs para eliminar")
+        print(f"   ⚠️  No hay logs Flask para eliminar")
+    print(f"   ℹ️  debug.log se conserva (útil para diagnóstico)")
     print()
 
     # Eliminar archivos de análisis temporal
@@ -224,7 +223,8 @@ def main():
     print()
     print("NOTA: Las carpetas archivos_descargados/ y pdfs_temporales/ se")
     print("      volverán a llenar conforme el robot procese nuevos viajes.")
-    print("      Los logs se regenerarán cuando Flask se ejecute nuevamente.")
+    print("      Los logs Flask se regenerarán si se ejecuta el panel antiguo.")
+    print("      debug.log se conserva porque es útil para diagnóstico.")
     print("      Esto es normal y esperado.")
     print()
 
