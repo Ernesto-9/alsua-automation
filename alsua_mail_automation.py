@@ -571,34 +571,18 @@ class AlsuaMailAutomation:
                     self.driver = None
     
     def mostrar_estadisticas_inicio(self):
-        logger.info("Estado inicial del sistema:")
-        
         try:
             stats_cola = obtener_estadisticas_cola()
-            logger.info(f"   Viajes en cola: {stats_cola.get('total_viajes', 0)}")
-            logger.info(f"   Pendientes: {stats_cola.get('pendientes', 0)}")
-            logger.info(f"   Procesando: {stats_cola.get('procesando', 0)}")
-            
-            if stats_cola.get('viajes_con_errores', 0) > 0:
-                logger.info(f"   Con errores: {stats_cola.get('viajes_con_errores', 0)}")
+            logger.info(f"Cola: {stats_cola.get('total_viajes', 0)} | Pendientes: {stats_cola.get('pendientes', 0)} | Procesando: {stats_cola.get('procesando', 0)}")
         except Exception as e:
             logger.warning(f"Error obteniendo estadísticas de cola: {e}")
     
     def ejecutar_bucle_continuo(self, mostrar_debug=False):
-        logger.info("Iniciando sistema de automatización Alsua Transport")
-        logger.info("FLUJO:")
-        logger.info("   PRIORIDAD 1: Procesar cola existente")
-        logger.info("   PRIORIDAD 2: Si cola vacía → buscar nuevos correos")
-        logger.info("   RESULTADO: 1 viaje a la vez, sin acumulación")
-        logger.info("=" * 70)
-
-        # Resetear viajes atascados al inicio (previene bloqueos por cierre abrupto)
         from cola_viajes import resetear_viajes_atascados
         viajes_reseteados = resetear_viajes_atascados()
         if viajes_reseteados > 0:
-            logger.warning(f"⚠️ Se resetearon {viajes_reseteados} viajes atascados al inicio")
+            logger.warning(f"Se resetearon {viajes_reseteados} viajes atascados")
 
-        # Marcar robot como ejecutando
         robot_state_manager.actualizar_estado_robot("ejecutando")
         debug_logger.info("Iniciando bucle continuo de automatización")
 
@@ -652,30 +636,30 @@ class AlsuaMailAutomation:
                         viaje_id = viaje_registro.get('id')
                         datos_viaje = viaje_registro.get('datos_viaje', {})
                         prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
-                        
-                        logger.info(f"PROCESANDO VIAJE DE COLA: {prefactura}")
-                        
+
+                        logger.info(f"Procesando: {prefactura}")
+
                         resultado, modulo_error = self.procesar_viaje_individual(viaje_registro)
-                        
+
                         if resultado == 'EXITOSO':
                             marcar_viaje_exitoso_cola(viaje_id)
-                            logger.info(f"Viaje {prefactura} COMPLETADO - removido de cola")
+                            logger.info(f"{prefactura} COMPLETADO")
                             contador_sync_mysql += 1
                             time.sleep(60)
 
                         elif resultado == 'LOGIN_LIMIT':
                             registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
-                            logger.warning(f"LOGIN LÍMITE - {prefactura} reintentará en 15 minutos")
+                            logger.warning(f"LOGIN LÍMITE - {prefactura}")
                             time.sleep(15 * 60)
 
                         elif resultado == 'DRIVER_CORRUPTO':
                             registrar_error_reintentable_cola(viaje_id, 'DRIVER_CORRUPTO', f'Driver corrupto en {modulo_error}')
-                            logger.warning(f"DRIVER CORRUPTO - {prefactura} reintentará inmediatamente")
+                            logger.warning(f"DRIVER CORRUPTO - {prefactura}")
 
                         else:
                             motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                             marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
-                            logger.error(f"{prefactura} FALLÓ EN: {modulo_error} - removido de cola")
+                            logger.error(f"{prefactura} FALLÓ: {modulo_error}")
                             contador_sync_mysql += 1
                             time.sleep(30)
 
@@ -818,53 +802,27 @@ class AlsuaMailAutomation:
             self.limpiar_com()
     
     def mostrar_estadisticas(self):
-        logger.info("ESTADÍSTICAS DEL SISTEMA:")
-        logger.info("   Sistema de cola persistente JSON")
-        logger.info("   Reintentos selectivos inteligentes")
-        logger.info("   Proceso GM completo automatizado")
-        logger.info("   Extracción automática PDF")
-        logger.info("   Registro CSV + MySQL")
-        logger.info("   Compatible con interfaz web")
-        
         try:
             stats = viajes_log.obtener_estadisticas()
-            logger.info(f"   Total viajes en CSV: {stats['total_viajes']}")
-            logger.info(f"   Exitosos: {stats['exitosos']}")
-            logger.info(f"   Fallidos: {stats['fallidos']}")
-            if stats['ultimo_viaje']:
-                logger.info(f"   Último viaje: {stats['ultimo_viaje']}")
+            logger.info(f"Total: {stats['total_viajes']} | Exitosos: {stats['exitosos']} | Fallidos: {stats['fallidos']}")
         except Exception as e:
             logger.warning(f"Error obteniendo estadísticas CSV: {e}")
-        
+
         try:
             stats_cola = obtener_estadisticas_cola()
-            logger.info(f"   Viajes en cola: {stats_cola.get('total_viajes', 0)}")
-            logger.info(f"   Pendientes: {stats_cola.get('pendientes', 0)}")
-            logger.info(f"   Procesando: {stats_cola.get('procesando', 0)}")
+            logger.info(f"Cola: {stats_cola.get('total_viajes', 0)} viajes | Pendientes: {stats_cola.get('pendientes', 0)} | Procesando: {stats_cola.get('procesando', 0)}")
         except Exception as e:
             logger.warning(f"Error obteniendo estadísticas de cola: {e}")
 
 def main():
-    print("Sistema de Automatización Alsua Transport")
-    print("Procesamiento automático de viajes de carga")
-    print("Flujo continuo con cola persistente")
-    print("=" * 50)
-    
     sistema = AlsuaMailAutomation()
-    
+
     sistema.mostrar_estadisticas()
-    
+
     if len(sys.argv) > 1 and sys.argv[1] == "--test":
         logger.info("MODO PRUEBA: Ejecutando revisión de test...")
         sistema.ejecutar_revision_unica()
     else:
-        logger.info("MODO PRODUCCIÓN: Iniciando flujo continuo")
-        logger.info("PROCESAMIENTO PERPETUO:")
-        logger.info("   Revisar correos → Viaje VACIO → Cola → Procesar")
-        logger.info("   Sin intervalos fijos innecesarios")
-        logger.info("   Máxima robustez con cola persistente")
-        logger.info("   Solo 2 errores reintentables")
-        logger.info("Compatible con interfaz web Flask")
         sistema.ejecutar_bucle_continuo(mostrar_debug=False)
 
 if __name__ == "__main__":
