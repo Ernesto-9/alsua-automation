@@ -583,7 +583,7 @@ class GMTransportAutomation:
                 "EDT_FECHAESTATUS",
             ]
 
-            fechas_con_hora_opcionales = [
+            fechas_sin_hora_opcionales = [
                 "EDT_FECHACARGA",
             ]
 
@@ -601,10 +601,10 @@ class GMTransportAutomation:
                     self.reset_formulario()
                     self.llenar_fecha(fecha_id, fecha_valor)
 
-            for fecha_id in fechas_con_hora_opcionales:
+            for fecha_id in fechas_sin_hora_opcionales:
                 try:
                     elemento = self.driver.find_element(By.ID, fecha_id)
-                    self.llenar_fecha(fecha_id, fecha_valor)
+                    self.llenar_fecha(fecha_id, fecha_valor, incluir_hora=False)
                 except:
                     logger.warning(f"Campo opcional {fecha_id} no encontrado - omitiendo")
                     continue
