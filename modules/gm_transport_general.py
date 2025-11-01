@@ -609,12 +609,19 @@ class GMTransportAutomation:
                     logger.warning(f"Campo opcional {fecha_id} no encontrado - omitiendo")
                     continue
 
+            # Llenar EDT_FECHAENTREGA con patrón robusto
             try:
+                self.cerrar_todos_los_alerts()
+                self.cerrar_calendarios_abiertos()
+                time.sleep(0.5)
+
                 self.driver.execute_script("""
                     var campo = document.getElementById('EDT_FECHAENTREGA');
                     if (campo) {
                         campo.value = arguments[0];
+                        campo.dispatchEvent(new Event('input', { bubbles: true }));
                         campo.dispatchEvent(new Event('change', { bubbles: true }));
+                        campo.dispatchEvent(new Event('blur', { bubbles: true }));
                     }
                 """, fecha_valor)
             except Exception as e:

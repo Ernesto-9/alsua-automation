@@ -27,7 +27,29 @@ class GMSalidaAutomation:
         self.driver = driver
         self.wait = WebDriverWait(driver, 30)  # Aumentado de 20 a 30
         self.datos_viaje = datos_viaje or {}
-        
+
+    def cerrar_todos_los_alerts(self, max_intentos=5):
+        """Cierra todos los alerts abiertos"""
+        alerts_cerrados = 0
+        for i in range(max_intentos):
+            try:
+                alert = self.driver.switch_to.alert
+                alert.accept()
+                alerts_cerrados += 1
+                time.sleep(0.2)
+            except:
+                break
+        return alerts_cerrados
+
+    def cerrar_calendarios_abiertos(self):
+        """Cierra calendarios abiertos enviando ESC"""
+        try:
+            for _ in range(3):
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                time.sleep(0.3)
+        except:
+            pass
+
     def obtener_sucursal_por_determinante(self, clave_determinante):
         """Obtiene la sucursal correspondiente a la clave determinante"""
         csv_path = 'modules/clave_ruta_base.csv'
@@ -82,9 +104,17 @@ class GMSalidaAutomation:
             logger.info(f" Llenando fecha en {campo_id}: {fecha_valor}")
             debug_logger.info(f"Llenando fecha {campo_id} con valor {fecha_valor}")
 
+            # Cerrar alerts y calendarios ANTES de empezar (patrón que funciona)
+            self.cerrar_todos_los_alerts()
+            self.cerrar_calendarios_abiertos()
+            time.sleep(0.5)
+
             # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
             for intento in range(3):
                 try:
+                    # Cerrar alerts en cada intento
+                    self.cerrar_todos_los_alerts()
+
                     logger.info(f"Intento {intento + 1}/3 de llenar fecha con JavaScript")
 
                     # Usar JavaScript directo para llenar el campo SIN abrirlo

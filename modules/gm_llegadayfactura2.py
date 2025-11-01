@@ -26,7 +26,29 @@ class ProcesadorLlegadaFactura:
         self.driver = driver
         self.datos_viaje = datos_viaje
         self.wait = WebDriverWait(driver, 20)
-        
+
+    def cerrar_todos_los_alerts(self, max_intentos=5):
+        """Cierra todos los alerts abiertos"""
+        alerts_cerrados = 0
+        for i in range(max_intentos):
+            try:
+                alert = self.driver.switch_to.alert
+                alert.accept()
+                alerts_cerrados += 1
+                time.sleep(0.2)
+            except:
+                break
+        return alerts_cerrados
+
+    def cerrar_calendarios_abiertos(self):
+        """Cierra calendarios abiertos enviando ESC"""
+        try:
+            for _ in range(3):
+                self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                time.sleep(0.3)
+        except:
+            pass
+
     def procesar_llegada_y_factura(self):
         """Proceso principal de llegada y facturación CON EXTRACCIÓN AUTOMÁTICA"""
         paso_actual = "Inicialización"
@@ -98,49 +120,70 @@ class ProcesadorLlegadaFactura:
             return False
     
     def _llenar_fecha_llegada_robusto(self, id_input, fecha_valor):
-        """Método ROBUSTO para llenar fecha de llegada"""
+        """Método ROBUSTO para llenar fecha usando JavaScript (patrón que funciona)"""
         try:
             logger.info(f" Llenando fecha en {id_input}: {fecha_valor}")
-            
-            campo = self.wait.until(EC.element_to_be_clickable((By.ID, id_input)))
-            
-            # Verificar valor actual
-            valor_actual = campo.get_attribute("value")
-            
-            # DOBLE CLIC
-            campo.click()
-            time.sleep(0.3)
-            campo.click()
-            time.sleep(0.2)
-            
-            # Limpiar campo completamente
-            campo.send_keys(Keys.HOME)
-            for _ in range(15):
-                campo.send_keys(Keys.DELETE)
-                
-            # Obtener hora actual si existe, sino usar hora por defecto
-            if valor_actual and " " in valor_actual:
-                hora = valor_actual.split(" ")[1]
-            else:
-                hora = "14:00"
-                
-            # Insertar nueva fecha con hora
-            nuevo_valor = f"{fecha_valor} {hora}"
-            campo.send_keys(nuevo_valor)
+            debug_logger.info(f"Llenando fecha {id_input} con valor {fecha_valor}")
+
+            # Cerrar alerts y calendarios ANTES de empezar (patrón que funciona)
+            self.cerrar_todos_los_alerts()
+            self.cerrar_calendarios_abiertos()
             time.sleep(0.5)
-            
-            # Verificar que se insertó correctamente
-            valor_final = campo.get_attribute("value")
-            logger.info(f" Fecha insertada: {fecha_valor}")
-            
-            # Hacer ENTER para confirmar
-            campo.send_keys(Keys.ENTER)
-            time.sleep(0.3)
-            
-            return True
-            
+
+            # Usar JavaScript para llenar (como en los campos que funcionan)
+            for intento in range(3):
+                try:
+                    # Cerrar alerts en cada intento
+                    self.cerrar_todos_los_alerts()
+
+                    # Usar JavaScript directo para llenar el campo
+                    script = f"""
+                    var campo = document.getElementById('{id_input}');
+                    if (campo) {{
+                        campo.value = '{fecha_valor}';
+                        campo.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        campo.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                        campo.dispatchEvent(new Event('blur', {{ bubbles: true }}));
+                        return true;
+                    }}
+                    return false;
+                    """
+
+                    resultado = self.driver.execute_script(script)
+
+                    if not resultado:
+                        logger.warning(f"Campo {id_input} no encontrado en intento {intento + 1}")
+                        time.sleep(1)
+                        continue
+
+                    time.sleep(0.5)
+
+                    # Verificar que se llenó correctamente
+                    valor_actual = self.driver.execute_script(f"return document.getElementById('{id_input}').value;")
+
+                    if valor_actual and fecha_valor in valor_actual:
+                        logger.info(f" Fecha insertada correctamente: {fecha_valor}")
+                        debug_logger.info(f" Fecha {id_input} = {valor_actual}")
+                        return True
+                    else:
+                        logger.warning(f" Verificación falló. Esperado: {fecha_valor}, Actual: {valor_actual}")
+                        time.sleep(1)
+                        continue
+
+                except Exception as e:
+                    logger.error(f" Error en intento {intento + 1}: {e}")
+                    debug_logger.error(f"Error llenando fecha {id_input} intento {intento + 1}: {e}")
+                    time.sleep(1)
+                    continue
+
+            # Si llegamos aquí, fallaron todos los intentos
+            logger.error(f" ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
+            debug_logger.error(f"FALLO CRÍTICO llenando fecha {id_input} con valor {fecha_valor}")
+            return False
+
         except Exception as e:
-            logger.error(f" Error al llenar fecha en {id_input}: {e}")
+            logger.error(f" Error en _llenar_fecha_llegada_robusto: {e}")
+            debug_logger.error(f"Excepción en _llenar_fecha_llegada_robusto: {e}")
             return False
     
     def _procesar_llegada(self):
