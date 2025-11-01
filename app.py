@@ -7,9 +7,11 @@ from flask import Flask, render_template, jsonify, redirect, url_for
 import threading
 import os
 import logging
+import sys
 from modules import robot_state_manager
 from alsua_mail_automation import AlsuaMailAutomation
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
@@ -25,26 +27,34 @@ sistema_estado = {
 def ejecutar_robot_bucle():
     """Función que ejecuta el bucle del robot en un hilo separado"""
     try:
-        print(">>> ejecutar_robot_bucle() INICIADO <<<")
+        logger.info(">>> ejecutar_robot_bucle() INICIADO <<<")
+        sys.stdout.flush()
+
         robot_state_manager.actualizar_estado_robot("ejecutando")
-        print(">>> Estado robot actualizado <<<")
+        logger.info(">>> Estado robot actualizado <<<")
+        sys.stdout.flush()
 
         AlsuaMailAutomation.continuar_ejecutando = True
-        print(">>> Creando instancia AlsuaMailAutomation <<<")
+        logger.info(">>> Creando instancia AlsuaMailAutomation <<<")
+        sys.stdout.flush()
+
         sistema = AlsuaMailAutomation()
-        print(">>> Instancia creada <<<")
+        logger.info(">>> Instancia creada <<<")
+        sys.stdout.flush()
 
         sistema_estado["instancia"] = sistema
-        print(">>> Robot iniciado desde panel web <<<")
+        logger.info(">>> Robot iniciado desde panel web <<<")
+        sys.stdout.flush()
 
         sistema.ejecutar_bucle_continuo()
     except Exception as e:
-        print(f">>> ERROR en ejecución del robot: {e} <<<")
+        logger.error(f">>> ERROR en ejecución del robot: {e} <<<")
         import traceback
         traceback.print_exc()
         robot_state_manager.actualizar_estado_robot("detenido")
     finally:
-        print(">>> ejecutar_robot_bucle() FINALIZANDO <<<")
+        logger.info(">>> ejecutar_robot_bucle() FINALIZANDO <<<")
+        sys.stdout.flush()
         sistema_estado["ejecutando"] = False
         sistema_estado["instancia"] = None
 
@@ -89,21 +99,32 @@ def api_estado():
 def iniciar_robot():
     """Inicia el robot de automatización en un hilo separado"""
     try:
-        print(">>> ENDPOINT /iniciar llamado <<<")
+        logger.info(">>> ENDPOINT /iniciar llamado <<<")
+        sys.stdout.flush()
 
         if sistema_estado["ejecutando"]:
-            print(">>> Robot ya está ejecutando <<<")
+            logger.warning(">>> Robot ya está ejecutando - ignorando <<<")
+            sys.stdout.flush()
             return redirect(url_for('index'))
 
-        print(">>> Creando thread del robot <<<")
+        logger.info(">>> Creando thread del robot <<<")
+        sys.stdout.flush()
+
         sistema_estado["ejecutando"] = True
         sistema_estado["hilo"] = threading.Thread(target=ejecutar_robot_bucle, daemon=True)
+
+        logger.info(">>> Iniciando thread <<<")
+        sys.stdout.flush()
+
         sistema_estado["hilo"].start()
-        print(">>> Thread iniciado <<<")
+
+        logger.info(">>> Thread iniciado exitosamente <<<")
+        sys.stdout.flush()
 
         return redirect(url_for('index'))
     except Exception as e:
-        print(f">>> ERROR en /iniciar: {e} <<<")
+        logger.error(f">>> ERROR en /iniciar: {e} <<<")
+        sys.stdout.flush()
         import traceback
         traceback.print_exc()
         return redirect(url_for('index'))
