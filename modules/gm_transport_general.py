@@ -578,7 +578,7 @@ class GMTransportAutomation:
             self.llenar_campo_texto("EDT_NOVIAJECLIENTE", prefactura_valor, "Prefactura")
             self.llenar_campo_texto("EDT_NUMEROCLIENTE", cliente_codigo, "Cliente")
 
-            fechas_con_hora_requeridas = [
+            fechas_sin_hora_requeridas = [
                 "EDT_FECHA",
                 "EDT_FECHAESTATUS",
             ]
@@ -588,18 +588,18 @@ class GMTransportAutomation:
             ]
 
             inicio_fechas = time.time()
-            for fecha_id in fechas_con_hora_requeridas:
+            for fecha_id in fechas_sin_hora_requeridas:
                 if time.time() - inicio_fechas > 15:
                     logger.error("TIMEOUT llenando fechas - haciendo reset")
                     if not self.reset_formulario():
                         return False
                     inicio_fechas = time.time()
 
-                exito = self.llenar_fecha(fecha_id, fecha_valor)
+                exito = self.llenar_fecha(fecha_id, fecha_valor, incluir_hora=False)
                 if not exito:
                     logger.warning(f"Fallo en {fecha_id} - reintentando con reset")
                     self.reset_formulario()
-                    self.llenar_fecha(fecha_id, fecha_valor)
+                    self.llenar_fecha(fecha_id, fecha_valor, incluir_hora=False)
 
             for fecha_id in fechas_sin_hora_opcionales:
                 try:
