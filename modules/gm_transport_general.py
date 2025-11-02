@@ -422,7 +422,7 @@ class GMTransportAutomation:
             self.llenar_fecha("EDT_FECHAESTIMADACARGA", fecha_valor, incluir_hora=False)
             
             logger.info("Esperando asignación automática de operador...")
-            time.sleep(5)
+            time.sleep(10)  # Aumentado para dar tiempo a asignación automática
             
             # Validación estricta de operador
             operador_asignado = False
