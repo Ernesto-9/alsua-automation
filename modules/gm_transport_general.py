@@ -2,6 +2,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 import time
 import csv
 import os
@@ -423,65 +424,29 @@ class GMTransportAutomation:
             logger.info("Esperando asignación automática de operador...")
             time.sleep(5)
             
+            # Validación estricta de operador
             operador_asignado = False
-            
+
             try:
                 posibles_ids_operador = [
-                    "EDT_OPERADOR", 
-                    "EDT_CHOFER", 
+                    "EDT_OPERADOR",
+                    "EDT_CHOFER",
                     "EDT_CONDUCTOR",
-                    "EDT_OPERADOR1",
-                    "COMBO_OPERADOR",
-                    "EDT_NOMBREOPERADOR",
-                    "EDT_CODIGOOPERADOR"
+                    "EDT_OPERADOR1"
                 ]
-                
+
                 for id_operador in posibles_ids_operador:
                     try:
                         operador_campo = self.driver.find_element(By.ID, id_operador)
                         valor_operador = operador_campo.get_attribute("value")
-                        
+
                         if valor_operador and valor_operador.strip() and valor_operador != "0" and len(valor_operador.strip()) > 2:
-                            logger.info(f"Operador encontrado: {valor_operador}")
                             operador_asignado = True
                             break
-                            
+
                     except:
                         continue
-                
-                if not operador_asignado:
-                    try:
-                        elementos_operador = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'Operador') or contains(text(), 'OPERADOR') or contains(text(), 'Chofer') or contains(text(), 'CHOFER')]")
-                        for elem in elementos_operador:
-                            try:
-                                texto_parent = elem.find_element(By.XPATH, "..").text
-                                
-                                if ":" in texto_parent:
-                                    nombre_operador = texto_parent.split(":")[-1].strip()
-                                    if len(nombre_operador) > 3 and not nombre_operador.isdigit():
-                                        logger.info(f"Operador detectado: {nombre_operador}")
-                                        operador_asignado = True
-                                        break
-                            except:
-                                continue
-                    except:
-                        pass
-                
-                if not operador_asignado:
-                    try:
-                        todos_inputs = self.driver.find_elements(By.XPATH, "//input[@type='text']")
-                        for input_elem in todos_inputs:
-                            try:
-                                valor = input_elem.get_attribute("value")
-                                if valor and len(valor) > 5 and " " in valor and not valor.isdigit():
-                                    logger.info(f"Posible operador encontrado: {valor}")
-                                    operador_asignado = True
-                                    break
-                            except:
-                                continue
-                    except:
-                        pass
-                        
+
             except Exception as e:
                 logger.warning(f"Error verificando operador: {e}")
                 
@@ -508,17 +473,26 @@ class GMTransportAutomation:
                     logger.warning(f"Error cerrando modal: {e}")
                 
                 return False, "Sin operador asignado"
-            
-            logger.info("Operador asignado correctamente")
-            
+
+            # Operador válido encontrado, cerrar modal
             try:
                 aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTARTRAYECTO")))
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", aceptar_btn)
                 time.sleep(0.3)
                 self.driver.execute_script("arguments[0].click();", aceptar_btn)
-                logger.info("Tractor y operador asignados exitosamente")
-                return True, ""
-                
+
+                # Verificar que el modal se cerró
+                try:
+                    self.wait.until(
+                        EC.invisibility_of_element_located((By.ID, "BTN_ACEPTARTRAYECTO"))
+                    )
+                    return True, ""
+                except TimeoutException:
+                    logger.error("Modal no se cerró - forzando cierre")
+                    self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                    time.sleep(1)
+                    return False, "MODAL_NO_CERRADO"
+
             except Exception as e:
                 logger.error(f"Error al aceptar modal: {e}")
                 return False, "ERROR_ACEPTAR_MODAL"
