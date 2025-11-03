@@ -638,6 +638,7 @@ class AlsuaMailAutomation:
 
                         if resultado == 'EXITOSO':
                             marcar_viaje_exitoso_cola(viaje_id)
+                            robot_state_manager.limpiar_viaje_actual()
                             logger.info(f"{prefactura} COMPLETADO")
                             contador_sync_mysql += 1
                             time.sleep(60)
@@ -649,11 +650,13 @@ class AlsuaMailAutomation:
 
                         elif resultado == 'DRIVER_CORRUPTO':
                             registrar_error_reintentable_cola(viaje_id, 'DRIVER_CORRUPTO', f'Driver corrupto en {modulo_error}')
+                            robot_state_manager.limpiar_viaje_actual()
                             logger.warning(f"DRIVER CORRUPTO - {prefactura}")
 
                         else:
                             motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                             marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
+                            robot_state_manager.limpiar_viaje_actual()
                             logger.error(f"{prefactura} FALLÓ: {modulo_error}")
                             contador_sync_mysql += 1
                             time.sleep(30)
