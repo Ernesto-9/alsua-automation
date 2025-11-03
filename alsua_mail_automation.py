@@ -9,6 +9,7 @@ import time
 import logging
 import re
 import sys
+import csv
 from datetime import datetime, timedelta
 import win32com.client
 import pythoncom
@@ -438,25 +439,19 @@ class AlsuaMailAutomation:
                 else:
                     logger.error(f"Error en automatización GM: {prefactura}")
 
-                    # Buscar último error en debug log para mensaje más descriptivo
+                    # Leer motivo específico del CSV (la fuente de verdad)
                     mensaje_error = "Error durante creación del viaje"
                     try:
-                        with open('debug.log', 'r', encoding='utf-8') as f:
-                            ultimas_lineas = f.readlines()[-50:]
-                            for linea in reversed(ultimas_lineas):
-                                if prefactura in linea and ('FALLO CRÍTICO' in linea or 'ERROR CRÍTICO' in linea):
-                                    # Extraer descripción del error
-                                    if 'EDT_' in linea:
-                                        campo = linea.split('EDT_')[1].split()[0]
-                                        mensaje_error = f"Error llenando campo {campo}"
-                                    elif 'Determinante' in linea and 'no encontrada' in linea:
-                                        det = linea.split('Determinante')[1].split()[0]
-                                        mensaje_error = f"Determinante {det} no encontrada en CSV"
-                                    elif 'Alert' in linea:
-                                        mensaje_error = "Alert 'Valor no válido' bloqueó formulario"
+                        with open('viajes_log.csv', 'r', encoding='utf-8') as f:
+                            reader = csv.DictReader(f)
+                            viajes = list(reader)
+                            # Buscar el último registro de esta prefactura que falló
+                            for row in reversed(viajes):
+                                if row['prefactura'] == str(prefactura) and row['estatus'] == 'FALLIDO':
+                                    mensaje_error = row['motivo_fallo']
                                     break
-                    except:
-                        pass
+                    except Exception as e:
+                        logger.warning(f"No se pudo leer motivo del CSV: {e}")
 
                     robot_state_manager.incrementar_fallidos(prefactura, mensaje_error)
                     debug_logger.log_viaje_fallo(prefactura, "gm_transport_general", mensaje_error)
