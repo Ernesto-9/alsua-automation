@@ -26,6 +26,7 @@ class ProcesadorLlegadaFactura:
         self.driver = driver
         self.datos_viaje = datos_viaje
         self.wait = WebDriverWait(driver, 20)
+        self.ultimo_paso_fallido = None  # Guardar paso donde falló
 
     def cerrar_todos_los_alerts(self, max_intentos=5):
         """Cierra todos los alerts abiertos"""
@@ -84,6 +85,9 @@ class ProcesadorLlegadaFactura:
             return True
 
         except Exception as e:
+            # Guardar paso donde falló para registro detallado
+            self.ultimo_paso_fallido = paso_actual
+
             logger.error(f" Error en proceso de llegada y facturación - PASO: {paso_actual}")
             logger.error(f" Detalles del error: {e}")
             debug_logger.error(f"Error en paso '{paso_actual}': {e}")
@@ -571,27 +575,11 @@ def procesar_llegada_factura(driver, datos_viaje):
                 datos_viaje['viajegm'] = datos_extraidos['viajegm']
                 
         else:  # resultado == False - CUALQUIER ERROR
-            # Intentar extraer detalles del error del debug.log
-            detalle_error = "Error en llegada y facturación"
-            try:
-                with open('debug.log', 'r', encoding='utf-8') as f:
-                    ultimas_lineas = f.readlines()[-30:]
-                    for linea in reversed(ultimas_lineas):
-                        if prefactura in linea:
-                            if 'FALLO CRÍTICO' in linea or 'ERROR' in linea:
-                                # Extraer descripción del error
-                                if 'BTN_' in linea or 'EDT_' in linea:
-                                    elemento = linea.split('BTN_')[1].split()[0] if 'BTN_' in linea else linea.split('EDT_')[1].split()[0]
-                                    detalle_error = f"Error en llegada - Elemento {elemento} no accesible"
-                                elif 'not clickable' in linea:
-                                    detalle_error = "Error en llegada - Elemento no clickable"
-                                elif 'Timeout' in linea:
-                                    detalle_error = "Error en llegada - Timeout esperando elemento"
-                                elif 'PDF' in linea or 'pdf' in linea:
-                                    detalle_error = "Error en llegada - Problema con PDF"
-                                break
-            except:
-                pass  # Si no se puede leer debug.log, usar mensaje genérico
+            # Obtener paso específico donde falló
+            if procesador.ultimo_paso_fallido:
+                detalle_error = f"Error en paso: {procesador.ultimo_paso_fallido}"
+            else:
+                detalle_error = "Error en llegada y facturación"
 
             logger.error(f" VIAJE {prefactura} FALLÓ: {detalle_error}")
 
