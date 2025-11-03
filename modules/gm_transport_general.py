@@ -477,31 +477,6 @@ class GMTransportAutomation:
                 except:
                     pass
 
-            # MÉTODO 3: Búsqueda genérica en inputs (con validación muy estricta)
-            if not operador_asignado:
-                try:
-                    todos_inputs = self.driver.find_elements(By.XPATH, "//input[@type='text']")
-                    for input_elem in todos_inputs:
-                        try:
-                            valor = input_elem.get_attribute("value")
-                            # Validación MUCHO más estricta para evitar falsos positivos
-                            if (valor and
-                                len(valor) > 5 and
-                                " " in valor and
-                                not valor.isdigit() and
-                                # Excluir valores conocidos que no son operadores
-                                valor not in ["TODOS LOS TIPOS DE UNIDADES", "SELECCIONE UNA OPCIÓN", ""] and
-                                not valor.startswith("TODOS") and
-                                # Debe tener al menos 2 palabras de más de 2 letras (formato nombre)
-                                len([p for p in valor.split() if len(p) > 2]) >= 2):
-                                logger.info(f"Posible operador encontrado: {valor}")
-                                operador_asignado = True
-                                break
-                        except:
-                            continue
-                except:
-                    pass
-
             if not operador_asignado:
                 logger.error("PLACA SIN OPERADOR ASIGNADO")
                 logger.error(f"Placa: {placa_tractor} no tiene operador disponible")
