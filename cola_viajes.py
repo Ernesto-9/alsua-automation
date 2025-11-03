@@ -143,12 +143,26 @@ class ColaViajes:
             logger.error(f"Error agregando viaje a cola: {e}")
             return False
     
-    def obtener_siguiente_viaje(self):
+    def obtener_siguiente_viaje(self, max_intentos=5):
         try:
             datos = self._leer_cola()
+            viajes_actualizados = False
 
             for viaje in datos.get("viajes", []):
                 if viaje.get("estado") == "pendiente":
+                    intentos = viaje.get("intentos", 0)
+                    prefactura = viaje.get('datos_viaje', {}).get('prefactura', 'DESCONOCIDA')
+
+                    if intentos >= max_intentos:
+                        logger.warning(f"Viaje {prefactura} superó límite de {max_intentos} intentos")
+                        self.marcar_viaje_fallido(
+                            viaje.get("id"),
+                            "MAX_INTENTOS_EXCEDIDOS",
+                            f"Superó el límite de {max_intentos} intentos. Último error: {viaje.get('errores', [{}])[-1].get('tipo', 'DESCONOCIDO')}"
+                        )
+                        viajes_actualizados = True
+                        continue
+
                     viaje["estado"] = "procesando"
                     viaje["fecha_inicio_procesamiento"] = datetime.now().isoformat()
 
@@ -156,6 +170,9 @@ class ColaViajes:
                         return viaje
                     else:
                         return None
+
+            if viajes_actualizados:
+                return self.obtener_siguiente_viaje(max_intentos)
 
             return None
 
@@ -217,30 +234,31 @@ class ColaViajes:
     def registrar_error_reintentable(self, viaje_id, tipo_error, detalle):
         try:
             datos = self._leer_cola()
-            
+
             for viaje in datos.get("viajes", []):
                 if viaje.get("id") == viaje_id:
                     viaje["estado"] = "pendiente"
                     viaje["intentos"] = viaje.get("intentos", 0) + 1
-                    
+                    viaje["fecha_inicio_procesamiento"] = None
+
                     error_info = {
                         "tipo": tipo_error,
                         "detalle": detalle,
                         "timestamp": datetime.now().isoformat()
                     }
-                    
+
                     if "errores" not in viaje:
                         viaje["errores"] = []
                     viaje["errores"].append(error_info)
-                    
+
                     prefactura = viaje.get('datos_viaje', {}).get('prefactura')
                     logger.warning(f"Error reintentable registrado para {prefactura}: {tipo_error} (intento {viaje['intentos']})")
-                    
+
                     return self._guardar_cola(datos)
-            
+
             logger.warning(f"Viaje {viaje_id} no encontrado para registrar error")
             return False
-            
+
         except Exception as e:
             logger.error(f"Error registrando error reintentable: {e}")
             return False

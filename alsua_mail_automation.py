@@ -712,7 +712,7 @@ class AlsuaMailAutomation:
             except:
                 pass
 
-            # Marcar robot como detenido
+            robot_state_manager.limpiar_viaje_actual()
             robot_state_manager.actualizar_estado_robot("detenido")
             debug_logger.info("Bucle continuo finalizado")
 

@@ -349,6 +349,17 @@ class ProcesadorLlegadaFactura:
                 logger.info(f" Tipo de documento seleccionado: '{seleccionado.text}' (valor: 8)")
                 debug_logger.info(f"Tipo documento seleccionado: {seleccionado.text} (valor: 8)")
 
+                # Disparar evento change para actualizar UI de GM
+                script = """
+                var combo = document.getElementById('COMBO_CATTIPOSDOCUMENTOS');
+                if (combo) {
+                    var event = new Event('change', { bubbles: true });
+                    combo.dispatchEvent(event);
+                }
+                """
+                self.driver.execute_script(script)
+                time.sleep(2)
+
             except Exception as e:
                 logger.error(f" Error al seleccionar tipo de documento: {e}")
                 debug_logger.error(f"Error seleccionando tipo documento: {e}")
@@ -357,12 +368,55 @@ class ProcesadorLlegadaFactura:
             
             # Hacer clic en "Aceptar" para confirmar la facturación
             try:
-                aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Aceptar')]/..")))
+                aceptar_btn = None
+
+                # Método 1: Por ID
+                try:
+                    aceptar_btn = self.driver.find_element(By.ID, "BTN_ACEPTAR")
+                    if not (aceptar_btn.is_enabled() and aceptar_btn.is_displayed()):
+                        aceptar_btn = None
+                except NoSuchElementException:
+                    pass
+
+                # Método 2: XPath
+                if not aceptar_btn:
+                    try:
+                        aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.XPATH, "//span[contains(text(), 'Aceptar')]/..")))
+                    except TimeoutException:
+                        pass
+
+                # Método 3: Buscar en todos los botones visibles
+                if not aceptar_btn:
+                    try:
+                        elementos = self.driver.find_elements(By.XPATH, "//button | //span[@class='ui-button-text'] | //span[contains(@class, 'button')]")
+                        for elem in elementos:
+                            if elem.is_displayed() and "Aceptar" in elem.text:
+                                aceptar_btn = elem
+                                break
+                    except:
+                        pass
+
+                if not aceptar_btn:
+                    logger.error(" No se pudo encontrar el botón 'Aceptar'")
+                    prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
+                    screenshot_mgr.capturar_con_html(self.driver, prefactura=prefactura,
+                                                     detalle_error="Botón Aceptar no encontrado")
+                    debug_logger.error(f"Botón Aceptar no encontrado - {prefactura}")
+                    return False
+
                 self.driver.execute_script("arguments[0].click();", aceptar_btn)
                 time.sleep(2)
                 logger.info(" Botón 'Aceptar' clickeado")
+
             except Exception as e:
                 logger.error(f" Error al hacer clic en 'Aceptar': {e}")
+                debug_logger.error(f"Error en clic Aceptar: {e}")
+                try:
+                    prefactura = self.datos_viaje.get('prefactura', 'DESCONOCIDA')
+                    screenshot_mgr.capturar_con_html(self.driver, prefactura=prefactura,
+                                                     detalle_error=f"Error clic Aceptar: {e}")
+                except:
+                    pass
                 return False
             
             # Confirmar timbrado con "Sí"
