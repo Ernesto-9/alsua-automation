@@ -44,11 +44,13 @@ class AlsuaMailAutomation:
 
     def __init__(self):
         self.carpeta_descarga = os.path.abspath("archivos_descargados")
-        
+
         self.driver = None
-        
+
         self.com_inicializado = False
-        
+
+        self.emails_fallidos = {}
+
         self._crear_carpeta_descarga()
         
     def _crear_carpeta_descarga(self):
@@ -279,45 +281,66 @@ class AlsuaMailAutomation:
                 if viajes_extraidos >= limite_viajes:
                     logger.info(f"Límite alcanzado: {limite_viajes} viajes extraídos")
                     break
-                    
+
                 try:
                     remitente = mensaje.SenderEmailAddress or ""
                     if "PreFacturacionTransportes@walmart.com" not in remitente:
                         continue
-                    
+
                     asunto = mensaje.Subject or ""
                     prefactura = self.extraer_prefactura_del_asunto(asunto)
-                    
+
+                    if prefactura in self.emails_fallidos and self.emails_fallidos[prefactura] >= 3:
+                        logger.warning(f"Email problemático detectado ({prefactura}) - {self.emails_fallidos[prefactura]} crashes previos")
+                        try:
+                            carpeta_problemas = inbox.Folders("Problemas")
+                        except:
+                            carpeta_problemas = inbox.Folders.Add("Problemas")
+
+                        mensaje.Move(carpeta_problemas)
+                        logger.warning(f"Email {prefactura} movido a carpeta 'Problemas'")
+                        correos_saltados += 1
+                        continue
+
                     logger.info(f"Extrayendo viaje: {prefactura}")
                     datos_viaje = self.extraer_datos_de_correo(mensaje)
-                    
+
                     if datos_viaje:
                         # VALIDACIÓN DEFENSIVA AGREGADA
                         if isinstance(datos_viaje, list):
                             logger.error(f"ERROR CRÍTICO: datos_viaje es una lista cuando debería ser dict")
                             logger.error(f"Contenido: {datos_viaje}")
                             correos_saltados += 1
+                            self.emails_fallidos[prefactura] = self.emails_fallidos.get(prefactura, 0) + 1
                             continue
-                        
+
                         if not isinstance(datos_viaje, dict):
                             logger.error(f"ERROR CRÍTICO: datos_viaje no es dict. Tipo: {type(datos_viaje)}")
                             logger.error(f"Contenido: {datos_viaje}")
                             correos_saltados += 1
+                            self.emails_fallidos[prefactura] = self.emails_fallidos.get(prefactura, 0) + 1
                             continue
-                        
+
                         if agregar_viaje_a_cola(datos_viaje):
                             viajes_extraidos += 1
                             logger.info(f"Viaje agregado a cola: {datos_viaje['prefactura']}")
-                            
+
                             mensaje.UnRead = False
                         else:
                             logger.warning(f"No se pudo agregar viaje a cola: {datos_viaje.get('prefactura')}")
                     else:
                         correos_saltados += 1
-                        
+
                 except Exception as e:
                     logger.error(f"Error procesando mensaje individual: {e}")
                     correos_saltados += 1
+                    try:
+                        asunto = mensaje.Subject or ""
+                        prefactura = self.extraer_prefactura_del_asunto(asunto)
+                        self.emails_fallidos[prefactura] = self.emails_fallidos.get(prefactura, 0) + 1
+                        logger.error(f"Email {prefactura} registrado como fallido (intento #{self.emails_fallidos[prefactura]})")
+                    except:
+                        pass
                     continue
             
             logger.info(f"Extracción completada:")
@@ -387,10 +410,14 @@ class AlsuaMailAutomation:
             )
             debug_logger.log_viaje_inicio(prefactura, datos_viaje)
 
-            if viajes_log.verificar_viaje_existe(prefactura):
-                logger.warning(f"DUPLICADO DETECTADO: {prefactura} ya fue procesado - saltando")
-                robot_state_manager.limpiar_viaje_actual()
-                return 'EXITOSO', 'duplicado_detectado'
+            try:
+                if viajes_log.verificar_viaje_existe(prefactura):
+                    logger.warning(f"DUPLICADO DETECTADO: {prefactura} ya fue procesado - saltando")
+                    robot_state_manager.limpiar_viaje_actual()
+                    return 'EXITOSO', 'duplicado_detectado'
+            except Exception as e:
+                logger.error(f"Error verificando duplicados para {prefactura}: {e}")
+                logger.error(f"Continuando con procesamiento del viaje")
 
             logger.info(f"Procesando viaje: {prefactura}")
             
@@ -483,6 +510,7 @@ class AlsuaMailAutomation:
         except Exception as e:
             logger.error(f"Error general procesando viaje: {e}")
             try:
+                robot_state_manager.limpiar_viaje_actual()
                 robot_state_manager.incrementar_fallidos(prefactura, f"Error general: {str(e)}")
                 debug_logger.log_viaje_fallo(prefactura, 'sistema_general', str(e))
             except:
@@ -676,7 +704,15 @@ class AlsuaMailAutomation:
                             logger.info(f"Nuevos viajes agregados a cola: {viajes_encontrados}")
                         else:
                             time.sleep(10)
-                    
+
+                    # Watchdog: verificar viaje_actual stuck cada ciclo
+                    try:
+                        limpiado, mensaje = robot_state_manager.verificar_y_limpiar_viaje_stuck()
+                        if limpiado:
+                            logger.warning(mensaje)
+                    except:
+                        pass
+
                     # Limpieza zombie automática cada 100 ciclos (~1 hora)
                     if contador_ciclos % 100 == 0:
                         try:

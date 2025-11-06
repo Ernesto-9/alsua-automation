@@ -211,6 +211,45 @@ def actualizar_cola(lista_viajes):
     _guardar_estado(estado)
 
 
+def verificar_y_limpiar_viaje_stuck():
+    """
+    Verifica si viaje_actual está stuck (>30 min en procesamiento) y lo limpia automáticamente
+
+    Returns:
+        tuple: (limpiado: bool, mensaje: str o None)
+               - (True, "mensaje") si se limpió un viaje stuck
+               - (False, None) si todo está OK
+    """
+    estado = _leer_estado()
+    robot = estado['robots']['robot_1']
+    viaje_actual = robot.get('viaje_actual')
+
+    if not viaje_actual:
+        return False, None
+
+    try:
+        inicio_viaje = datetime.fromisoformat(viaje_actual['inicio'])
+        ahora = datetime.now()
+        minutos_procesando = (ahora - inicio_viaje).total_seconds() / 60
+
+        if minutos_procesando > 30:
+            prefactura = viaje_actual.get('prefactura', 'DESCONOCIDO')
+            fase = viaje_actual.get('fase', 'DESCONOCIDA')
+
+            limpiar_viaje_actual()
+
+            mensaje = (
+                f"AUTO-RECUPERACIÓN: Viaje {prefactura} stuck por "
+                f"{int(minutos_procesando)} min en fase '{fase}' - limpiado automáticamente"
+            )
+            return True, mensaje
+
+    except Exception as e:
+        print(f"Error verificando viaje stuck: {e}")
+
+    return False, None
+
+
 def verificar_si_trabado():
     """
     Verifica si el robot está trabado en dos escenarios:
