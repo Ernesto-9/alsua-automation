@@ -291,14 +291,12 @@ class AlsuaMailAutomation:
                     prefactura = self.extraer_prefactura_del_asunto(asunto)
 
                     if prefactura in self.emails_fallidos and self.emails_fallidos[prefactura] >= 3:
-                        logger.warning(f"Email problemático detectado ({prefactura}) - {self.emails_fallidos[prefactura]} crashes previos")
                         try:
                             carpeta_problemas = inbox.Folders("Problemas")
                         except:
                             carpeta_problemas = inbox.Folders.Add("Problemas")
 
                         mensaje.Move(carpeta_problemas)
-                        logger.warning(f"Email {prefactura} movido a carpeta 'Problemas'")
                         correos_saltados += 1
                         continue
 
@@ -306,17 +304,12 @@ class AlsuaMailAutomation:
                     datos_viaje = self.extraer_datos_de_correo(mensaje)
 
                     if datos_viaje:
-                        # VALIDACIÓN DEFENSIVA AGREGADA
                         if isinstance(datos_viaje, list):
-                            logger.error(f"ERROR CRÍTICO: datos_viaje es una lista cuando debería ser dict")
-                            logger.error(f"Contenido: {datos_viaje}")
                             correos_saltados += 1
                             self.emails_fallidos[prefactura] = self.emails_fallidos.get(prefactura, 0) + 1
                             continue
 
                         if not isinstance(datos_viaje, dict):
-                            logger.error(f"ERROR CRÍTICO: datos_viaje no es dict. Tipo: {type(datos_viaje)}")
-                            logger.error(f"Contenido: {datos_viaje}")
                             correos_saltados += 1
                             self.emails_fallidos[prefactura] = self.emails_fallidos.get(prefactura, 0) + 1
                             continue
@@ -338,7 +331,6 @@ class AlsuaMailAutomation:
                         asunto = mensaje.Subject or ""
                         prefactura = self.extraer_prefactura_del_asunto(asunto)
                         self.emails_fallidos[prefactura] = self.emails_fallidos.get(prefactura, 0) + 1
-                        logger.error(f"Email {prefactura} registrado como fallido (intento #{self.emails_fallidos[prefactura]})")
                     except:
                         pass
                     continue
@@ -416,8 +408,7 @@ class AlsuaMailAutomation:
                     robot_state_manager.limpiar_viaje_actual()
                     return 'EXITOSO', 'duplicado_detectado'
             except Exception as e:
-                logger.error(f"Error verificando duplicados para {prefactura}: {e}")
-                logger.error(f"Continuando con procesamiento del viaje")
+                logger.error(f"Error verificando duplicados: {e}")
 
             logger.info(f"Procesando viaje: {prefactura}")
             
@@ -705,11 +696,8 @@ class AlsuaMailAutomation:
                         else:
                             time.sleep(10)
 
-                    # Watchdog: verificar viaje_actual stuck cada ciclo
                     try:
-                        limpiado, mensaje = robot_state_manager.verificar_y_limpiar_viaje_stuck()
-                        if limpiado:
-                            logger.warning(mensaje)
+                        robot_state_manager.verificar_y_limpiar_viaje_stuck()
                     except:
                         pass
 
