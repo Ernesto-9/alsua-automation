@@ -51,6 +51,7 @@ class ColaViajes:
             for viaje in datos.get("viajes", []):
                 if viaje.get("estado") == "procesando":
                     viaje["estado"] = "pendiente"
+                    viaje["fecha_inicio_procesamiento"] = None
                     if "intentos" not in viaje:
                         viaje["intentos"] = 0
                     viajes_reseteados += 1
@@ -154,14 +155,19 @@ class ColaViajes:
                     prefactura = viaje.get('datos_viaje', {}).get('prefactura', 'DESCONOCIDA')
 
                     if intentos >= max_intentos:
-                        logger.warning(f"Viaje {prefactura} superó límite de {max_intentos} intentos")
-                        self.marcar_viaje_fallido(
-                            viaje.get("id"),
-                            "MAX_INTENTOS_EXCEDIDOS",
-                            f"Superó el límite de {max_intentos} intentos. Último error: {viaje.get('errores', [{}])[-1].get('tipo', 'DESCONOCIDO')}"
-                        )
-                        viajes_actualizados = True
-                        continue
+                        ultimo_error_tipo = viaje.get('errores', [{}])[-1].get('tipo', 'DESCONOCIDO')
+
+                        if ultimo_error_tipo in ['LOGIN_LIMIT', 'DRIVER_CORRUPTO']:
+                            pass
+                        else:
+                            logger.warning(f"Viaje {prefactura} superó límite de {max_intentos} intentos")
+                            self.marcar_viaje_fallido(
+                                viaje.get("id"),
+                                "MAX_INTENTOS_EXCEDIDOS",
+                                f"Superó el límite de {max_intentos} intentos. Último error: {ultimo_error_tipo}"
+                            )
+                            viajes_actualizados = True
+                            continue
 
                     viaje["estado"] = "procesando"
                     viaje["fecha_inicio_procesamiento"] = datetime.now().isoformat()

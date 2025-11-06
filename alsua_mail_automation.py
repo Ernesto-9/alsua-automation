@@ -351,7 +351,7 @@ class AlsuaMailAutomation:
     def crear_driver_nuevo(self):
         try:
             logger.info("Creando nuevo driver...")
-            
+
             if self.driver:
                 try:
                     self.driver.quit()
@@ -360,31 +360,41 @@ class AlsuaMailAutomation:
                     pass
                 finally:
                     self.driver = None
-            
+
             self.driver = login_to_gm()
-            
+
             if self.driver:
                 logger.info("Nuevo driver creado exitosamente")
+                self.ultimo_error_driver = None
                 return True
             else:
                 logger.error("Error en login GM")
+                self.ultimo_error_driver = Exception("Login GM falló sin excepción específica")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error crítico creando driver: {e}")
             self.driver = None
+            self.ultimo_error_driver = e
             return False
     
     def detectar_tipo_error(self, error):
         error_str = str(error).lower()
-        
-        if any(keyword in error_str for keyword in ['limit', 'limite', 'usuarios', 'user limit', 'maximum', 'conexiones']):
-            return 'LOGIN_LIMIT'
-        
-        if any(keyword in error_str for keyword in ['invalid session', 'chrome not reachable', 'no such window', 'session deleted', 'connection refused']):
+
+        if any(keyword in error_str for keyword in [
+            'invalid session', 'chrome not reachable', 'no such window',
+            'session deleted', 'connection refused', 'stacktrace',
+            'gethandleverifier', 'basethreadinitthunk', 'devtools'
+        ]):
             return 'DRIVER_CORRUPTO'
-        
-        return 'VIAJE_FALLIDO'
+
+        if any(keyword in error_str for keyword in [
+            'limite de usuarios', 'user limit', 'maximum users',
+            'máximo de usuarios', 'conexiones simultáneas'
+        ]):
+            return 'LOGIN_LIMIT'
+
+        return 'DRIVER_CORRUPTO'
     
     def procesar_viaje_individual(self, viaje_registro):
         try:
@@ -415,14 +425,20 @@ class AlsuaMailAutomation:
             if not self.driver:
                 logger.info("No hay driver, creando nuevo...")
                 if not self.crear_driver_nuevo():
-                    return 'LOGIN_LIMIT', 'gm_login'
+                    if hasattr(self, 'ultimo_error_driver') and self.ultimo_error_driver:
+                        tipo_error = self.detectar_tipo_error(self.ultimo_error_driver)
+                        return tipo_error, 'gm_login'
+                    return 'DRIVER_CORRUPTO', 'gm_login'
             
             try:
                 current_url = self.driver.current_url
                 if "softwareparatransporte.com" not in current_url:
                     logger.warning("Driver en página incorrecta, recreando...")
                     if not self.crear_driver_nuevo():
-                        return 'LOGIN_LIMIT', 'gm_login'
+                        if hasattr(self, 'ultimo_error_driver') and self.ultimo_error_driver:
+                            tipo_error = self.detectar_tipo_error(self.ultimo_error_driver)
+                            return tipo_error, 'gm_login'
+                        return 'DRIVER_CORRUPTO', 'gm_login'
             except Exception as e:
                 logger.warning(f"Driver corrupto detectado: {e}")
                 if not self.crear_driver_nuevo():
@@ -615,7 +631,12 @@ class AlsuaMailAutomation:
                     contador_ciclos += 1
                     if mostrar_debug:
                         logger.info(f"Ciclo #{contador_ciclos}")
-                    
+
+                    try:
+                        robot_state_manager.verificar_y_limpiar_viaje_stuck()
+                    except:
+                        pass
+
                     viaje_registro = obtener_siguiente_viaje_cola()
 
                     # Actualizar cola en estado_robots.json (solo si cambia)
@@ -695,11 +716,6 @@ class AlsuaMailAutomation:
                             logger.info(f"Nuevos viajes agregados a cola: {viajes_encontrados}")
                         else:
                             time.sleep(10)
-
-                    try:
-                        robot_state_manager.verificar_y_limpiar_viaje_stuck()
-                    except:
-                        pass
 
                     # Limpieza zombie automática cada 100 ciclos (~1 hora)
                     if contador_ciclos % 100 == 0:
