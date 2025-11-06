@@ -65,29 +65,23 @@ def login(driver):
         # Manejo de popup molesto de bienvenida
         try:
             print(" Buscando popup de bienvenida...")
-            popup_checkbox = WebDriverWait(driver, 10).until(
+            popup_checkbox = WebDriverWait(driver, 3).until(
                 EC.presence_of_element_located((By.ID, "CBOX_CHECKBOX1_1"))
             )
-            print(f" DEBUG: Checkbox encontrado: {popup_checkbox}")
             popup_checkbox.click()
             print(" Casilla 'No volver a mostrar' marcada")
 
-            print(" Buscando botón OK...")
-            ok_button = WebDriverWait(driver, 10).until(
+            ok_button = WebDriverWait(driver, 3).until(
                 EC.element_to_be_clickable((By.CLASS_NAME, "btnvalignmiddle"))
             )
-            print(f" DEBUG: Botón OK encontrado: {ok_button.tag_name}, texto: '{ok_button.text}'")
             try:
                 ok_button.click()
-                print(" Click normal exitoso")
-            except Exception as click_error:
-                print(f" Click normal falló: {click_error}, intentando JS click...")
+            except:
                 driver.execute_script("arguments[0].click();", ok_button)
-                print(" JS click ejecutado")
             print(" Popup cerrado correctamente")
             time.sleep(2)
         except Exception as e:
-            print(f" ERROR en popup: {type(e).__name__}: {e}")
+            pass
 
         # Confirmación de login exitoso
         try:
