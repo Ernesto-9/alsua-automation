@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración del Sistema - Panel Alsua</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { color: #1a202c; font-size: 28px; font-weight: 700; }
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-primary { background: #48bb78; color: white; }
+        .btn-primary:hover { background: #38a169; }
+        .btn-secondary { background: #4299e1; color: white; }
+        .btn-secondary:hover { background: #3182ce; }
+        .config-section {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .config-section h2 {
+            color: #1a202c;
+            margin-bottom: 8px;
+            font-size: 20px;
+        }
+        .config-section p {
+            color: #718096;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .config-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+        }
+        .config-item {
+            border: 1px solid #e2e8f0;
+            padding: 16px;
+            border-radius: 8px;
+        }
+        .config-item label {
+            display: block;
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .config-item input, .config-item select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .config-item small {
+            display: block;
+            color: #a0aec0;
+            margin-top: 4px;
+            font-size: 12px;
+        }
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #cbd5e0;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #48bb78;
+        }
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .alert.success { background: #c6f6d5; color: #22543d; }
+        .alert.error { background: #fed7d7; color: #742a2a; }
+        .alert.warning { background: #fef5e7; color: #7c2d12; }
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .warning-box strong { color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Configuración del Sistema</h1>
+            <div>
+                <a href="/" class="btn btn-secondary">Volver al Dashboard</a>
+                <button onclick="saveConfig()" class="btn btn-primary">Guardar Cambios</button>
+            </div>
+        </div>
+
+        <div class="warning-box">
+            <strong>⚠️ Importante:</strong> Los cambios requieren reiniciar el sistema para aplicarse. Algunos ajustes pueden afectar el rendimiento.
+        </div>
+
+        <div id="alert" class="alert"></div>
+
+        <div class="config-section">
+            <h2>⚙️ Configuración General</h2>
+            <p>Parámetros básicos del sistema</p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Límite de viajes por ciclo</label>
+                    <input type="number" id="LIMITE_VIAJES_POR_CICLO" min="1" max="10">
+                    <small>Cuántos viajes extraer de email por vez (1-10)</small>
+                </div>
+                <div class="config-item">
+                    <label>Tiempo espera viaje exitoso (segundos)</label>
+                    <input type="number" id="TIEMPO_ESPERA_EXITOSO" min="30" max="300">
+                    <small>Pausa después de procesar exitosamente</small>
+                </div>
+                <div class="config-item">
+                    <label>Tiempo espera viaje fallido (segundos)</label>
+                    <input type="number" id="TIEMPO_ESPERA_FALLIDO" min="10" max="120">
+                    <small>Pausa después de un fallo</small>
+                </div>
+                <div class="config-item">
+                    <label>Tiempo espera límite login (segundos)</label>
+                    <input type="number" id="TIEMPO_ESPERA_LOGIN_LIMIT" min="300" max="1800">
+                    <small>Pausa cuando hay límite de usuarios CRM</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>🛡️ Circuit Breaker</h2>
+            <p>Detección automática de patrones de error</p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Circuit Breaker Habilitado</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="CIRCUIT_BREAKER_ENABLED">
+                        <span class="slider"></span>
+                    </label>
+                    <small>Pausa sistema al detectar errores recurrentes</small>
+                </div>
+                <div class="config-item">
+                    <label>Máximo mismo error consecutivo</label>
+                    <input type="number" id="CIRCUIT_BREAKER_MAX_SAME_ERROR" min="5" max="20">
+                    <small>Cuántos errores iguales antes de pausar</small>
+                </div>
+                <div class="config-item">
+                    <label>Tasa máxima de error (%)</label>
+                    <input type="number" id="CIRCUIT_BREAKER_MAX_ERROR_RATE" min="50" max="100" step="5">
+                    <small>Porcentaje de fallos antes de pausar (60-100%)</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>🔄 Reprocesamiento</h2>
+            <p>Gestión de viajes fallidos</p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Auto-guardar viajes fallidos</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="AUTO_SAVE_FAILED_TRIPS">
+                        <span class="slider"></span>
+                    </label>
+                    <small>Guarda automáticamente viajes fallidos en JSON</small>
+                </div>
+                <div class="config-item">
+                    <label>Directorio viajes fallidos</label>
+                    <input type="text" id="FAILED_TRIPS_DIR">
+                    <small>Carpeta donde se guardan viajes fallidos</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>📊 Logging</h2>
+            <p>Configuración de logs del sistema</p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Nivel de logging</label>
+                    <select id="LOG_LEVEL">
+                        <option value="DEBUG">DEBUG (detallado)</option>
+                        <option value="INFO">INFO (normal)</option>
+                        <option value="WARNING">WARNING (solo advertencias)</option>
+                        <option value="ERROR">ERROR (solo errores)</option>
+                    </select>
+                    <small>Cantidad de información en logs</small>
+                </div>
+                <div class="config-item">
+                    <label>Logging JSON habilitado</label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="LOG_JSON_ENABLED">
+                        <span class="slider"></span>
+                    </label>
+                    <small>Logs estructurados en formato JSON</small>
+                </div>
+                <div class="config-item">
+                    <label>Directorio de logs</label>
+                    <input type="text" id="LOG_DIR">
+                    <small>Carpeta donde se guardan los logs</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>🗄️ Base de Datos MySQL</h2>
+            <p>Conexión a base de datos (requiere reinicio)</p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>Host</label>
+                    <input type="text" id="MYSQL_HOST">
+                    <small>Dirección del servidor MySQL</small>
+                </div>
+                <div class="config-item">
+                    <label>Usuario</label>
+                    <input type="text" id="MYSQL_USER">
+                    <small>Usuario de la base de datos</small>
+                </div>
+                <div class="config-item">
+                    <label>Contraseña</label>
+                    <input type="password" id="MYSQL_PASSWORD">
+                    <small>Contraseña (oculta por seguridad)</small>
+                </div>
+                <div class="config-item">
+                    <label>Base de datos</label>
+                    <input type="text" id="MYSQL_DATABASE">
+                    <small>Nombre de la base de datos</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="config-section">
+            <h2>🌐 CRM GM Transport</h2>
+            <p>Credenciales del CRM (requiere reinicio)</p>
+            <div class="config-grid">
+                <div class="config-item">
+                    <label>URL del CRM</label>
+                    <input type="text" id="CRM_URL">
+                    <small>Dirección web del sistema GM</small>
+                </div>
+                <div class="config-item">
+                    <label>Usuario CRM</label>
+                    <input type="text" id="CRM_USER">
+                    <small>Usuario para login en GM</small>
+                </div>
+                <div class="config-item">
+                    <label>Contraseña CRM</label>
+                    <input type="password" id="CRM_PASSWORD">
+                    <small>Contraseña (oculta por seguridad)</small>
+                </div>
+            </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 24px;">
+            <button onclick="saveConfig()" class="btn btn-primary" style="padding: 16px 48px; font-size: 18px;">
+                💾 Guardar Toda la Configuración
+            </button>
+        </div>
+    </div>
+
+    <script>
+        function loadConfig() {
+            fetch('/api/config')
+                .then(r => r.json())
+                .then(data => {
+                    Object.keys(data.config).forEach(key => {
+                        const element = document.getElementById(key);
+                        if (!element) return;
+
+                        if (element.type === 'checkbox') {
+                            element.checked = data.config[key];
+                        } else if (key === 'CIRCUIT_BREAKER_MAX_ERROR_RATE') {
+                            element.value = data.config[key] * 100;
+                        } else {
+                            element.value = data.config[key];
+                        }
+                    });
+                });
+        }
+
+        function saveConfig() {
+            const config = {};
+            const fields = [
+                'LIMITE_VIAJES_POR_CICLO', 'TIEMPO_ESPERA_EXITOSO', 'TIEMPO_ESPERA_FALLIDO',
+                'TIEMPO_ESPERA_LOGIN_LIMIT', 'CIRCUIT_BREAKER_ENABLED', 'CIRCUIT_BREAKER_MAX_SAME_ERROR',
+                'CIRCUIT_BREAKER_MAX_ERROR_RATE', 'AUTO_SAVE_FAILED_TRIPS', 'FAILED_TRIPS_DIR',
+                'LOG_LEVEL', 'LOG_JSON_ENABLED', 'LOG_DIR', 'MYSQL_HOST', 'MYSQL_USER',
+                'MYSQL_PASSWORD', 'MYSQL_DATABASE', 'CRM_URL', 'CRM_USER', 'CRM_PASSWORD'
+            ];
+
+            fields.forEach(field => {
+                const element = document.getElementById(field);
+                if (!element) return;
+
+                if (element.type === 'checkbox') {
+                    config[field] = element.checked;
+                } else if (field === 'CIRCUIT_BREAKER_MAX_ERROR_RATE') {
+                    config[field] = parseFloat(element.value) / 100;
+                } else if (element.type === 'number') {
+                    config[field] = parseInt(element.value);
+                } else {
+                    config[field] = element.value;
+                }
+            });
+
+            fetch('/api/config/save', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({config})
+            })
+            .then(r => r.json())
+            .then(result => {
+                if (result.success) {
+                    showAlert('✅ Configuración guardada. REINICIA el sistema para aplicar cambios.', 'success');
+                } else {
+                    showAlert('❌ Error: ' + result.error, 'error');
+                }
+            });
+        }
+
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = 'alert ' + type;
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 5000);
+        }
+
+        loadConfig();
+    </script>
+</body>
+</html>

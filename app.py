@@ -13,6 +13,7 @@ from modules import robot_state_manager
 from modules.reprocessing_manager import reprocessing_manager
 from modules.circuit_breaker import circuit_breaker
 from modules.trip_validator import trip_validator
+from modules import config
 from alsua_mail_automation import AlsuaMailAutomation
 from cola_viajes import agregar_viaje_a_cola
 
@@ -308,6 +309,66 @@ def api_circuit_breaker_reset():
     try:
         circuit_breaker.reset()
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/configuracion")
+def configuracion():
+    """Página de configuración"""
+    return render_template("configuracion.html")
+
+@app.route("/api/config")
+def api_config():
+    """Obtiene configuración actual"""
+    try:
+        config_data = {
+            'LIMITE_VIAJES_POR_CICLO': config.LIMITE_VIAJES_POR_CICLO,
+            'TIEMPO_ESPERA_EXITOSO': config.TIEMPO_ESPERA_EXITOSO,
+            'TIEMPO_ESPERA_FALLIDO': config.TIEMPO_ESPERA_FALLIDO,
+            'TIEMPO_ESPERA_LOGIN_LIMIT': config.TIEMPO_ESPERA_LOGIN_LIMIT,
+            'CIRCUIT_BREAKER_ENABLED': config.CIRCUIT_BREAKER_ENABLED,
+            'CIRCUIT_BREAKER_MAX_SAME_ERROR': config.CIRCUIT_BREAKER_MAX_SAME_ERROR,
+            'CIRCUIT_BREAKER_MAX_ERROR_RATE': config.CIRCUIT_BREAKER_MAX_ERROR_RATE,
+            'AUTO_SAVE_FAILED_TRIPS': config.AUTO_SAVE_FAILED_TRIPS,
+            'FAILED_TRIPS_DIR': config.FAILED_TRIPS_DIR,
+            'LOG_LEVEL': config.LOG_LEVEL,
+            'LOG_JSON_ENABLED': config.LOG_JSON_ENABLED,
+            'LOG_DIR': config.LOG_DIR,
+            'MYSQL_HOST': config.MYSQL_HOST,
+            'MYSQL_USER': config.MYSQL_USER,
+            'MYSQL_PASSWORD': '***' if config.MYSQL_PASSWORD else '',
+            'MYSQL_DATABASE': config.MYSQL_DATABASE,
+            'CRM_URL': config.CRM_URL,
+            'CRM_USER': config.CRM_USER,
+            'CRM_PASSWORD': '***' if config.CRM_PASSWORD else ''
+        }
+        return jsonify({'success': True, 'config': config_data})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/api/config/save", methods=['POST'])
+def api_config_save():
+    """Guarda configuración en archivo .env"""
+    try:
+        data = request.json
+        config_data = data.get('config', {})
+
+        env_lines = []
+        for key, value in config_data.items():
+            if key.endswith('_PASSWORD') and value == '***':
+                continue
+
+            if isinstance(value, bool):
+                value = 'true' if value else 'false'
+            elif isinstance(value, (int, float)):
+                value = str(value)
+
+            env_lines.append(f"{key}={value}")
+
+        with open('.env', 'w', encoding='utf-8') as f:
+            f.write('\n'.join(env_lines))
+
+        return jsonify({'success': True, 'message': 'Configuración guardada. Reinicia el sistema.'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
