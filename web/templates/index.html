@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Panel ALSUA</title>
+</head>
+<body>
+    <h1>Panel de Automatización ALSUA</h1>
+
+    <p><strong>Estado actual:</strong> {{ 'Ejecutando' if estado["ejecutando"] else 'Detenida' }}</p>
+
+    <form action="/iniciar" method="get" style="display:inline;">
+        <button type="submit" {% if estado["ejecutando"] %}disabled{% endif %}>
+            ▶ Iniciar Automatización
+        </button>
+    </form>
+
+    <form action="/detener" method="get" style="display:inline;">
+        <button type="submit" {% if not estado["ejecutando"] %}disabled{% endif %}>
+            ⏹ Detener Automatización
+        </button>
+    </form>
+
+    <h2>Últimos viajes procesados.</h2>
+    {% if viajes %}
+        <table border="1" cellpadding="5">
+            <tr>
+                <th>Prefactura</th>
+                <th>Fecha</th>
+                <th>Importe</th>
+                <th>Estatus</th>
+                <th>Error Robot</th>
+            </tr>
+            {% for viaje in viajes %}
+            <tr>
+                <td>{{ viaje.prefactura }}</td>
+                <td>{{ viaje.fecha }}</td>
+                <td>${{ viaje.importe }}</td>
+                <td>{{ viaje.estatus }}</td>
+                <td>{{ viaje.anotaciones or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No hay viajes registrados aún.</p>
+    {% endif %}
+</body>
+</html>
