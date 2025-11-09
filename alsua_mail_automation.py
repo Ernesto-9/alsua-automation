@@ -28,6 +28,8 @@ from viajes_log import registrar_viaje_fallido as log_viaje_fallido, viajes_log
 # Importar módulos de mejora
 from modules import robot_state_manager
 from modules.debug_logger import debug_logger
+from modules.reprocessing_manager import reprocessing_manager
+from modules.trip_validator import trip_validator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -421,7 +423,15 @@ class AlsuaMailAutomation:
                 logger.error(f"Error verificando duplicados: {e}")
 
             logger.info(f"Procesando viaje: {prefactura}")
-            
+
+            is_valid, validation_errors = trip_validator.validate_trip(datos_viaje)
+            if not is_valid:
+                error_msg = "; ".join(validation_errors)
+                logger.error(f"VALIDACIÓN FALLIDA: {error_msg}")
+                robot_state_manager.incrementar_fallidos(prefactura, f"Validación: {error_msg}")
+                debug_logger.log_viaje_fallo(prefactura, 'validacion_pre_crm', error_msg)
+                return 'VIAJE_FALLIDO', 'validacion_pre_crm'
+
             if not self.driver:
                 logger.info("No hay driver, creando nuevo...")
                 if not self.crear_driver_nuevo():
@@ -582,8 +592,9 @@ class AlsuaMailAutomation:
                 else:
                     motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                     marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
+                    reprocessing_manager.save_failed_trip(datos_viaje, motivo_detallado, modulo_error)
                     logger.error(f"{prefactura} FALLÓ EN: {modulo_error} - removido de cola")
-                    
+
                     logger.info("Esperando 30 segundos después de viaje fallido...")
                     time.sleep(30)
             
@@ -625,7 +636,11 @@ class AlsuaMailAutomation:
             ultima_cant_viajes = -1  # Para tracking de cambios en cola
 
             while AlsuaMailAutomation.continuar_ejecutando:
-                # La variable de clase controla la ejecución
+                if not circuit_breaker.should_process():
+                    logger.error("Circuit breaker abierto - sistema pausado")
+                    logger.error("Presiona Ctrl+C y revisa errores antes de continuar")
+                    time.sleep(60)
+                    continue
 
                 try:
                     contador_ciclos += 1
@@ -679,6 +694,8 @@ class AlsuaMailAutomation:
                         if resultado == 'EXITOSO':
                             marcar_viaje_exitoso_cola(viaje_id)
                             robot_state_manager.limpiar_viaje_actual()
+                            circuit_breaker.record_result(True)
+                            json_logger.info("Viaje procesado exitosamente", prefactura=prefactura)
                             logger.info(f"{prefactura} COMPLETADO")
                             contador_sync_mysql += 1
                             time.sleep(60)
@@ -696,6 +713,9 @@ class AlsuaMailAutomation:
                         else:
                             motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                             marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
+                            reprocessing_manager.save_failed_trip(datos_viaje, motivo_detallado, modulo_error)
+                            circuit_breaker.record_result(False, modulo_error)
+                            json_logger.error("Viaje fallido", prefactura=prefactura, modulo=modulo_error, motivo=motivo_detallado)
                             robot_state_manager.limpiar_viaje_actual()
                             logger.error(f"{prefactura} FALLÓ: {modulo_error}")
                             contador_sync_mysql += 1

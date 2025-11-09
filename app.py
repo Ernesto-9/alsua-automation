@@ -3,13 +3,18 @@ Panel Web Alsua - Servidor Flask
 Monitoreo en tiempo real del robot de automatización
 """
 
-from flask import Flask, render_template, jsonify, redirect, url_for
+from flask import Flask, render_template, jsonify, redirect, url_for, request
 import threading
 import os
+import csv
 import logging
 import sys
 from modules import robot_state_manager
+from modules.reprocessing_manager import reprocessing_manager
+from modules.circuit_breaker import circuit_breaker
+from modules.trip_validator import trip_validator
 from alsua_mail_automation import AlsuaMailAutomation
+from cola_viajes import agregar_viaje_a_cola
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -183,6 +188,128 @@ def ver_screenshot(nombre):
     """Sirve un screenshot específico"""
     from flask import send_from_directory
     return send_from_directory('screenshots_errores', nombre)
+
+
+@app.route("/determinantes")
+def determinantes():
+    """Página de gestión de determinantes"""
+    return render_template("determinantes.html")
+
+@app.route("/viajes_fallidos")
+def viajes_fallidos_page():
+    """Página de viajes fallidos"""
+    return render_template("viajes_fallidos.html")
+
+@app.route("/api/determinantes")
+def api_determinantes():
+    """Lista todas las determinantes"""
+    try:
+        determinantes = []
+        with open('modules/clave_ruta_base.csv', 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            determinantes = list(reader)
+        return jsonify({'success': True, 'determinantes': determinantes})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/api/determinantes/add", methods=['POST'])
+def api_add_determinante():
+    """Agrega nueva determinante"""
+    try:
+        data = request.json
+        determinante = data.get('determinante')
+        ruta_gm = data.get('ruta_gm')
+        base_origen = data.get('base_origen')
+
+        with open('modules/clave_ruta_base.csv', 'a', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer.writerow({
+                'determinante': determinante,
+                'ruta_gm': ruta_gm,
+                'base_origen': base_origen
+            })
+
+        trip_validator.reload_determinantes()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/api/determinantes/delete", methods=['POST'])
+def api_delete_determinante():
+    """Elimina determinante"""
+    try:
+        data = request.json
+        determinante_to_delete = data.get('determinante')
+
+        determinantes = []
+        with open('modules/clave_ruta_base.csv', 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            determinantes = [row for row in reader if row['determinante'] != determinante_to_delete]
+
+        with open('modules/clave_ruta_base.csv', 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer.writeheader()
+            writer.writerows(determinantes)
+
+        trip_validator.reload_determinantes()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/api/viajes_fallidos")
+def api_viajes_fallidos():
+    """Lista viajes fallidos"""
+    estado = request.args.get('estado')
+    trips = reprocessing_manager.get_failed_trips(estado)
+    return jsonify({'success': True, 'viajes': trips})
+
+@app.route("/api/viajes_fallidos/reprocess", methods=['POST'])
+def api_reprocess_trip():
+    """Reprocesa viaje fallido"""
+    try:
+        data = request.json
+        filename = data.get('filename')
+
+        trips = reprocessing_manager.get_failed_trips()
+        trip = next((t for t in trips if t['filename'] == filename), None)
+
+        if not trip:
+            return jsonify({'success': False, 'error': 'Viaje no encontrado'})
+
+        agregado = agregar_viaje_a_cola(trip['datos_viaje'])
+        if agregado:
+            reprocessing_manager.mark_as_reprocessed(filename, False)
+            return jsonify({'success': True, 'message': 'Viaje agregado a cola'})
+        else:
+            return jsonify({'success': False, 'error': 'No se pudo agregar a cola'})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/api/viajes_fallidos/delete", methods=['POST'])
+def api_delete_failed_trip():
+    """Elimina viaje fallido"""
+    try:
+        data = request.json
+        filename = data.get('filename')
+        reprocessing_manager.delete_failed_trip(filename)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route("/api/circuit_breaker")
+def api_circuit_breaker_status():
+    """Estado del circuit breaker"""
+    return jsonify(circuit_breaker.get_status())
+
+@app.route("/api/circuit_breaker/reset", methods=['POST'])
+def api_circuit_breaker_reset():
+    """Resetea circuit breaker"""
+    try:
+        circuit_breaker.reset()
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 
 if __name__ == "__main__":
