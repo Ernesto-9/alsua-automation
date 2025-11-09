@@ -1,4 +1,4 @@
-"""Módulos de gestión de cola de viajes"""
+"""Queue management modules"""
 from .queue_processor import QueueProcessor
 
 __all__ = ['QueueProcessor']
