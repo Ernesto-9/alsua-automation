@@ -3,11 +3,12 @@ Panel Web Alsua - Servidor Flask
 Monitoreo en tiempo real del robot de automatización
 """
 
-from flask import Flask, render_template, jsonify, redirect, url_for
+from flask import Flask, render_template, jsonify, redirect, url_for, request
 import threading
 import os
 import logging
 import sys
+import csv
 from modules import robot_state_manager
 from alsua_mail_automation import AlsuaMailAutomation
 
@@ -183,6 +184,167 @@ def ver_screenshot(nombre):
     """Sirve un screenshot específico"""
     from flask import send_from_directory
     return send_from_directory('screenshots_errores', nombre)
+
+
+# ========== ENDPOINTS PARA ADMINISTRACIÓN DE DETERMINANTES ==========
+
+CSV_DETERMINANTES = 'modules/clave_ruta_base.csv'
+
+@app.route("/admin/determinantes")
+def admin_determinantes():
+    """Página de administración de determinantes"""
+    return render_template("admin_determinantes.html")
+
+
+@app.route("/api/determinantes")
+def api_listar_determinantes():
+    """Lista todas las claves determinantes del CSV"""
+    try:
+        if not os.path.exists(CSV_DETERMINANTES):
+            return jsonify({'success': False, 'error': 'Archivo CSV no encontrado'}), 404
+
+        determinantes = []
+        with open(CSV_DETERMINANTES, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get('determinante'):  # Ignorar líneas vacías
+                    determinantes.append({
+                        'determinante': row['determinante'],
+                        'ruta_gm': row['ruta_gm'],
+                        'base_origen': row['base_origen']
+                    })
+
+        return jsonify({'success': True, 'determinantes': determinantes})
+    except Exception as e:
+        logger.error(f"Error listando determinantes: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/determinantes", methods=['POST'])
+def api_agregar_determinante():
+    """Agrega una nueva clave determinante"""
+    try:
+        data = request.get_json()
+        determinante = data.get('determinante', '').strip()
+        ruta_gm = data.get('ruta_gm', '').strip()
+        base_origen = data.get('base_origen', '').strip()
+
+        # Validaciones
+        if not determinante or not ruta_gm or not base_origen:
+            return jsonify({'success': False, 'error': 'Todos los campos son requeridos'}), 400
+
+        if len(determinante) != 4 or not determinante.isdigit():
+            return jsonify({'success': False, 'error': 'Determinante debe ser 4 dígitos'}), 400
+
+        # Verificar si ya existe
+        determinantes_existentes = []
+        if os.path.exists(CSV_DETERMINANTES):
+            with open(CSV_DETERMINANTES, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    determinantes_existentes.append(row)
+                    if row.get('determinante') == determinante:
+                        return jsonify({'success': False, 'error': f'Determinante {determinante} ya existe'}), 400
+
+        # Agregar nueva determinante
+        with open(CSV_DETERMINANTES, 'a', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer.writerow({
+                'determinante': determinante,
+                'ruta_gm': ruta_gm,
+                'base_origen': base_origen
+            })
+
+        logger.info(f"Determinante agregada: {determinante} -> Ruta: {ruta_gm}, Base: {base_origen}")
+        return jsonify({'success': True, 'message': 'Determinante agregada correctamente'})
+
+    except Exception as e:
+        logger.error(f"Error agregando determinante: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/determinantes/<determinante>", methods=['PUT'])
+def api_editar_determinante(determinante):
+    """Edita una clave determinante existente"""
+    try:
+        data = request.get_json()
+        nueva_ruta = data.get('ruta_gm', '').strip()
+        nueva_base = data.get('base_origen', '').strip()
+
+        if not nueva_ruta or not nueva_base:
+            return jsonify({'success': False, 'error': 'Ruta y base son requeridos'}), 400
+
+        # Leer todas las determinantes
+        if not os.path.exists(CSV_DETERMINANTES):
+            return jsonify({'success': False, 'error': 'Archivo CSV no encontrado'}), 404
+
+        determinantes = []
+        encontrado = False
+
+        with open(CSV_DETERMINANTES, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get('determinante') == determinante:
+                    row['ruta_gm'] = nueva_ruta
+                    row['base_origen'] = nueva_base
+                    encontrado = True
+                determinantes.append(row)
+
+        if not encontrado:
+            return jsonify({'success': False, 'error': f'Determinante {determinante} no encontrada'}), 404
+
+        # Reescribir el archivo
+        with open(CSV_DETERMINANTES, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer.writeheader()
+            for det in determinantes:
+                if det.get('determinante'):  # No escribir líneas vacías
+                    writer.writerow(det)
+
+        logger.info(f"Determinante editada: {determinante} -> Ruta: {nueva_ruta}, Base: {nueva_base}")
+        return jsonify({'success': True, 'message': 'Determinante actualizada correctamente'})
+
+    except Exception as e:
+        logger.error(f"Error editando determinante: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/determinantes/<determinante>", methods=['DELETE'])
+def api_eliminar_determinante(determinante):
+    """Elimina una clave determinante"""
+    try:
+        if not os.path.exists(CSV_DETERMINANTES):
+            return jsonify({'success': False, 'error': 'Archivo CSV no encontrado'}), 404
+
+        # Leer todas las determinantes excepto la que se va a eliminar
+        determinantes = []
+        encontrado = False
+
+        with open(CSV_DETERMINANTES, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get('determinante') == determinante:
+                    encontrado = True
+                    continue  # Saltar esta fila (eliminarla)
+                if row.get('determinante'):  # No agregar líneas vacías
+                    determinantes.append(row)
+
+        if not encontrado:
+            return jsonify({'success': False, 'error': f'Determinante {determinante} no encontrada'}), 404
+
+        # Reescribir el archivo sin la determinante eliminada
+        with open(CSV_DETERMINANTES, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer.writeheader()
+            for det in determinantes:
+                writer.writerow(det)
+
+        logger.info(f"Determinante eliminada: {determinante}")
+        return jsonify({'success': True, 'message': 'Determinante eliminada correctamente'})
+
+    except Exception as e:
+        logger.error(f"Error eliminando determinante: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == "__main__":

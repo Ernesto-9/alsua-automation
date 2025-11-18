@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Determinantes - Panel Alsua</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-back {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-back:hover {
+            background: #3182ce;
+            transform: translateY(-2px);
+        }
+
+        .btn-primary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #38a169;
+        }
+
+        .btn-edit {
+            background: #ed8936;
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-edit:hover {
+            background: #dd6b20;
+        }
+
+        .btn-delete {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-delete:hover {
+            background: #e53e3e;
+        }
+
+        .btn-cancel {
+            background: #cbd5e0;
+            color: #2d3748;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-cancel:hover {
+            background: #a0aec0;
+        }
+
+        .form-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .form-container h2 {
+            color: #1a202c;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            border-left: 4px solid #48bb78;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+            color: #742a2a;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .table-container h2 {
+            color: #1a202c;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .table-wrapper {
+            max-height: 600px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #a0aec0;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .stat-badge {
+            background: #e6fffa;
+            color: #047857;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            table {
+                font-size: 14px;
+            }
+
+            th, td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Administración de Claves Determinantes</h1>
+            <a href="/" class="btn btn-back">← Volver al Dashboard</a>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div class="form-container">
+            <h2 id="formTitle">Agregar Nueva Determinante</h2>
+            <form id="formDeterminante" onsubmit="guardarDeterminante(event)">
+                <input type="hidden" id="editMode" value="false">
+                <input type="hidden" id="editOriginal">
+
+                <div class="form-group">
+                    <label for="inputDeterminante">Clave Determinante (4 dígitos)</label>
+                    <input type="text" id="inputDeterminante" maxlength="4" pattern="[0-9]{4}" required placeholder="Ej: 8121">
+                </div>
+
+                <div class="form-group">
+                    <label for="inputRutaGM">Ruta GM</label>
+                    <input type="text" id="inputRutaGM" required placeholder="Ej: 225">
+                </div>
+
+                <div class="form-group">
+                    <label for="inputBaseOrigen">Base Origen</label>
+                    <input type="text" id="inputBaseOrigen" required placeholder="Ej: Hermosillo">
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="btnSubmit">Agregar Determinante</button>
+                    <button type="button" class="btn btn-cancel" id="btnCancelar" onclick="cancelarEdicion()" style="display: none;">Cancelar</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-container">
+            <div class="stats">
+                <div class="stat-badge">Total: <span id="totalDeterminantes">0</span></div>
+            </div>
+            <h2>Listado de Determinantes</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Determinante</th>
+                            <th>Ruta GM</th>
+                            <th>Base Origen</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaDeterminantes">
+                        <tr><td colspan="4" class="empty-state">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let determinantes = [];
+
+        // Cargar determinantes al iniciar
+        async function cargarDeterminantes() {
+            try {
+                const response = await fetch('/api/determinantes');
+                const data = await response.json();
+
+                if (data.success) {
+                    determinantes = data.determinantes;
+                    actualizarTabla();
+                } else {
+                    mostrarAlerta('Error cargando determinantes: ' + data.error, 'error');
+                }
+            } catch (error) {
+                mostrarAlerta('Error de conexión: ' + error.message, 'error');
+            }
+        }
+
+        function actualizarTabla() {
+            const tbody = document.getElementById('tablaDeterminantes');
+            document.getElementById('totalDeterminantes').textContent = determinantes.length;
+
+            if (determinantes.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No hay determinantes registradas</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = determinantes.map(det => `
+                <tr>
+                    <td><strong>${det.determinante}</strong></td>
+                    <td>${det.ruta_gm}</td>
+                    <td>${det.base_origen}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn btn-edit" onclick="editarDeterminante('${det.determinante}')">Editar</button>
+                            <button class="btn btn-delete" onclick="confirmarEliminar('${det.determinante}')">Eliminar</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function guardarDeterminante(event) {
+            event.preventDefault();
+
+            const editMode = document.getElementById('editMode').value === 'true';
+            const determinante = document.getElementById('inputDeterminante').value;
+            const rutaGM = document.getElementById('inputRutaGM').value;
+            const baseOrigen = document.getElementById('inputBaseOrigen').value;
+
+            const data = {
+                determinante: determinante,
+                ruta_gm: rutaGM,
+                base_origen: baseOrigen
+            };
+
+            try {
+                let response;
+                if (editMode) {
+                    const original = document.getElementById('editOriginal').value;
+                    response = await fetch(`/api/determinantes/${original}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                } else {
+                    response = await fetch('/api/determinantes', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    mostrarAlerta(result.message, 'success');
+                    limpiarFormulario();
+                    await cargarDeterminantes();
+                } else {
+                    mostrarAlerta(result.error, 'error');
+                }
+            } catch (error) {
+                mostrarAlerta('Error: ' + error.message, 'error');
+            }
+        }
+
+        function editarDeterminante(determinante) {
+            const det = determinantes.find(d => d.determinante === determinante);
+            if (!det) return;
+
+            document.getElementById('formTitle').textContent = 'Editar Determinante';
+            document.getElementById('editMode').value = 'true';
+            document.getElementById('editOriginal').value = determinante;
+            document.getElementById('inputDeterminante').value = det.determinante;
+            document.getElementById('inputRutaGM').value = det.ruta_gm;
+            document.getElementById('inputBaseOrigen').value = det.base_origen;
+            document.getElementById('btnSubmit').textContent = 'Guardar Cambios';
+            document.getElementById('btnCancelar').style.display = 'inline-block';
+
+            // Scroll al formulario
+            document.querySelector('.form-container').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function cancelarEdicion() {
+            limpiarFormulario();
+        }
+
+        function limpiarFormulario() {
+            document.getElementById('formTitle').textContent = 'Agregar Nueva Determinante';
+            document.getElementById('editMode').value = 'false';
+            document.getElementById('editOriginal').value = '';
+            document.getElementById('formDeterminante').reset();
+            document.getElementById('btnSubmit').textContent = 'Agregar Determinante';
+            document.getElementById('btnCancelar').style.display = 'none';
+        }
+
+        async function confirmarEliminar(determinante) {
+            if (!confirm(`¿Estás seguro de eliminar la determinante ${determinante}?\n\nEsta acción no se puede deshacer.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/determinantes/${determinante}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    mostrarAlerta(result.message, 'success');
+                    await cargarDeterminantes();
+                } else {
+                    mostrarAlerta(result.error, 'error');
+                }
+            } catch (error) {
+                mostrarAlerta('Error: ' + error.message, 'error');
+            }
+        }
+
+        function mostrarAlerta(mensaje, tipo) {
+            const alertContainer = document.getElementById('alertContainer');
+            const alertClass = tipo === 'success' ? 'alert-success' : 'alert-error';
+
+            alertContainer.innerHTML = `
+                <div class="alert ${alertClass}">
+                    ${mensaje}
+                </div>
+            `;
+
+            // Auto-ocultar después de 5 segundos
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+
+            // Scroll a la alerta
+            alertContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Cargar al iniciar
+        cargarDeterminantes();
+    </script>
+</body>
+</html>
