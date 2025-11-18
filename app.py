@@ -233,8 +233,8 @@ def api_agregar_determinante():
         if not determinante or not ruta_gm or not base_origen:
             return jsonify({'success': False, 'error': 'Todos los campos son requeridos'}), 400
 
-        if len(determinante) != 4 or not determinante.isdigit():
-            return jsonify({'success': False, 'error': 'Determinante debe ser 4 dígitos'}), 400
+        if not determinante.isdigit():
+            return jsonify({'success': False, 'error': 'Determinante debe contener solo números'}), 400
 
         # Verificar si ya existe
         determinantes_existentes = []
