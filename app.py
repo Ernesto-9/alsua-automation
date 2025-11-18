@@ -9,8 +9,11 @@ import os
 import logging
 import sys
 import csv
+from datetime import datetime, timedelta
 from modules import robot_state_manager
 from alsua_mail_automation import AlsuaMailAutomation
+from cola_reprocesamiento import cola_reprocesamiento
+from viajes_log import viajes_log
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -344,6 +347,144 @@ def api_eliminar_determinante(determinante):
 
     except Exception as e:
         logger.error(f"Error eliminando determinante: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ========== ENDPOINTS PARA VIAJES FALLIDOS Y REPROCESAMIENTO ==========
+
+@app.route("/admin/viajes-fallidos")
+def admin_viajes_fallidos():
+    """Página de administración de viajes fallidos"""
+    return render_template("admin_viajes_fallidos.html")
+
+
+@app.route("/api/viajes-fallidos")
+def api_listar_viajes_fallidos():
+    """Lista todos los viajes fallidos con filtros opcionales"""
+    try:
+        # Obtener parámetros de filtro
+        filtro_etapa = request.args.get('etapa', '')
+        filtro_fecha = request.args.get('fecha', '')  # 'hoy', 'semana', 'mes'
+        buscar = request.args.get('buscar', '').lower()
+
+        # Leer viajes fallidos del CSV
+        viajes_fallidos = []
+        if os.path.exists('viajes_log.csv'):
+            with open('viajes_log.csv', 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get('estatus') == 'FALLIDO':
+                        viajes_fallidos.append(row)
+
+        # Aplicar filtros
+        if filtro_fecha:
+            ahora = datetime.now()
+            if filtro_fecha == 'hoy':
+                fecha_limite = ahora.date()
+                viajes_fallidos = [v for v in viajes_fallidos
+                                  if datetime.strptime(v['timestamp'].split()[0], '%Y-%m-%d').date() >= fecha_limite]
+            elif filtro_fecha == 'semana':
+                fecha_limite = ahora - timedelta(days=7)
+                viajes_fallidos = [v for v in viajes_fallidos
+                                  if datetime.strptime(v['timestamp'].split()[0], '%Y-%m-%d') >= fecha_limite]
+            elif filtro_fecha == 'mes':
+                fecha_limite = ahora - timedelta(days=30)
+                viajes_fallidos = [v for v in viajes_fallidos
+                                  if datetime.strptime(v['timestamp'].split()[0], '%Y-%m-%d') >= fecha_limite]
+
+        if filtro_etapa:
+            viajes_fallidos = [v for v in viajes_fallidos if filtro_etapa.upper() in v.get('motivo_fallo', '').upper()]
+
+        if buscar:
+            viajes_fallidos = [v for v in viajes_fallidos
+                              if buscar in v.get('prefactura', '').lower()
+                              or buscar in v.get('motivo_fallo', '').lower()]
+
+        return jsonify({'success': True, 'viajes': viajes_fallidos})
+
+    except Exception as e:
+        logger.error(f"Error listando viajes fallidos: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/cola-reprocesamiento")
+def api_listar_cola():
+    """Lista todos los viajes en cola de reprocesamiento"""
+    try:
+        pendientes = cola_reprocesamiento.obtener_pendientes()
+        return jsonify({'success': True, 'cola': pendientes})
+    except Exception as e:
+        logger.error(f"Error listando cola: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/cola-reprocesamiento", methods=['POST'])
+def api_agregar_a_cola():
+    """Agrega un viaje a la cola de reprocesamiento"""
+    try:
+        data = request.get_json()
+
+        # Validar datos requeridos
+        campos_requeridos = ['prefactura', 'determinante', 'fecha_viaje',
+                           'placa_tractor', 'placa_remolque', 'importe']
+        for campo in campos_requeridos:
+            if not data.get(campo):
+                return jsonify({'success': False, 'error': f'Campo {campo} es requerido'}), 400
+
+        # Agregar a cola
+        exito = cola_reprocesamiento.agregar_a_cola(
+            datos_viaje=data,
+            modo_reproceso=data.get('modo_reproceso', 'completo'),
+            viaje_gm=data.get('viaje_gm', ''),
+            etapa_inicial=data.get('etapa_inicial', 'SALIDA')
+        )
+
+        if exito:
+            return jsonify({'success': True, 'message': 'Viaje agregado a cola de reprocesamiento'})
+        else:
+            return jsonify({'success': False, 'error': 'No se pudo agregar a cola'}), 500
+
+    except Exception as e:
+        logger.error(f"Error agregando a cola: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/cola-reprocesamiento/<prefactura>", methods=['DELETE'])
+def api_eliminar_de_cola(prefactura):
+    """Elimina un viaje de la cola de reprocesamiento"""
+    try:
+        exito = cola_reprocesamiento.eliminar_de_cola(prefactura)
+        if exito:
+            return jsonify({'success': True, 'message': 'Viaje eliminado de cola'})
+        else:
+            return jsonify({'success': False, 'error': 'No se encontró el viaje'}), 404
+    except Exception as e:
+        logger.error(f"Error eliminando de cola: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/procesar-viaje/<prefactura>", methods=['POST'])
+def api_procesar_viaje(prefactura):
+    """Procesa un viaje específico de la cola AHORA"""
+    try:
+        # Obtener datos del viaje de la cola
+        viaje = cola_reprocesamiento.obtener_viaje(prefactura)
+        if not viaje:
+            return jsonify({'success': False, 'error': 'Viaje no encontrado en cola'}), 404
+
+        # Marcar como procesando
+        cola_reprocesamiento.marcar_procesando(prefactura)
+
+        # Aquí se procesará el viaje (lo integraremos con el robot después)
+        # Por ahora solo retornamos éxito
+        return jsonify({
+            'success': True,
+            'message': f'Viaje {prefactura} en proceso',
+            'viaje': viaje
+        })
+
+    except Exception as e:
+        logger.error(f"Error procesando viaje: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

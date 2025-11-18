@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Viajes Fallidos - Panel Alsua</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-back {
+            background: #4299e1;
+            color: white;
+        }
+
+        .btn-back:hover {
+            background: #3182ce;
+        }
+
+        .btn-primary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #38a169;
+        }
+
+        .btn-secondary {
+            background: #ed8936;
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-secondary:hover {
+            background: #dd6b20;
+        }
+
+        .btn-delete {
+            background: #f56565;
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+        .btn-delete:hover {
+            background: #e53e3e;
+        }
+
+        .filters-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .filters-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .filter-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .filter-group select, .filter-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            border-left: 4px solid #48bb78;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+            color: #742a2a;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .table-container h2 {
+            color: #1a202c;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .table-wrapper {
+            max-height: 500px;
+            overflow: auto;
+            border-radius: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+
+        th {
+            background: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 8px;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            white-space: nowrap;
+        }
+
+        td {
+            padding: 12px 8px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .motivo-cell {
+            max-width: 400px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            cursor: pointer;
+            color: #e53e3e;
+            font-weight: 500;
+        }
+
+        .motivo-cell:hover {
+            text-decoration: underline;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #a0aec0;
+        }
+
+        .stats {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .stat-badge {
+            background: #e6fffa;
+            color: #047857;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .stat-badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: white;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h2 {
+            color: #1a202c;
+            font-size: 22px;
+        }
+
+        .close-modal {
+            background: none;
+            border: none;
+            font-size: 28px;
+            cursor: pointer;
+            color: #a0aec0;
+        }
+
+        .close-modal:hover {
+            color: #2d3748;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .info-box {
+            background: #fffbeb;
+            border-left: 4px solid #f59e0b;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-size: 14px;
+            color: #78350f;
+        }
+
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Administración de Viajes Fallidos</h1>
+            <a href="/" class="btn btn-back">← Volver al Dashboard</a>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <!-- Filtros -->
+        <div class="filters-container">
+            <h3 style="margin-bottom: 16px; color: #2d3748;">Filtros</h3>
+            <div class="filters-row">
+                <div class="filter-group">
+                    <label>Etapa</label>
+                    <select id="filtroEtapa" onchange="aplicarFiltros()">
+                        <option value="">Todas</option>
+                        <option value="SALIDA">Salida</option>
+                        <option value="LLEGADA">Llegada</option>
+                        <option value="FACTURA">Facturación</option>
+                        <option value="DETERMINANTE">Determinante</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Fecha</label>
+                    <select id="filtroFecha" onchange="aplicarFiltros()">
+                        <option value="">Todas</option>
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Última semana</option>
+                        <option value="mes">Último mes</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Buscar</label>
+                    <input type="text" id="filtroBuscar" placeholder="Prefactura o motivo..." onkeyup="aplicarFiltros()">
+                </div>
+                <div class="filter-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-secondary" onclick="limpiarFiltros()">Limpiar Filtros</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de Viajes Fallidos -->
+        <div class="table-container">
+            <div class="stats">
+                <div class="stat-badge">Total Fallidos: <span id="totalFallidos">0</span></div>
+                <div class="stat-badge warning">Filtrados: <span id="totalFiltrados">0</span></div>
+            </div>
+            <h2>Viajes Fallidos</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha/Hora</th>
+                            <th>Prefactura</th>
+                            <th>Determinante</th>
+                            <th>Placas</th>
+                            <th>Motivo de Fallo</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaFallidos">
+                        <tr><td colspan="6" class="empty-state">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cola de Reprocesamiento -->
+        <div class="table-container">
+            <div class="stats">
+                <div class="stat-badge warning">En Cola: <span id="totalCola">0</span></div>
+            </div>
+            <h2>Cola de Reprocesamiento</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Prefactura</th>
+                            <th>Determinante</th>
+                            <th>Placas</th>
+                            <th>Modo</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaCola">
+                        <tr><td colspan="6" class="empty-state">No hay viajes en cola</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar/Agregar a Cola -->
+    <div id="modalEditar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Agregar a Cola de Reprocesamiento</h2>
+                <button class="close-modal" onclick="cerrarModal()">&times;</button>
+            </div>
+
+            <div class="info-box">
+                <strong>Instrucciones:</strong> Verifica que hayas corregido el problema (agregar determinante, borrar viaje en GM si es necesario, etc.) antes de agregar a la cola.
+            </div>
+
+            <form id="formReprocesar" onsubmit="agregarACola(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prefactura *</label>
+                        <input type="text" id="modalPrefactura" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label>Determinante *</label>
+                        <input type="text" id="modalDeterminante" required>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Fecha Viaje *</label>
+                        <input type="text" id="modalFecha" required placeholder="DD/MM/YYYY">
+                    </div>
+                    <div class="form-group">
+                        <label>Importe *</label>
+                        <input type="text" id="modalImporte" required placeholder="0.00">
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Placa Tractor *</label>
+                        <input type="text" id="modalTractor" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Placa Remolque *</label>
+                        <input type="text" id="modalRemolque" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Modo de Reprocesamiento *</label>
+                    <select id="modalModo" onchange="toggleViajeGM()">
+                        <option value="completo">Completo (crear viaje desde cero)</option>
+                        <option value="continuar">Continuar (viaje ya existe en GM)</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="grupoViajeGM" style="display: none;">
+                    <label>Número de Viaje en GM *</label>
+                    <input type="text" id="modalViajeGM" placeholder="Ej: HMO-65590">
+                </div>
+
+                <div class="form-group" id="grupoEtapa" style="display: none;">
+                    <label>Continuar desde etapa *</label>
+                    <select id="modalEtapa">
+                        <option value="LLEGADA">Llegada</option>
+                        <option value="FACTURA">Facturación</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Motivo Original</label>
+                    <textarea id="modalMotivo" readonly></textarea>
+                </div>
+
+                <div style="display: flex; gap: 12px; margin-top: 20px;">
+                    <button type="submit" class="btn btn-primary">Agregar a Cola</button>
+                    <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let viajesFallidos = [];
+        let viajesFiltrados = [];
+        let cola = [];
+
+        async function cargarViajesFallidos() {
+            try {
+                const response = await fetch('/api/viajes-fallidos');
+                const data = await response.json();
+                if (data.success) {
+                    viajesFallidos = data.viajes;
+                    aplicarFiltros();
+                }
+            } catch (error) {
+                mostrarAlerta('Error cargando viajes: ' + error.message, 'error');
+            }
+        }
+
+        async function cargarCola() {
+            try {
+                const response = await fetch('/api/cola-reprocesamiento');
+                const data = await response.json();
+                if (data.success) {
+                    cola = data.cola;
+                    actualizarTablaCola();
+                }
+            } catch (error) {
+                console.error('Error cargando cola:', error);
+            }
+        }
+
+        function aplicarFiltros() {
+            const etapa = document.getElementById('filtroEtapa').value;
+            const fecha = document.getElementById('filtroFecha').value;
+            const buscar = document.getElementById('filtroBuscar').value;
+
+            let url = `/api/viajes-fallidos?etapa=${etapa}&fecha=${fecha}&buscar=${buscar}`;
+
+            fetch(url)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        viajesFiltrados = data.viajes;
+                        actualizarTablaFallidos();
+                    }
+                });
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('filtroEtapa').value = '';
+            document.getElementById('filtroFecha').value = '';
+            document.getElementById('filtroBuscar').value = '';
+            aplicarFiltros();
+        }
+
+        function actualizarTablaFallidos() {
+            const tbody = document.getElementById('tablaFallidos');
+            document.getElementById('totalFallidos').textContent = viajesFallidos.length;
+            document.getElementById('totalFiltrados').textContent = viajesFiltrados.length;
+
+            if (viajesFiltrados.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No hay viajes fallidos</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = viajesFiltrados.map(v => `
+                <tr>
+                    <td>${v.timestamp || '--'}</td>
+                    <td><strong>${v.prefactura || '--'}</strong></td>
+                    <td>${v.determinante || '--'}</td>
+                    <td>${v.placa_tractor || '--'} / ${v.placa_remolque || '--'}</td>
+                    <td class="motivo-cell" title="${v.motivo_fallo || '--'}" onclick="mostrarMotivoCompleto('${v.motivo_fallo}')">${v.motivo_fallo || '--'}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn btn-secondary" onclick="abrirModalEditar('${v.prefactura}')">Reprocesar</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function actualizarTablaCola() {
+            const tbody = document.getElementById('tablaCola');
+            document.getElementById('totalCola').textContent = cola.length;
+
+            if (cola.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No hay viajes en cola</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = cola.map(v => `
+                <tr>
+                    <td><strong>${v.prefactura}</strong></td>
+                    <td>${v.determinante}</td>
+                    <td>${v.placa_tractor} / ${v.placa_remolque}</td>
+                    <td>${v.modo_reproceso === 'completo' ? 'Completo' : 'Continuar desde ' + v.etapa_inicial}</td>
+                    <td>${v.estado === 'pendiente' ? '⏳ Pendiente' : '🔄 Procesando'}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn btn-primary" onclick="procesarViaje('${v.prefactura}')">Procesar Ahora</button>
+                            <button class="btn btn-delete" onclick="eliminarDeCola('${v.prefactura}')">Eliminar</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function abrirModalEditar(prefactura) {
+            const viaje = viajesFiltrados.find(v => v.prefactura === prefactura);
+            if (!viaje) return;
+
+            document.getElementById('modalPrefactura').value = viaje.prefactura || '';
+            document.getElementById('modalDeterminante').value = viaje.determinante || '';
+            document.getElementById('modalFecha').value = viaje.fecha_viaje || '';
+            document.getElementById('modalImporte').value = viaje.importe || '';
+            document.getElementById('modalTractor').value = viaje.placa_tractor || '';
+            document.getElementById('modalRemolque').value = viaje.placa_remolque || '';
+            document.getElementById('modalMotivo').value = viaje.motivo_fallo || '';
+            document.getElementById('modalModo').value = 'completo';
+            document.getElementById('grupoViajeGM').style.display = 'none';
+            document.getElementById('grupoEtapa').style.display = 'none';
+
+            document.getElementById('modalEditar').style.display = 'block';
+        }
+
+        function cerrarModal() {
+            document.getElementById('modalEditar').style.display = 'none';
+        }
+
+        function toggleViajeGM() {
+            const modo = document.getElementById('modalModo').value;
+            const grupoGM = document.getElementById('grupoViajeGM');
+            const grupoEtapa = document.getElementById('grupoEtapa');
+
+            if (modo === 'continuar') {
+                grupoGM.style.display = 'block';
+                grupoEtapa.style.display = 'block';
+                document.getElementById('modalViajeGM').required = true;
+            } else {
+                grupoGM.style.display = 'none';
+                grupoEtapa.style.display = 'none';
+                document.getElementById('modalViajeGM').required = false;
+            }
+        }
+
+        async function agregarACola(event) {
+            event.preventDefault();
+
+            const data = {
+                prefactura: document.getElementById('modalPrefactura').value,
+                determinante: document.getElementById('modalDeterminante').value,
+                fecha_viaje: document.getElementById('modalFecha').value,
+                importe: document.getElementById('modalImporte').value,
+                placa_tractor: document.getElementById('modalTractor').value,
+                placa_remolque: document.getElementById('modalRemolque').value,
+                cliente_codigo: '040512',
+                modo_reproceso: document.getElementById('modalModo').value,
+                viaje_gm: document.getElementById('modalViajeGM').value || '',
+                etapa_inicial: document.getElementById('modalEtapa').value || 'SALIDA',
+                motivo_fallo: document.getElementById('modalMotivo').value
+            };
+
+            try {
+                const response = await fetch('/api/cola-reprocesamiento', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    mostrarAlerta(result.message, 'success');
+                    cerrarModal();
+                    await cargarCola();
+                } else {
+                    mostrarAlerta(result.error, 'error');
+                }
+            } catch (error) {
+                mostrarAlerta('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function eliminarDeCola(prefactura) {
+            if (!confirm(`¿Eliminar viaje ${prefactura} de la cola?`)) return;
+
+            try {
+                const response = await fetch(`/api/cola-reprocesamiento/${prefactura}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    mostrarAlerta(result.message, 'success');
+                    await cargarCola();
+                } else {
+                    mostrarAlerta(result.error, 'error');
+                }
+            } catch (error) {
+                mostrarAlerta('Error: ' + error.message, 'error');
+            }
+        }
+
+        async function procesarViaje(prefactura) {
+            if (!confirm(`¿Procesar viaje ${prefactura} AHORA?\n\nAsegúrate de que:\n- Has corregido el problema\n- Borraste el viaje de GM si es necesario\n- Los datos son correctos`)) return;
+
+            try {
+                const response = await fetch(`/api/procesar-viaje/${prefactura}`, {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    mostrarAlerta('Viaje en proceso. Revisa el dashboard para ver el progreso.', 'success');
+                    await cargarCola();
+                } else {
+                    mostrarAlerta(result.error, 'error');
+                }
+            } catch (error) {
+                mostrarAlerta('Error: ' + error.message, 'error');
+            }
+        }
+
+        function mostrarMotivoCompleto(motivo) {
+            alert('Motivo completo:\n\n' + motivo);
+        }
+
+        function mostrarAlerta(mensaje, tipo) {
+            const alertContainer = document.getElementById('alertContainer');
+            const alertClass = tipo === 'success' ? 'alert-success' : 'alert-error';
+
+            alertContainer.innerHTML = `<div class="alert ${alertClass}">${mensaje}</div>`;
+
+            setTimeout(() => {
+                alertContainer.innerHTML = '';
+            }, 5000);
+
+            alertContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        // Cerrar modal al hacer clic fuera
+        window.onclick = function(event) {
+            const modal = document.getElementById('modalEditar');
+            if (event.target === modal) {
+                cerrarModal();
+            }
+        }
+
+        // Cargar datos al iniciar
+        cargarViajesFallidos();
+        cargarCola();
+
+        // Actualizar cada 10 segundos
+        setInterval(() => {
+            cargarCola();
+        }, 10000);
+    </script>
+</body>
+</html>
