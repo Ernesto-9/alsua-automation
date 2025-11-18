@@ -326,10 +326,13 @@ class ProcesadorLlegadaFactura:
                 logger.error(f" Error al hacer clic en 'Facturar': {e}")
                 return False
             
-            # Cambiar tipo de documento a "FACTURA CFDI - W"
+            # Cambiar tipo de documento según configuración de determinante
             try:
-                logger.info(" Cambiando tipo de documento a 'FACTURA CFDI - W'...")
-                debug_logger.info("Intentando cambiar tipo de documento a FACTURA CFDI - W")
+                # Obtener tipo_documento de datos_viaje (configurado por determinante)
+                tipo_documento = self.datos_viaje.get('tipo_documento', 'FACTURA CFDI - W')
+
+                logger.info(f" Cambiando tipo de documento a '{tipo_documento}'...")
+                debug_logger.info(f"Intentando cambiar tipo de documento a {tipo_documento}")
 
                 # Esperar a que el combo esté disponible
                 tipo_doc_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATTIPOSDOCUMENTOS"))))
@@ -339,15 +342,15 @@ class ProcesadorLlegadaFactura:
                 logger.info(f" Tipo documento por defecto: '{seleccionado_actual.text}' (valor: {seleccionado_actual.get_attribute('value')})")
                 debug_logger.info(f"Tipo documento por defecto: {seleccionado_actual.text}")
 
-                # Seleccionar directamente "FACTURA CFDI - W" (valor 8)
-                logger.info(" Seleccionando 'FACTURA CFDI - W' (valor: 8)...")
-                tipo_doc_select.select_by_value("8")
+                # Seleccionar por TEXTO VISIBLE (más robusto que por valor numérico)
+                logger.info(f" Seleccionando '{tipo_documento}' por texto visible...")
+                tipo_doc_select.select_by_visible_text(tipo_documento)
                 time.sleep(1)
 
                 # Verificar selección
                 seleccionado = tipo_doc_select.first_selected_option
-                logger.info(f" Tipo de documento seleccionado: '{seleccionado.text}' (valor: 8)")
-                debug_logger.info(f"Tipo documento seleccionado: {seleccionado.text} (valor: 8)")
+                logger.info(f" Tipo de documento seleccionado: '{seleccionado.text}' (valor: {seleccionado.get_attribute('value')})")
+                debug_logger.info(f"Tipo documento seleccionado: {seleccionado.text} (valor: {seleccionado.get_attribute('value')})")
 
                 # Disparar evento change para actualizar UI de GM
                 script = """

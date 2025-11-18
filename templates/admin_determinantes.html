@@ -303,6 +303,14 @@
                     <input type="text" id="inputBaseOrigen" required placeholder="Ej: Hermosillo">
                 </div>
 
+                <div class="form-group">
+                    <label for="inputTipoDocumento">Tipo de Documento</label>
+                    <input type="text" id="inputTipoDocumento" required placeholder="Ej: FACTURA CFDI - W">
+                    <small style="color: #718096; font-size: 12px; margin-top: 4px; display: block;">
+                        Escribe el texto EXACTO que aparece en GM (ej: "FACTURA CFDI - W", "CARTA PORTE", etc.)
+                    </small>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary" id="btnSubmit">Agregar Determinante</button>
                     <button type="button" class="btn btn-cancel" id="btnCancelar" onclick="cancelarEdicion()" style="display: none;">Cancelar</button>
@@ -322,11 +330,12 @@
                             <th>Determinante</th>
                             <th>Ruta GM</th>
                             <th>Base Origen</th>
+                            <th>Tipo Documento</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="tablaDeterminantes">
-                        <tr><td colspan="4" class="empty-state">Cargando...</td></tr>
+                        <tr><td colspan="5" class="empty-state">Cargando...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -358,7 +367,7 @@
             document.getElementById('totalDeterminantes').textContent = determinantes.length;
 
             if (determinantes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No hay determinantes registradas</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No hay determinantes registradas</td></tr>';
                 return;
             }
 
@@ -367,6 +376,7 @@
                     <td><strong>${det.determinante}</strong></td>
                     <td>${det.ruta_gm}</td>
                     <td>${det.base_origen}</td>
+                    <td>${det.tipo_documento || 'FACTURA CFDI - W'}</td>
                     <td>
                         <div class="actions-cell">
                             <button class="btn btn-edit" onclick="editarDeterminante('${det.determinante}')">Editar</button>
@@ -384,11 +394,13 @@
             const determinante = document.getElementById('inputDeterminante').value;
             const rutaGM = document.getElementById('inputRutaGM').value;
             const baseOrigen = document.getElementById('inputBaseOrigen').value;
+            const tipoDocumento = document.getElementById('inputTipoDocumento').value;
 
             const data = {
                 determinante: determinante,
                 ruta_gm: rutaGM,
-                base_origen: baseOrigen
+                base_origen: baseOrigen,
+                tipo_documento: tipoDocumento
             };
 
             try {
@@ -432,6 +444,7 @@
             document.getElementById('inputDeterminante').value = det.determinante;
             document.getElementById('inputRutaGM').value = det.ruta_gm;
             document.getElementById('inputBaseOrigen').value = det.base_origen;
+            document.getElementById('inputTipoDocumento').value = det.tipo_documento || 'FACTURA CFDI - W';
             document.getElementById('btnSubmit').textContent = 'Guardar Cambios';
             document.getElementById('btnCancelar').style.display = 'inline-block';
 

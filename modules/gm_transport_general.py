@@ -157,37 +157,38 @@ class GMTransportAutomation:
             return False
 
     def obtener_ruta_y_base(self, determinante):
-        """Obtiene la ruta GM y base origen desde el CSV"""
+        """Obtiene la ruta GM, base origen y tipo documento desde el CSV"""
         csv_path = 'modules/clave_ruta_base.csv'
 
         logger.info(f"Buscando ruta para determinante: {determinante}")
-        
+
         try:
             if not os.path.exists(csv_path):
                 logger.error(f"No existe el archivo: {csv_path}")
-                return None, None, "ARCHIVO_CSV_NO_EXISTE"
-                
+                return None, None, None, "ARCHIVO_CSV_NO_EXISTE"
+
             with open(csv_path, newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
-                
+
                 determinantes_disponibles = []
-                
+
                 for i, row in enumerate(reader):
                     determinantes_disponibles.append(row['determinante'])
-                    
+
                     if row['determinante'] == str(determinante):
-                        logger.info(f"Determinante {determinante} -> ruta {row['ruta_gm']}, base {row['base_origen']}")
-                        return row['ruta_gm'], row['base_origen'], "ENCONTRADO"
-                
+                        tipo_doc = row.get('tipo_documento', 'FACTURA CFDI - W')
+                        logger.info(f"Determinante {determinante} -> ruta {row['ruta_gm']}, base {row['base_origen']}, tipo doc {tipo_doc}")
+                        return row['ruta_gm'], row['base_origen'], tipo_doc, "ENCONTRADO"
+
                 logger.error("DETERMINANTE NO ENCONTRADA")
                 logger.error(f"Determinante buscada: {determinante}")
                 logger.error("Esta determinante debe agregarse al archivo clave_ruta_base.csv")
-                
-                return None, None, "DETERMINANTE_NO_ENCONTRADA"
-                        
+
+                return None, None, None, "DETERMINANTE_NO_ENCONTRADA"
+
         except Exception as e:
             logger.error(f"Error al leer CSV: {e}")
-            return None, None, "ERROR_LECTURA_CSV"
+            return None, None, None, "ERROR_LECTURA_CSV"
     
     def llenar_fecha(self, id_input, fecha_valor, incluir_hora=True):
         try:
@@ -645,8 +646,8 @@ class GMTransportAutomation:
             paso_actual = "Obtención de ruta y determinante"
             debug_logger.debug(f"Paso actual: {paso_actual}")
 
-            ruta_gm, base_origen, estado_determinante = self.obtener_ruta_y_base(clave_determinante)
-            
+            ruta_gm, base_origen, tipo_documento, estado_determinante = self.obtener_ruta_y_base(clave_determinante)
+
             if estado_determinante == "DETERMINANTE_NO_ENCONTRADA":
                 logger.error("DETERMINANTE NO ENCONTRADA - REGISTRANDO ERROR Y TERMINANDO VIAJE")
                 
@@ -668,7 +669,10 @@ class GMTransportAutomation:
             
             elif estado_determinante == "ENCONTRADO":
                 logger.info(f"Determinante válida: {clave_determinante} -> Ruta: {ruta_gm}, Base: {base_origen}")
-                
+
+                # Guardar tipo_documento en datos del viaje para usar en facturación
+                self.datos_viaje['tipo_documento'] = tipo_documento
+
                 self.llenar_campo_texto("EDT_FOLIORUTA", ruta_gm, "Ruta GM")
                 
                 time.sleep(0.5)

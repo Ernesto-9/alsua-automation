@@ -214,7 +214,8 @@ def api_listar_determinantes():
                     determinantes.append({
                         'determinante': row['determinante'],
                         'ruta_gm': row['ruta_gm'],
-                        'base_origen': row['base_origen']
+                        'base_origen': row['base_origen'],
+                        'tipo_documento': row.get('tipo_documento', 'FACTURA CFDI - W')
                     })
 
         return jsonify({'success': True, 'determinantes': determinantes})
@@ -231,9 +232,10 @@ def api_agregar_determinante():
         determinante = data.get('determinante', '').strip()
         ruta_gm = data.get('ruta_gm', '').strip()
         base_origen = data.get('base_origen', '').strip()
+        tipo_documento = data.get('tipo_documento', 'FACTURA CFDI - W').strip()
 
         # Validaciones
-        if not determinante or not ruta_gm or not base_origen:
+        if not determinante or not ruta_gm or not base_origen or not tipo_documento:
             return jsonify({'success': False, 'error': 'Todos los campos son requeridos'}), 400
 
         if not determinante.isdigit():
@@ -251,14 +253,15 @@ def api_agregar_determinante():
 
         # Agregar nueva determinante
         with open(CSV_DETERMINANTES, 'a', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen', 'tipo_documento'])
             writer.writerow({
                 'determinante': determinante,
                 'ruta_gm': ruta_gm,
-                'base_origen': base_origen
+                'base_origen': base_origen,
+                'tipo_documento': tipo_documento
             })
 
-        logger.info(f"Determinante agregada: {determinante} -> Ruta: {ruta_gm}, Base: {base_origen}")
+        logger.info(f"Determinante agregada: {determinante} -> Ruta: {ruta_gm}, Base: {base_origen}, Tipo Doc: {tipo_documento}")
         return jsonify({'success': True, 'message': 'Determinante agregada correctamente'})
 
     except Exception as e:
@@ -273,9 +276,10 @@ def api_editar_determinante(determinante):
         data = request.get_json()
         nueva_ruta = data.get('ruta_gm', '').strip()
         nueva_base = data.get('base_origen', '').strip()
+        nuevo_tipo_doc = data.get('tipo_documento', '').strip()
 
-        if not nueva_ruta or not nueva_base:
-            return jsonify({'success': False, 'error': 'Ruta y base son requeridos'}), 400
+        if not nueva_ruta or not nueva_base or not nuevo_tipo_doc:
+            return jsonify({'success': False, 'error': 'Ruta, base y tipo de documento son requeridos'}), 400
 
         # Leer todas las determinantes
         if not os.path.exists(CSV_DETERMINANTES):
@@ -290,6 +294,7 @@ def api_editar_determinante(determinante):
                 if row.get('determinante') == determinante:
                     row['ruta_gm'] = nueva_ruta
                     row['base_origen'] = nueva_base
+                    row['tipo_documento'] = nuevo_tipo_doc
                     encontrado = True
                 determinantes.append(row)
 
@@ -298,13 +303,13 @@ def api_editar_determinante(determinante):
 
         # Reescribir el archivo
         with open(CSV_DETERMINANTES, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen', 'tipo_documento'])
             writer.writeheader()
             for det in determinantes:
                 if det.get('determinante'):  # No escribir líneas vacías
                     writer.writerow(det)
 
-        logger.info(f"Determinante editada: {determinante} -> Ruta: {nueva_ruta}, Base: {nueva_base}")
+        logger.info(f"Determinante editada: {determinante} -> Ruta: {nueva_ruta}, Base: {nueva_base}, Tipo Doc: {nuevo_tipo_doc}")
         return jsonify({'success': True, 'message': 'Determinante actualizada correctamente'})
 
     except Exception as e:
@@ -337,7 +342,7 @@ def api_eliminar_determinante(determinante):
 
         # Reescribir el archivo sin la determinante eliminada
         with open(CSV_DETERMINANTES, 'w', encoding='utf-8', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen'])
+            writer = csv.DictWriter(f, fieldnames=['determinante', 'ruta_gm', 'base_origen', 'tipo_documento'])
             writer.writeheader()
             for det in determinantes:
                 writer.writerow(det)
