@@ -51,6 +51,11 @@ class AlsuaMailAutomation:
 
         self.emails_fallidos = {}
 
+        # Sistema de detección de loops infinitos
+        self.historial_procesamiento = {}  # {prefactura: [timestamp1, timestamp2, ...]}
+        self.ultimo_viaje_procesado = None
+        self.ultimo_timestamp_procesado = None
+
         self._crear_carpeta_descarga()
         
     def _crear_carpeta_descarga(self):
@@ -378,6 +383,44 @@ class AlsuaMailAutomation:
             self.ultimo_error_driver = e
             return False
     
+    def detectar_loop_infinito(self, prefactura, max_intentos_ventana=10, ventana_minutos=5):
+        """
+        Detecta si un viaje está en un loop infinito
+
+        Args:
+            prefactura: ID del viaje
+            max_intentos_ventana: Máximo de intentos permitidos en la ventana de tiempo
+            ventana_minutos: Tamaño de la ventana de tiempo en minutos
+
+        Returns:
+            True si se detecta loop infinito, False en caso contrario
+        """
+        ahora = datetime.now()
+
+        # Registrar intento actual
+        if prefactura not in self.historial_procesamiento:
+            self.historial_procesamiento[prefactura] = []
+
+        self.historial_procesamiento[prefactura].append(ahora)
+
+        # Limpiar intentos antiguos (fuera de la ventana)
+        ventana_inicio = ahora - timedelta(minutes=ventana_minutos)
+        self.historial_procesamiento[prefactura] = [
+            ts for ts in self.historial_procesamiento[prefactura]
+            if ts >= ventana_inicio
+        ]
+
+        # Contar intentos en la ventana
+        intentos_recientes = len(self.historial_procesamiento[prefactura])
+
+        if intentos_recientes > max_intentos_ventana:
+            logger.error(f"LOOP INFINITO DETECTADO: Viaje {prefactura} procesado {intentos_recientes} veces en {ventana_minutos} minutos")
+            debug_logger.error(f"[{prefactura}] LOOP INFINITO: {intentos_recientes} intentos en {ventana_minutos} min")
+            debug_logger.error(f"[{prefactura}] Timestamps: {[ts.strftime('%H:%M:%S') for ts in self.historial_procesamiento[prefactura]]}")
+            return True
+
+        return False
+
     def detectar_tipo_error(self, error):
         error_str = str(error).lower()
 
@@ -402,7 +445,16 @@ class AlsuaMailAutomation:
             datos_viaje = viaje_registro.get('datos_viaje', {})
             prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
 
+            # DETECCIÓN DE LOOP INFINITO: Verificar si este viaje se está procesando repetidamente
+            if self.detectar_loop_infinito(prefactura, max_intentos_ventana=10, ventana_minutos=5):
+                logger.error(f"ABORTANDO viaje {prefactura} por loop infinito detectado")
+                robot_state_manager.incrementar_fallidos(prefactura, "Loop infinito detectado - más de 10 intentos en 5 minutos")
+                debug_logger.log_viaje_fallo(prefactura, "loop_infinito", "Más de 10 intentos en 5 minutos")
+
+                return 'VIAJE_FALLIDO', 'loop_infinito'
+
             # Marcar viaje como en proceso en estado_robots.json
+            debug_logger.info(f"[{prefactura}] Paso 1/7: Marcando viaje como en proceso")
             robot_state_manager.marcar_viaje_actual(
                 prefactura=prefactura,
                 fase="Inicializando",
@@ -412,43 +464,78 @@ class AlsuaMailAutomation:
             )
             debug_logger.log_viaje_inicio(prefactura, datos_viaje)
 
+            # LOGGING DETALLADO: Verificación de duplicados
+            debug_logger.info(f"[{prefactura}] Paso 2/7: Verificando duplicados en viajes_log.csv")
             try:
                 if viajes_log.verificar_viaje_existe(prefactura):
                     logger.warning(f"DUPLICADO DETECTADO: {prefactura} ya fue procesado - saltando")
+                    debug_logger.warning(f"[{prefactura}] DUPLICADO encontrado en viajes_log.csv")
                     robot_state_manager.limpiar_viaje_actual()
                     return 'EXITOSO', 'duplicado_detectado'
+                debug_logger.info(f"[{prefactura}] No es duplicado, continuando")
             except Exception as e:
                 logger.error(f"Error verificando duplicados: {e}")
+                debug_logger.error(f"[{prefactura}] ERROR verificando duplicados: {e}")
 
             logger.info(f"Procesando viaje: {prefactura}")
-            
+
+            # LOGGING DETALLADO: Verificación del driver
+            debug_logger.info(f"[{prefactura}] Paso 3/7: Verificando estado del driver")
             if not self.driver:
                 logger.info("No hay driver, creando nuevo...")
+                debug_logger.warning(f"[{prefactura}] Driver es None, creando nuevo driver...")
                 if not self.crear_driver_nuevo():
+                    debug_logger.error(f"[{prefactura}] ERROR CRÍTICO: No se pudo crear driver nuevo")
                     if hasattr(self, 'ultimo_error_driver') and self.ultimo_error_driver:
                         tipo_error = self.detectar_tipo_error(self.ultimo_error_driver)
+                        debug_logger.error(f"[{prefactura}] Tipo de error detectado: {tipo_error} - {self.ultimo_error_driver}")
                         return tipo_error, 'gm_login'
                     return 'DRIVER_CORRUPTO', 'gm_login'
-            
+                debug_logger.info(f"[{prefactura}] Driver nuevo creado exitosamente")
+            else:
+                debug_logger.info(f"[{prefactura}] Driver existente encontrado")
+
+            # LOGGING DETALLADO: Verificación de URL
+            debug_logger.info(f"[{prefactura}] Paso 4/7: Verificando URL del driver")
             try:
                 current_url = self.driver.current_url
+                debug_logger.info(f"[{prefactura}] URL actual: {current_url}")
                 if "softwareparatransporte.com" not in current_url:
                     logger.warning("Driver en página incorrecta, recreando...")
+                    debug_logger.warning(f"[{prefactura}] URL incorrecta, recreando driver...")
                     if not self.crear_driver_nuevo():
+                        debug_logger.error(f"[{prefactura}] ERROR: No se pudo recrear driver después de URL incorrecta")
                         if hasattr(self, 'ultimo_error_driver') and self.ultimo_error_driver:
                             tipo_error = self.detectar_tipo_error(self.ultimo_error_driver)
+                            debug_logger.error(f"[{prefactura}] Tipo de error: {tipo_error}")
                             return tipo_error, 'gm_login'
                         return 'DRIVER_CORRUPTO', 'gm_login'
+                    debug_logger.info(f"[{prefactura}] Driver recreado exitosamente")
+                else:
+                    debug_logger.info(f"[{prefactura}] URL correcta, continuando")
             except Exception as e:
                 logger.warning(f"Driver corrupto detectado: {e}")
+                debug_logger.error(f"[{prefactura}] ERROR ACCEDIENDO A current_url: {e}")
+                debug_logger.error(f"[{prefactura}] Recreando driver por error: {type(e).__name__}")
                 if not self.crear_driver_nuevo():
+                    debug_logger.error(f"[{prefactura}] ERROR CRÍTICO: No se pudo recrear driver después de excepción")
                     return 'DRIVER_CORRUPTO', 'selenium_driver'
-            
+                debug_logger.info(f"[{prefactura}] Driver recreado exitosamente después de excepción")
+
+            # LOGGING DETALLADO: Creación de automation y llamada a fill_viaje_form
+            debug_logger.info(f"[{prefactura}] Paso 5/7: Creando instancia de GMTransportAutomation")
             try:
                 automation = GMTransportAutomation(self.driver)
+                debug_logger.info(f"[{prefactura}] GMTransportAutomation creado exitosamente")
+
+                debug_logger.info(f"[{prefactura}] Paso 6/7: Asignando datos del viaje")
                 automation.datos_viaje = datos_viaje
-                
+                debug_logger.info(f"[{prefactura}] Datos asignados: Placa tractor={datos_viaje.get('placa_tractor')}, Remolque={datos_viaje.get('placa_remolque')}")
+
+                debug_logger.info(f"[{prefactura}] Paso 7/7: Llamando a fill_viaje_form()")
+                debug_logger.info(f"[{prefactura}] ========== INICIO FILL_VIAJE_FORM ==========")
                 resultado = automation.fill_viaje_form()
+                debug_logger.info(f"[{prefactura}] ========== FIN FILL_VIAJE_FORM - Resultado: {resultado} ==========")
                 
                 if resultado == "OPERADOR_OCUPADO":
                     logger.warning(f"Operador ocupado: {prefactura}")
@@ -493,13 +580,19 @@ class AlsuaMailAutomation:
                     
             except Exception as automation_error:
                 logger.error(f"Error durante automatización: {automation_error}")
-                
+                debug_logger.error(f"[{prefactura}] EXCEPCIÓN CAPTURADA durante automatización")
+                debug_logger.error(f"[{prefactura}] Tipo de excepción: {type(automation_error).__name__}")
+                debug_logger.error(f"[{prefactura}] Mensaje: {str(automation_error)}")
+
                 tipo_error = self.detectar_tipo_error(automation_error)
-                
+                debug_logger.warning(f"[{prefactura}] Tipo de error detectado: {tipo_error}")
+
                 if tipo_error == 'LOGIN_LIMIT':
+                    debug_logger.warning(f"[{prefactura}] ERROR: LOGIN_LIMIT - Límite de usuarios alcanzado")
                     robot_state_manager.limpiar_viaje_actual()
                     return 'LOGIN_LIMIT', 'gm_login'
                 elif tipo_error == 'DRIVER_CORRUPTO':
+                    debug_logger.error(f"[{prefactura}] ERROR: DRIVER_CORRUPTO - Cerrando driver")
                     try:
                         self.driver.quit()
                     except:
@@ -510,12 +603,17 @@ class AlsuaMailAutomation:
                     return 'DRIVER_CORRUPTO', 'selenium_driver'
                 else:
                     modulo_error = self.determinar_modulo_error(automation_error)
+                    debug_logger.error(f"[{prefactura}] ERROR: VIAJE_FALLIDO en módulo {modulo_error}")
                     robot_state_manager.incrementar_fallidos(prefactura, f"Error durante automatización: {modulo_error}")
                     debug_logger.log_viaje_fallo(prefactura, modulo_error, str(automation_error))
                     return 'VIAJE_FALLIDO', modulo_error
                 
         except Exception as e:
             logger.error(f"Error general procesando viaje: {e}")
+            debug_logger.error(f"[{prefactura}] EXCEPCIÓN NO CAPTURADA en nivel superior")
+            debug_logger.error(f"[{prefactura}] Tipo: {type(e).__name__}")
+            debug_logger.error(f"[{prefactura}] Mensaje: {str(e)}")
+
             try:
                 robot_state_manager.limpiar_viaje_actual()
                 robot_state_manager.incrementar_fallidos(prefactura, f"Error general: {str(e)}")
@@ -632,10 +730,16 @@ class AlsuaMailAutomation:
                     if mostrar_debug:
                         logger.info(f"Ciclo #{contador_ciclos}")
 
+                    # Verificar viajes stuck (timeout: 10 minutos)
                     try:
-                        robot_state_manager.verificar_y_limpiar_viaje_stuck()
-                    except:
-                        pass
+                        limpiado, mensaje = robot_state_manager.verificar_y_limpiar_viaje_stuck(timeout_minutos=10)
+                        if limpiado:
+                            logger.error(mensaje)
+                            debug_logger.error(mensaje)
+                            # Si se limpió un viaje stuck, agregar pausa para estabilidad
+                            time.sleep(30)
+                    except Exception as e:
+                        logger.warning(f"Error verificando viajes stuck: {e}")
 
                     viaje_registro = obtener_siguiente_viaje_cola()
 
