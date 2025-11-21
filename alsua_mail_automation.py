@@ -28,6 +28,7 @@ from viajes_log import registrar_viaje_fallido as log_viaje_fallido, viajes_log
 # Importar módulos de mejora
 from modules import robot_state_manager
 from modules.debug_logger import debug_logger
+from modules.email_alertas import enviar_alerta_robot_trabado, enviar_alerta_loop_infinito
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +56,11 @@ class AlsuaMailAutomation:
         self.historial_procesamiento = {}  # {prefactura: [timestamp1, timestamp2, ...]}
         self.ultimo_viaje_procesado = None
         self.ultimo_timestamp_procesado = None
+
+        # Sistema de alertas por email
+        self.ultimo_viaje_exitoso_timestamp = datetime.now()
+        self.ultimo_viaje_exitoso_prefactura = None
+        self.alerta_enviada = False
 
         self._crear_carpeta_descarga()
         
@@ -417,6 +423,13 @@ class AlsuaMailAutomation:
             logger.error(f"LOOP INFINITO DETECTADO: Viaje {prefactura} procesado {intentos_recientes} veces en {ventana_minutos} minutos")
             debug_logger.error(f"[{prefactura}] LOOP INFINITO: {intentos_recientes} intentos en {ventana_minutos} min")
             debug_logger.error(f"[{prefactura}] Timestamps: {[ts.strftime('%H:%M:%S') for ts in self.historial_procesamiento[prefactura]]}")
+
+            # Enviar alerta por email
+            try:
+                enviar_alerta_loop_infinito(prefactura, intentos_recientes)
+            except Exception as e:
+                logger.warning(f"Error enviando alerta de loop infinito: {e}")
+
             return True
 
         return False
@@ -550,6 +563,11 @@ class AlsuaMailAutomation:
                     # Actualizar estado: viaje exitoso
                     robot_state_manager.incrementar_exitosos(prefactura)
                     debug_logger.log_viaje_exito(prefactura)
+
+                    # Actualizar timestamp del último viaje exitoso (para sistema de alertas)
+                    self.ultimo_viaje_exitoso_timestamp = datetime.now()
+                    self.ultimo_viaje_exitoso_prefactura = prefactura
+                    self.alerta_enviada = False  # Resetear para permitir nueva alerta si vuelve a trabarse
 
                     archivo_descargado = datos_viaje.get('archivo_descargado')
                     if archivo_descargado and os.path.exists(archivo_descargado):
@@ -741,6 +759,24 @@ class AlsuaMailAutomation:
                     except Exception as e:
                         logger.warning(f"Error verificando viajes stuck: {e}")
 
+                    # Verificar si el robot lleva 15 horas sin procesar viajes (sistema de alertas)
+                    try:
+                        ahora = datetime.now()
+                        horas_sin_trabajar = (ahora - self.ultimo_viaje_exitoso_timestamp).total_seconds() / 3600
+
+                        if horas_sin_trabajar >= 15 and not self.alerta_enviada:
+                            logger.error(f"⚠️ ROBOT SIN TRABAJAR: {horas_sin_trabajar:.1f} horas sin procesar viajes")
+                            debug_logger.error(f"Robot lleva {horas_sin_trabajar:.1f}h sin procesar viajes - enviando alerta")
+
+                            # Enviar email de alerta
+                            if enviar_alerta_robot_trabado(horas_sin_trabajar, self.ultimo_viaje_exitoso_prefactura):
+                                self.alerta_enviada = True
+                                logger.info("✅ Alerta por email enviada exitosamente")
+                            else:
+                                logger.warning("⚠️ No se pudo enviar alerta por email")
+                    except Exception as e:
+                        logger.warning(f"Error verificando tiempo sin trabajar: {e}")
+
                     viaje_registro = obtener_siguiente_viaje_cola()
 
                     # Actualizar cola en estado_robots.json (solo si cambia)
@@ -784,6 +820,12 @@ class AlsuaMailAutomation:
                             marcar_viaje_exitoso_cola(viaje_id)
                             robot_state_manager.limpiar_viaje_actual()
                             logger.info(f"{prefactura} COMPLETADO")
+
+                            # Actualizar timestamp del último viaje exitoso (para sistema de alertas)
+                            self.ultimo_viaje_exitoso_timestamp = datetime.now()
+                            self.ultimo_viaje_exitoso_prefactura = prefactura
+                            self.alerta_enviada = False
+
                             contador_sync_mysql += 1
                             time.sleep(60)
 
