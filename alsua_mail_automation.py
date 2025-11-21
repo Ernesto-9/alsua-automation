@@ -700,8 +700,8 @@ class AlsuaMailAutomation:
                     marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
                     logger.error(f"{prefactura} FALLÓ EN: {modulo_error} - removido de cola")
 
-                    logger.info("Esperando 5 segundos después de viaje fallido...")
-                    time.sleep(5)
+                    logger.info("Esperando 30 segundos después de viaje fallido...")
+                    time.sleep(30)
             
         except KeyboardInterrupt:
             logger.info("Interrupción manual del procesamiento")
