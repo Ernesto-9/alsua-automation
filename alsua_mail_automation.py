@@ -687,7 +687,17 @@ class AlsuaMailAutomation:
                 elif resultado == 'LOGIN_LIMIT':
                     registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
                     logger.warning(f"Límite de usuarios - {prefactura} reintentará en 15 minutos")
-                    
+
+                    # Cerrar Chrome antes de espera larga para evitar sesión expirada de GM Transport
+                    if self.driver:
+                        logger.info("Cerrando Chrome para evitar sesión expirada durante espera de 15 min...")
+                        try:
+                            self.driver.quit()
+                        except:
+                            pass
+                        finally:
+                            self.driver = None
+
                     logger.info("Esperando 15 minutos por límite de usuarios...")
                     time.sleep(15 * 60)
                     
