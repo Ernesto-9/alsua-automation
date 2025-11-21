@@ -97,6 +97,14 @@ Este es un mensaje automático del sistema de monitoreo del robot.
             # Enviar
             mail.Send()
 
+            # Forzar envío inmediato (no dejar en bandeja de salida)
+            try:
+                namespace = outlook.GetNamespace("MAPI")
+                namespace.SendAndReceive(False)
+                logger.info("Forzado envío inmediato de emails pendientes")
+            except Exception as e:
+                logger.warning(f"No se pudo forzar envío inmediato: {e}")
+
             # Registrar envío exitoso
             self.ultima_alerta_enviada = ahora
             logger.info(f"✅ Alerta enviada a {self.email_destino}")
@@ -156,6 +164,14 @@ Este es un mensaje automático del sistema de monitoreo del robot.
 
             mail.Body = cuerpo
             mail.Send()
+
+            # Forzar envío inmediato (no dejar en bandeja de salida)
+            try:
+                namespace = outlook.GetNamespace("MAPI")
+                namespace.SendAndReceive(False)
+                logger.info("Forzado envío inmediato de alerta de loop")
+            except Exception as e:
+                logger.warning(f"No se pudo forzar envío inmediato: {e}")
 
             self.ultima_alerta_enviada = ahora
             logger.info(f"✅ Alerta de loop infinito enviada")
