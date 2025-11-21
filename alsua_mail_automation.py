@@ -680,9 +680,9 @@ class AlsuaMailAutomation:
                 if resultado == 'EXITOSO':
                     marcar_viaje_exitoso_cola(viaje_id)
                     logger.info(f"Viaje {prefactura} completado y removido de cola")
-                    
-                    logger.info("Esperando 1 minuto antes del siguiente viaje...")
-                    time.sleep(60)
+
+                    logger.info("Esperando 5 segundos antes del siguiente viaje...")
+                    time.sleep(5)
                     
                 elif resultado == 'LOGIN_LIMIT':
                     registrar_error_reintentable_cola(viaje_id, 'LOGIN_LIMIT', f'Límite de usuarios en {modulo_error}')
@@ -699,9 +699,9 @@ class AlsuaMailAutomation:
                     motivo_detallado = f"PROCESO FALLÓ EN: {modulo_error}"
                     marcar_viaje_fallido_cola(viaje_id, modulo_error, motivo_detallado)
                     logger.error(f"{prefactura} FALLÓ EN: {modulo_error} - removido de cola")
-                    
-                    logger.info("Esperando 30 segundos después de viaje fallido...")
-                    time.sleep(30)
+
+                    logger.info("Esperando 5 segundos después de viaje fallido...")
+                    time.sleep(5)
             
         except KeyboardInterrupt:
             logger.info("Interrupción manual del procesamiento")
