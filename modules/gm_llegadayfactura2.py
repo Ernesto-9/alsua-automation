@@ -387,6 +387,27 @@ class ProcesadorLlegadaFactura:
                 logger.info(f" Tipo documento por defecto: '{seleccionado_actual.text}' (valor: {seleccionado_actual.get_attribute('value')})")
                 debug_logger.info(f"Tipo documento por defecto: {seleccionado_actual.text}")
 
+                # DEBUGGING: Mostrar TODAS las opciones disponibles
+                logger.info("=" * 80)
+                logger.info("OPCIONES DISPONIBLES EN DROPDOWN:")
+                logger.info("=" * 80)
+                for i, option in enumerate(tipo_doc_select.options, 1):
+                    texto_opcion = option.text
+                    valor_opcion = option.get_attribute('value')
+                    logger.info(f"  {i}. valor='{valor_opcion}' | texto='{texto_opcion}'")
+                logger.info("=" * 80)
+                logger.info(f"BUSCANDO: '{tipo_documento_cfdi}'")
+                logger.info("=" * 80)
+
+                # PAUSA PARA VERIFICACIÓN MANUAL
+                logger.info("")
+                logger.info("PAUSA PARA VERIFICACIÓN")
+                logger.info(f"Revisa la pantalla de GM Transport")
+                logger.info(f"Verifica que el tipo de documento '{tipo_documento_cfdi}' existe en el dropdown")
+                logger.info(f"Presiona ENTER para continuar y seleccionar...")
+                logger.info("")
+                input()
+
                 # SELECCIONAR POR TEXTO VISIBLE (resistente a cambios en dropdown)
                 logger.info(f" Seleccionando '{tipo_documento_cfdi}' por texto visible...")
                 tipo_doc_select.select_by_visible_text(tipo_documento_cfdi)
