@@ -3,11 +3,12 @@ Panel Web Alsua - Servidor Flask
 Monitoreo en tiempo real del robot de automatización
 """
 
-from flask import Flask, render_template, jsonify, redirect, url_for
+from flask import Flask, render_template, jsonify, redirect, url_for, request, send_from_directory
 import threading
 import os
 import logging
 import sys
+import csv
 from modules import robot_state_manager
 from alsua_mail_automation import AlsuaMailAutomation
 
@@ -15,6 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.static_folder = 'static'
 
 # Estado del sistema Flask
 sistema_estado = {
@@ -411,6 +413,388 @@ def api_eliminar_clave(determinante):
         return jsonify({
             'success': False,
             'mensaje': f'Error al eliminar: {str(e)}'
+        }), 500
+
+
+# ==============================
+# PANEL DE REPROCESAMIENTO
+# ==============================
+
+@app.route("/admin/reprocesar")
+def admin_reprocesar():
+    """Panel de reprocesamiento de viajes fallidos"""
+    return render_template("admin_reprocesar.html")
+
+
+@app.route("/static/<path:filename>")
+def serve_static(filename):
+    """Sirve archivos estáticos"""
+    return send_from_directory('static', filename)
+
+
+@app.route("/api/viajes-fallidos", methods=["GET"])
+def api_obtener_viajes_fallidos():
+    """API que devuelve todos los viajes fallidos con historial de intentos"""
+    from viajes_log import viajes_log, obtener_historial_viaje
+    from cola_viajes import leer_cola
+
+    try:
+        # Leer viajes fallidos del CSV
+        viajes_fallidos = viajes_log.leer_viajes_por_estatus("FALLIDO")
+
+        # Leer cola para marcar viajes que ya están en cola
+        cola = leer_cola()
+        prefacturas_en_cola = set()
+        for viaje_cola in cola.get("viajes", []):
+            prefactura = viaje_cola.get("datos_viaje", {}).get("prefactura")
+            if prefactura:
+                prefacturas_en_cola.add(prefactura)
+
+        # Enriquecer cada viaje con historial de intentos
+        for viaje in viajes_fallidos:
+            prefactura = viaje.get('prefactura')
+            historial = obtener_historial_viaje(prefactura)
+            viaje['num_intentos'] = len(historial.get('intentos', []))
+            viaje['en_cola'] = prefactura in prefacturas_en_cola
+
+        return jsonify({
+            'success': True,
+            'viajes': viajes_fallidos
+        })
+
+    except Exception as e:
+        logger.error(f"Error obteniendo viajes fallidos: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route("/api/viaje-historial/<prefactura>", methods=["GET"])
+def api_obtener_historial_viaje(prefactura):
+    """API que devuelve el historial de intentos de un viaje"""
+    from viajes_log import obtener_historial_viaje
+
+    try:
+        historial = obtener_historial_viaje(prefactura)
+
+        return jsonify({
+            'success': True,
+            'historial': historial
+        })
+
+    except Exception as e:
+        logger.error(f"Error obteniendo historial: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route("/api/viajes-fallidos/<prefactura>", methods=["PUT"])
+def api_editar_viaje_fallido(prefactura):
+    """API para editar un viaje fallido"""
+    try:
+        data = request.get_json()
+        nueva_prefactura = data.get('prefactura', '').strip()
+        determinante = data.get('determinante', '').strip()
+        fecha_viaje = data.get('fecha_viaje', '').strip()
+        placa_tractor = data.get('placa_tractor', '').strip()
+        placa_remolque = data.get('placa_remolque', '').strip()
+
+        if not all([nueva_prefactura, determinante, fecha_viaje, placa_tractor, placa_remolque]):
+            return jsonify({
+                'success': False,
+                'mensaje': 'Todos los campos son obligatorios'
+            }), 400
+
+        # Leer CSV completo
+        csv_path = 'viajes_log.csv'
+        filas = []
+        encontrado = False
+
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+            for row in reader:
+                if row.get('prefactura') == prefactura and row.get('estatus') == 'FALLIDO':
+                    # Actualizar la fila
+                    row['prefactura'] = nueva_prefactura
+                    row['determinante'] = determinante
+                    row['fecha_viaje'] = fecha_viaje
+                    row['placa_tractor'] = placa_tractor
+                    row['placa_remolque'] = placa_remolque
+                    encontrado = True
+
+                filas.append(row)
+
+        if not encontrado:
+            return jsonify({
+                'success': False,
+                'mensaje': f'Viaje {prefactura} no encontrado'
+            }), 404
+
+        # Escribir de vuelta al CSV
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(filas)
+
+        logger.info(f"Viaje fallido actualizado: {prefactura} -> {nueva_prefactura}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': 'Viaje actualizado exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error editando viaje: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route("/api/viajes-fallidos/<prefactura>", methods=["DELETE"])
+def api_eliminar_viaje_fallido(prefactura):
+    """API para eliminar un viaje fallido del log"""
+    from viajes_log import limpiar_historial_viaje
+
+    try:
+        csv_path = 'viajes_log.csv'
+        filas = []
+        encontrado = False
+
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+            for row in reader:
+                if row.get('prefactura') == prefactura and row.get('estatus') == 'FALLIDO':
+                    encontrado = True
+                    continue  # Saltar esta fila
+                filas.append(row)
+
+        if not encontrado:
+            return jsonify({
+                'success': False,
+                'mensaje': f'Viaje {prefactura} no encontrado'
+            }), 404
+
+        # Escribir de vuelta al CSV
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(filas)
+
+        # Limpiar historial
+        limpiar_historial_viaje(prefactura)
+
+        logger.info(f"Viaje fallido eliminado: {prefactura}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': 'Viaje eliminado exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error eliminando viaje: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route("/api/viajes-fallidos/edicion-masiva", methods=["POST"])
+def api_edicion_masiva():
+    """API para editar varios viajes fallidos a la vez"""
+    try:
+        data = request.get_json()
+        prefacturas = data.get('prefacturas', [])
+        cambios = data.get('cambios', {})
+
+        if not prefacturas or not cambios:
+            return jsonify({
+                'success': False,
+                'mensaje': 'Datos inválidos'
+            }), 400
+
+        csv_path = 'viajes_log.csv'
+        filas = []
+        actualizados = 0
+
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+            for row in reader:
+                if row.get('prefactura') in prefacturas and row.get('estatus') == 'FALLIDO':
+                    # Aplicar cambios
+                    if 'determinante' in cambios:
+                        row['determinante'] = cambios['determinante']
+                    if 'placa_tractor' in cambios:
+                        row['placa_tractor'] = cambios['placa_tractor']
+                    if 'placa_remolque' in cambios:
+                        row['placa_remolque'] = cambios['placa_remolque']
+                    actualizados += 1
+
+                filas.append(row)
+
+        # Escribir de vuelta al CSV
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(filas)
+
+        logger.info(f"Edición masiva: {actualizados} viajes actualizados")
+
+        return jsonify({
+            'success': True,
+            'actualizados': actualizados,
+            'mensaje': f'{actualizados} viaje(s) actualizados exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error en edición masiva: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route("/api/viajes-fallidos/eliminar-masivo", methods=["POST"])
+def api_eliminar_masivo():
+    """API para eliminar varios viajes fallidos a la vez"""
+    from viajes_log import limpiar_historial_viaje
+
+    try:
+        data = request.get_json()
+        prefacturas = data.get('prefacturas', [])
+
+        if not prefacturas:
+            return jsonify({
+                'success': False,
+                'mensaje': 'No se proporcionaron prefacturas'
+            }), 400
+
+        csv_path = 'viajes_log.csv'
+        filas = []
+        eliminados = 0
+
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+            for row in reader:
+                if row.get('prefactura') in prefacturas and row.get('estatus') == 'FALLIDO':
+                    eliminados += 1
+                    continue  # Saltar esta fila
+                filas.append(row)
+
+        # Escribir de vuelta al CSV
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(filas)
+
+        # Limpiar historial de cada viaje eliminado
+        for prefactura in prefacturas:
+            limpiar_historial_viaje(prefactura)
+
+        logger.info(f"Eliminación masiva: {eliminados} viajes eliminados")
+
+        return jsonify({
+            'success': True,
+            'eliminados': eliminados,
+            'mensaje': f'{eliminados} viaje(s) eliminados exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error en eliminación masiva: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
+@app.route("/api/reprocesar-viajes", methods=["POST"])
+def api_reprocesar_viajes():
+    """API para agregar viajes fallidos a la cola para reprocesarlos"""
+    from viajes_log import viajes_log
+    from cola_viajes import agregar_viaje_a_cola
+
+    try:
+        data = request.get_json()
+        prefacturas = data.get('prefacturas', [])
+        modo = data.get('modo', 'desde_cero')  # 'desde_cero' o 'desde_busqueda'
+
+        if not prefacturas:
+            return jsonify({
+                'success': False,
+                'mensaje': 'No se proporcionaron prefacturas'
+            }), 400
+
+        # Leer CSV de viajes para obtener datos completos
+        csv_path = 'viajes_log.csv'
+        viajes_a_reprocesar = []
+
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                if row.get('prefactura') in prefacturas and row.get('estatus') == 'FALLIDO':
+                    viajes_a_reprocesar.append(row)
+
+        if len(viajes_a_reprocesar) == 0:
+            return jsonify({
+                'success': False,
+                'mensaje': 'No se encontraron viajes fallidos con esas prefacturas'
+            }), 404
+
+        # Agregar cada viaje a la cola con el modo de reprocesamiento
+        agregados = 0
+        duplicados = 0
+
+        for viaje in viajes_a_reprocesar:
+            datos_viaje = {
+                'prefactura': viaje.get('prefactura'),
+                'determinante': viaje.get('determinante'),
+                'clave_determinante': viaje.get('determinante'),  # Alias
+                'fecha_viaje': viaje.get('fecha_viaje'),
+                'placa_tractor': viaje.get('placa_tractor'),
+                'placa_remolque': viaje.get('placa_remolque'),
+                'importe': viaje.get('importe'),
+                'cliente_codigo': viaje.get('cliente_codigo'),
+                'modo_reprocesar': modo  # Nuevo campo para indicar el modo
+            }
+
+            if agregar_viaje_a_cola(datos_viaje):
+                agregados += 1
+            else:
+                duplicados += 1
+                logger.warning(f"Viaje {datos_viaje['prefactura']} ya está en cola (duplicado)")
+
+        mensaje = f'{agregados} viaje(s) agregados a la cola para reprocesamiento'
+        if duplicados > 0:
+            mensaje += f' ({duplicados} ya estaban en cola)'
+
+        logger.info(mensaje)
+
+        return jsonify({
+            'success': True,
+            'agregados': agregados,
+            'duplicados': duplicados,
+            'mensaje': mensaje
+        })
+
+    except Exception as e:
+        logger.error(f"Error reprocesando viajes: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
         }), 500
 
 

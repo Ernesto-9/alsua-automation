@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reprocesar Viajes Fallidos</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .header h1 {
+            color: #1a202c;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-back {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-back:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary {
+            background: #48bb78;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #38a169;
+        }
+
+        .btn-danger {
+            background: #f56565;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #e53e3e;
+        }
+
+        .btn-edit {
+            background: #ed8936;
+            color: white;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .btn-edit:hover {
+            background: #dd6b20;
+        }
+
+        .btn-delete {
+            background: #f56565;
+            color: white;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .btn-delete:hover {
+            background: #e53e3e;
+        }
+
+        .btn-reprocess {
+            background: #4299e1;
+            color: white;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .btn-reprocess:hover {
+            background: #3182ce;
+        }
+
+        .btn:disabled {
+            background: #cbd5e0;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .filters-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 16px;
+            align-items: end;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .filter-group label {
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .filter-group input,
+        .filter-group select {
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .filter-group input:focus,
+        .filter-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: 500;
+            display: none;
+        }
+
+        .alert-success {
+            background: #c6f6d5;
+            border-left: 4px solid #48bb78;
+            color: #22543d;
+        }
+
+        .alert-error {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+            color: #742a2a;
+        }
+
+        .alert-info {
+            background: #bee3f8;
+            border-left: 4px solid #4299e1;
+            color: #2c5282;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .table-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .table-header h2 {
+            color: #1a202c;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .table-stats {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+        }
+
+        .stat-badge {
+            background: #edf2f7;
+            color: #2d3748;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .bulk-actions {
+            display: none;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .table-wrapper {
+            max-height: 600px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #f7fafc;
+            color: #4a5568;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #a0aec0;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .badge-warning {
+            background: #fef5e7;
+            color: #d97706;
+        }
+
+        .badge-danger {
+            background: #fee;
+            color: #c53030;
+        }
+
+        .badge-info {
+            background: #e0f2fe;
+            color: #0369a1;
+        }
+
+        .badge-queue {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .attempts-link {
+            color: #4299e1;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        .attempts-link:hover {
+            color: #2b6cb0;
+        }
+
+        .attempts-high {
+            color: #e53e3e;
+            font-weight: 700;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-header h3 {
+            color: #1a202c;
+            font-size: 20px;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #a0aec0;
+        }
+
+        .modal-close:hover {
+            color: #2d3748;
+        }
+
+        .modal-body {
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #4a5568;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .radio-option:hover {
+            background: #f7fafc;
+        }
+
+        .radio-option input[type="radio"] {
+            width: 20px;
+            height: 20px;
+        }
+
+        .radio-option label {
+            margin: 0;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .radio-description {
+            color: #718096;
+            font-size: 13px;
+            margin-top: 4px;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .history-timeline {
+            margin-top: 16px;
+        }
+
+        .history-item {
+            padding: 12px;
+            border-left: 3px solid #f56565;
+            background: #fff5f5;
+            margin-bottom: 12px;
+            border-radius: 4px;
+        }
+
+        .history-timestamp {
+            color: #718096;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .history-error {
+            color: #c53030;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .filters-grid {
+                grid-template-columns: 1fr;
+            }
+
+            table {
+                font-size: 12px;
+            }
+
+            th, td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 Reprocesar Viajes Fallidos</h1>
+            <a href="/" class="btn btn-back">← Volver al Dashboard</a>
+        </div>
+
+        <div class="filters-card">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="searchInput">Buscar</label>
+                    <input type="text" id="searchInput" placeholder="Prefactura, placa, determinante...">
+                </div>
+                <div class="filter-group">
+                    <label for="errorFilter">Filtrar por Error</label>
+                    <select id="errorFilter">
+                        <option value="">Todos los errores</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>&nbsp;</label>
+                    <button class="btn btn-primary" onclick="aplicarFiltros()">Aplicar Filtros</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <div class="table-container">
+            <div class="table-header">
+                <h2>Viajes Fallidos</h2>
+                <div class="table-stats">
+                    <span class="stat-badge">Total: <span id="totalCount">0</span></span>
+                    <span class="stat-badge" id="filteredBadge" style="display: none;">Mostrando: <span id="filteredCount">0</span></span>
+                </div>
+            </div>
+
+            <div id="bulkActions" class="bulk-actions">
+                <span style="color: #4a5568; font-weight: 600;"><span id="selectedCount">0</span> seleccionados</span>
+                <button class="btn btn-primary" onclick="reprocesarSeleccionados()">Reprocesar Seleccionados</button>
+                <button class="btn btn-edit" onclick="editarSeleccionados()">Editar Seleccionados</button>
+                <button class="btn btn-danger" onclick="eliminarSeleccionados()">Eliminar Seleccionados</button>
+            </div>
+
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll()"></th>
+                            <th>#Intentos</th>
+                            <th>Prefactura</th>
+                            <th>Fecha</th>
+                            <th>Tractor</th>
+                            <th>Remolque</th>
+                            <th>Determinante</th>
+                            <th>Último Error</th>
+                            <th>Falló</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="viajesBody">
+                        <tr><td colspan="10" class="empty-state">Cargando viajes fallidos...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Historial -->
+    <div id="modalHistorial" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>📜 Historial de Intentos</h3>
+                <button class="modal-close" onclick="cerrarModal('modalHistorial')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <h4 id="historialPrefactura" style="margin-bottom: 16px;"></h4>
+                <div id="historialContenido"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar -->
+    <div id="modalEditar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="editarTitulo">Editar Viaje</h3>
+                <button class="modal-close" onclick="cerrarModal('modalEditar')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="formEditar">
+                    <input type="hidden" id="editPrefacturaOriginal">
+                    <div class="form-group">
+                        <label>Prefactura</label>
+                        <input type="text" id="editPrefactura" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Determinante</label>
+                        <input type="text" id="editDeterminante" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Fecha Viaje</label>
+                        <input type="text" id="editFechaViaje" placeholder="DD/MM/YYYY" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Placa Tractor</label>
+                        <input type="text" id="editTractor" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Placa Remolque</label>
+                        <input type="text" id="editRemolque" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="cerrarModal('modalEditar')" style="background: #e2e8f0; color: #2d3748;">Cancelar</button>
+                <button class="btn btn-primary" onclick="guardarEdicion()">Guardar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Editar Masivo -->
+    <div id="modalEditarMasivo" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Edición Masiva - <span id="cantidadMasivo">0</span> viajes</h3>
+                <button class="modal-close" onclick="cerrarModal('modalEditarMasivo')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: #718096; margin-bottom: 16px;">Solo se aplicarán los cambios en los campos que completes:</p>
+                <form id="formEditarMasivo">
+                    <div class="form-group">
+                        <label>¿Cambiar determinante?</label>
+                        <input type="text" id="masivoDeterminante" placeholder="Dejar vacío si no quieres cambiar">
+                    </div>
+                    <div class="form-group">
+                        <label>¿Cambiar placa tractor?</label>
+                        <input type="text" id="masivoTractor" placeholder="Dejar vacío si no quieres cambiar">
+                    </div>
+                    <div class="form-group">
+                        <label>¿Cambiar placa remolque?</label>
+                        <input type="text" id="masivoRemolque" placeholder="Dejar vacío si no quieres cambiar">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="cerrarModal('modalEditarMasivo')" style="background: #e2e8f0; color: #2d3748;">Cancelar</button>
+                <button class="btn btn-primary" onclick="aplicarEdicionMasiva()">Aplicar Cambios</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Modo Reprocesamiento -->
+    <div id="modalModoReprocesar" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>🔄 ¿Cómo reprocesar?</h3>
+                <button class="modal-close" onclick="cerrarModal('modalModoReprocesar')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="modoReprocesarInfo" style="margin-bottom: 20px; color: #4a5568; font-weight: 500;"></p>
+                <div class="radio-group">
+                    <div class="radio-option">
+                        <input type="radio" name="modoReprocesar" id="modoDesde Cero" value="desde_cero" checked>
+                        <label for="modoDesdeCero">
+                            <div><strong>Desde cero</strong></div>
+                            <div class="radio-description">Crear nuevo viaje en GM Transport</div>
+                        </label>
+                    </div>
+                    <div class="radio-option">
+                        <input type="radio" name="modoReprocesar" id="modoDesdeBusqueda" value="desde_busqueda">
+                        <label for="modoDesdeBusqueda">
+                            <div><strong>Desde búsqueda</strong></div>
+                            <div class="radio-description">El viaje ya está creado, buscarlo y continuar</div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="cerrarModal('modalModoReprocesar')" style="background: #e2e8f0; color: #2d3748;">Cancelar</button>
+                <button class="btn btn-reprocess" onclick="confirmarReprocesar()">Reprocesar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/admin_reprocesar.js"></script>
+</body>
+</html>
