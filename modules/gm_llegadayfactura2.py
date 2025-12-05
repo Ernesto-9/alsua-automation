@@ -1,5 +1,7 @@
 import logging
 import traceback
+import csv
+import os
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait, Select
@@ -20,6 +22,46 @@ logger = logging.getLogger(__name__)
 
 # Instancia global del screenshot manager
 screenshot_mgr = ScreenshotManager()
+
+def obtener_tipo_documento_cfdi(clave_determinante):
+    """
+    Lee el CSV de claves determinantes y devuelve el tipo de documento CFDI correspondiente.
+    Si no encuentra la clave o no existe tipo_documento, devuelve default.
+
+    Args:
+        clave_determinante: Código de la clave determinante (ej: "8121", "4982")
+
+    Returns:
+        str: Nombre del tipo de documento CFDI (ej: "FACTURA CFDI - W")
+    """
+    csv_path = os.path.join(os.path.dirname(__file__), 'clave_ruta_base.csv')
+    tipo_default = "FACTURA CFDI - W"
+
+    try:
+        if not os.path.exists(csv_path):
+            logger.warning(f"CSV no encontrado: {csv_path} - usando tipo default")
+            return tipo_default
+
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                if row.get('determinante') == str(clave_determinante):
+                    tipo_doc = row.get('tipo_documento', '').strip()
+                    if tipo_doc:
+                        logger.info(f"Tipo documento para clave {clave_determinante}: '{tipo_doc}'")
+                        return tipo_doc
+                    else:
+                        logger.warning(f"Clave {clave_determinante} encontrada pero sin tipo_documento - usando default")
+                        return tipo_default
+
+        # Clave no encontrada en CSV
+        logger.warning(f"Clave {clave_determinante} no encontrada en CSV - usando default '{tipo_default}'")
+        return tipo_default
+
+    except Exception as e:
+        logger.error(f"Error al leer CSV de claves: {e} - usando default")
+        return tipo_default
 
 class ProcesadorLlegadaFactura:
     def __init__(self, driver, datos_viaje):
@@ -326,10 +368,16 @@ class ProcesadorLlegadaFactura:
                 logger.error(f" Error al hacer clic en 'Facturar': {e}")
                 return False
             
-            # Cambiar tipo de documento a "FACTURA CFDI - W"
+            # Seleccionar tipo de documento CFDI según clave determinante
             try:
-                logger.info(" Cambiando tipo de documento a 'FACTURA CFDI - W'...")
-                debug_logger.info("Intentando cambiar tipo de documento a FACTURA CFDI - W")
+                # Obtener clave determinante del viaje actual
+                clave_determinante = self.datos_viaje.get('clave_determinante', 'DESCONOCIDA')
+
+                # Obtener tipo de documento del CSV
+                tipo_documento_cfdi = obtener_tipo_documento_cfdi(clave_determinante)
+
+                logger.info(f" Cambiando tipo de documento a '{tipo_documento_cfdi}' (clave: {clave_determinante})...")
+                debug_logger.info(f"Intentando cambiar tipo de documento a {tipo_documento_cfdi} para clave {clave_determinante}")
 
                 # Esperar a que el combo esté disponible
                 tipo_doc_select = Select(self.wait.until(EC.element_to_be_clickable((By.ID, "COMBO_CATTIPOSDOCUMENTOS"))))
@@ -339,15 +387,15 @@ class ProcesadorLlegadaFactura:
                 logger.info(f" Tipo documento por defecto: '{seleccionado_actual.text}' (valor: {seleccionado_actual.get_attribute('value')})")
                 debug_logger.info(f"Tipo documento por defecto: {seleccionado_actual.text}")
 
-                # Seleccionar directamente "FACTURA CFDI - W" (valor 8)
-                logger.info(" Seleccionando 'FACTURA CFDI - W' (valor: 8)...")
-                tipo_doc_select.select_by_value("8")
+                # SELECCIONAR POR TEXTO VISIBLE (resistente a cambios en dropdown)
+                logger.info(f" Seleccionando '{tipo_documento_cfdi}' por texto visible...")
+                tipo_doc_select.select_by_visible_text(tipo_documento_cfdi)
                 time.sleep(1)
 
                 # Verificar selección
                 seleccionado = tipo_doc_select.first_selected_option
-                logger.info(f" Tipo de documento seleccionado: '{seleccionado.text}' (valor: 8)")
-                debug_logger.info(f"Tipo documento seleccionado: {seleccionado.text} (valor: 8)")
+                logger.info(f" Tipo de documento seleccionado: '{seleccionado.text}' (valor: {seleccionado.get_attribute('value')})")
+                debug_logger.info(f"Tipo documento seleccionado: {seleccionado.text} (valor: {seleccionado.get_attribute('value')})")
 
                 # Disparar evento change para actualizar UI de GM
                 script = """
