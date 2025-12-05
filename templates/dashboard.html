@@ -135,7 +135,7 @@
             transform: none;
         }
 
-        .maintenance-section {
+        .actions-section {
             background: white;
             border-radius: 12px;
             padding: 16px 24px;
@@ -145,20 +145,26 @@
             margin-left: auto;
             margin-right: auto;
             display: flex;
-            justify-content: space-between;
+            justify-content: center;
             align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
-        .maintenance-section h3 {
-            color: #718096;
+        .actions-section .btn {
+            padding: 10px 20px;
             font-size: 14px;
-            font-weight: 600;
-            margin: 0;
         }
 
-        .maintenance-section .btn {
-            padding: 8px 16px;
-            font-size: 14px;
+        .btn-admin {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-admin:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
         }
 
         .alert {
@@ -370,9 +376,9 @@
             </div>
         </div>
 
-        <div class="maintenance-section">
-            <h3>🔧 MANTENIMIENTO</h3>
+        <div class="actions-section">
             <button class="btn btn-clean" onclick="limpiarZombies()" id="btnLimpiar">🧹 Limpiar Zombies</button>
+            <a href="/admin/claves" class="btn btn-admin">📋 Gestionar Claves</a>
         </div>
 
         <div class="table-container">

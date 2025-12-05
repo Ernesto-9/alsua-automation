@@ -185,6 +185,235 @@ def ver_screenshot(nombre):
     return send_from_directory('screenshots_errores', nombre)
 
 
+@app.route("/admin/claves")
+def admin_claves():
+    """Panel de administración de claves determinantes"""
+    return render_template("admin_claves.html")
+
+
+@app.route("/api/claves", methods=["GET"])
+def api_obtener_claves():
+    """API que devuelve todas las claves determinantes del CSV"""
+    import csv
+    csv_path = os.path.join('modules', 'clave_ruta_base.csv')
+
+    try:
+        claves = []
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                claves.append({
+                    'determinante': row.get('determinante', ''),
+                    'ruta_gm': row.get('ruta_gm', ''),
+                    'base_origen': row.get('base_origen', ''),
+                    'tipo_documento': row.get('tipo_documento', '')
+                })
+
+        return jsonify({
+            'success': True,
+            'claves': claves
+        })
+    except Exception as e:
+        logger.error(f"Error al leer claves: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error al leer archivo: {str(e)}'
+        }), 500
+
+
+@app.route("/api/claves", methods=["POST"])
+def api_agregar_clave():
+    """API para agregar una nueva clave determinante"""
+    import csv
+    from flask import request
+
+    csv_path = os.path.join('modules', 'clave_ruta_base.csv')
+
+    try:
+        data = request.get_json()
+        nueva_determinante = data.get('determinante', '').strip()
+        ruta_gm = data.get('ruta_gm', '').strip()
+        base_origen = data.get('base_origen', '').strip()
+        tipo_documento = data.get('tipo_documento', '').strip()
+
+        # Validar campos
+        if not all([nueva_determinante, ruta_gm, base_origen, tipo_documento]):
+            return jsonify({
+                'success': False,
+                'mensaje': 'Todos los campos son obligatorios'
+            }), 400
+
+        # Validar que determinante sea solo números
+        if not nueva_determinante.isdigit():
+            return jsonify({
+                'success': False,
+                'mensaje': 'La determinante debe contener solo números'
+            }), 400
+
+        # Verificar si ya existe
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get('determinante') == nueva_determinante:
+                    return jsonify({
+                        'success': False,
+                        'mensaje': f'La determinante {nueva_determinante} ya existe'
+                    }), 400
+
+        # Agregar al CSV
+        with open(csv_path, 'a', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([nueva_determinante, ruta_gm, base_origen, tipo_documento])
+
+        logger.info(f"Nueva clave agregada: {nueva_determinante}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': f'Determinante {nueva_determinante} agregada exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error al agregar clave: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error al guardar: {str(e)}'
+        }), 500
+
+
+@app.route("/api/claves/<determinante>", methods=["PUT"])
+def api_editar_clave(determinante):
+    """API para editar una clave determinante existente"""
+    import csv
+    from flask import request
+
+    csv_path = os.path.join('modules', 'clave_ruta_base.csv')
+
+    try:
+        data = request.get_json()
+        nueva_determinante = data.get('determinante', '').strip()
+        ruta_gm = data.get('ruta_gm', '').strip()
+        base_origen = data.get('base_origen', '').strip()
+        tipo_documento = data.get('tipo_documento', '').strip()
+
+        # Validar campos
+        if not all([nueva_determinante, ruta_gm, base_origen, tipo_documento]):
+            return jsonify({
+                'success': False,
+                'mensaje': 'Todos los campos son obligatorios'
+            }), 400
+
+        # Validar que determinante sea solo números
+        if not nueva_determinante.isdigit():
+            return jsonify({
+                'success': False,
+                'mensaje': 'La determinante debe contener solo números'
+            }), 400
+
+        # Leer todas las filas
+        filas = []
+        encontrado = False
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+            for row in reader:
+                if row.get('determinante') == determinante:
+                    # Si cambió el número de determinante, verificar que no exista el nuevo
+                    if nueva_determinante != determinante:
+                        # Verificar si el nuevo número ya existe
+                        with open(csv_path, 'r', encoding='utf-8') as f2:
+                            reader2 = csv.DictReader(f2)
+                            for row2 in reader2:
+                                if row2.get('determinante') == nueva_determinante:
+                                    return jsonify({
+                                        'success': False,
+                                        'mensaje': f'La determinante {nueva_determinante} ya existe'
+                                    }), 400
+
+                    # Actualizar la fila
+                    row['determinante'] = nueva_determinante
+                    row['ruta_gm'] = ruta_gm
+                    row['base_origen'] = base_origen
+                    row['tipo_documento'] = tipo_documento
+                    encontrado = True
+
+                filas.append(row)
+
+        if not encontrado:
+            return jsonify({
+                'success': False,
+                'mensaje': f'Determinante {determinante} no encontrada'
+            }), 404
+
+        # Escribir de vuelta al CSV
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(filas)
+
+        logger.info(f"Clave actualizada: {determinante} -> {nueva_determinante}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': f'Determinante actualizada exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error al editar clave: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error al actualizar: {str(e)}'
+        }), 500
+
+
+@app.route("/api/claves/<determinante>", methods=["DELETE"])
+def api_eliminar_clave(determinante):
+    """API para eliminar una clave determinante"""
+    import csv
+
+    csv_path = os.path.join('modules', 'clave_ruta_base.csv')
+
+    try:
+        # Leer todas las filas excepto la que se va a eliminar
+        filas = []
+        encontrado = False
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            headers = reader.fieldnames
+
+            for row in reader:
+                if row.get('determinante') == determinante:
+                    encontrado = True
+                    continue  # Saltar esta fila
+                filas.append(row)
+
+        if not encontrado:
+            return jsonify({
+                'success': False,
+                'mensaje': f'Determinante {determinante} no encontrada'
+            }), 404
+
+        # Escribir de vuelta al CSV sin la fila eliminada
+        with open(csv_path, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=headers)
+            writer.writeheader()
+            writer.writerows(filas)
+
+        logger.info(f"Clave eliminada: {determinante}")
+
+        return jsonify({
+            'success': True,
+            'mensaje': f'Determinante {determinante} eliminada exitosamente'
+        })
+
+    except Exception as e:
+        logger.error(f"Error al eliminar clave: {e}")
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error al eliminar: {str(e)}'
+        }), 500
+
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     print("PANEL WEB ALSUA - INICIANDO")
