@@ -7,6 +7,7 @@ CON SINCRONIZACIÓN AUTOMÁTICA A MySQL
 
 import csv
 import os
+import json
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -14,6 +15,8 @@ from typing import Dict, List, Optional
 # Configurar logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+ARCHIVO_HISTORIAL = "viajes_historial.json"
 
 class ViajesLogManager:
     def __init__(self, archivo_csv="viajes_log.csv"):
@@ -355,14 +358,104 @@ class ViajesLogManager:
             return 0
 
 
+# Funciones para manejar historial de intentos fallidos
+def _leer_historial():
+    """Lee el archivo de historial de intentos"""
+    try:
+        if not os.path.exists(ARCHIVO_HISTORIAL):
+            return {}
+        with open(ARCHIVO_HISTORIAL, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Error leyendo historial: {e}")
+        return {}
+
+def _guardar_historial(historial):
+    """Guarda el archivo de historial de intentos"""
+    try:
+        with open(ARCHIVO_HISTORIAL, 'w', encoding='utf-8') as f:
+            json.dump(historial, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception as e:
+        logger.error(f"Error guardando historial: {e}")
+        return False
+
+def agregar_intento_fallido_historial(prefactura, motivo_fallo, determinante=None, placa_tractor=None):
+    """
+    Agrega un intento fallido al historial de una prefactura
+
+    Args:
+        prefactura: Número de prefactura
+        motivo_fallo: Motivo del error
+        determinante: Clave determinante
+        placa_tractor: Placa del tractor
+    """
+    try:
+        historial = _leer_historial()
+
+        if prefactura not in historial:
+            historial[prefactura] = {"intentos": []}
+
+        intento = {
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "error": motivo_fallo,
+            "determinante": determinante or "",
+            "tractor": placa_tractor or ""
+        }
+
+        historial[prefactura]["intentos"].append(intento)
+
+        _guardar_historial(historial)
+        logger.info(f"Intento fallido agregado al historial: {prefactura}")
+
+    except Exception as e:
+        logger.error(f"Error agregando intento al historial: {e}")
+
+def obtener_historial_viaje(prefactura):
+    """
+    Obtiene el historial de intentos de un viaje
+
+    Args:
+        prefactura: Número de prefactura
+
+    Returns:
+        dict: Historial del viaje con lista de intentos
+    """
+    try:
+        historial = _leer_historial()
+        return historial.get(prefactura, {"intentos": []})
+    except Exception as e:
+        logger.error(f"Error obteniendo historial del viaje: {e}")
+        return {"intentos": []}
+
+def limpiar_historial_viaje(prefactura):
+    """
+    Limpia el historial de intentos de un viaje (útil cuando se procesa exitosamente)
+
+    Args:
+        prefactura: Número de prefactura
+    """
+    try:
+        historial = _leer_historial()
+        if prefactura in historial:
+            del historial[prefactura]
+            _guardar_historial(historial)
+            logger.info(f"Historial limpiado para prefactura: {prefactura}")
+    except Exception as e:
+        logger.error(f"Error limpiando historial: {e}")
+
+
 # Instancia global para uso en toda la aplicación
 viajes_log = ViajesLogManager()
 
 # Funciones de conveniencia para importar fácilmente
-def registrar_viaje_exitoso(prefactura, determinante=None, fecha_viaje=None, 
-                           placa_tractor=None, placa_remolque=None, uuid=None, 
+def registrar_viaje_exitoso(prefactura, determinante=None, fecha_viaje=None,
+                           placa_tractor=None, placa_remolque=None, uuid=None,
                            viajegm=None, numero_factura=None, importe=None, cliente_codigo=None):
     """Función de conveniencia para registrar viaje exitoso CON SYNC AUTOMÁTICO"""
+    # Limpiar historial de intentos fallidos (el viaje ya se procesó exitosamente)
+    limpiar_historial_viaje(prefactura)
+
     return viajes_log.registrar_viaje_exitoso(
         prefactura=prefactura,
         determinante=determinante,
@@ -376,10 +469,14 @@ def registrar_viaje_exitoso(prefactura, determinante=None, fecha_viaje=None,
         cliente_codigo=cliente_codigo
     )
 
-def registrar_viaje_fallido(prefactura, motivo_fallo, determinante=None, 
+def registrar_viaje_fallido(prefactura, motivo_fallo, determinante=None,
                            fecha_viaje=None, placa_tractor=None, placa_remolque=None,
                            importe=None, cliente_codigo=None):
-    """Función de conveniencia para registrar viaje fallido CON SYNC AUTOMÁTICO"""
+    """Función de conveniencia para registrar viaje fallido CON SYNC AUTOMÁTICO Y HISTORIAL"""
+    # Agregar al historial de intentos
+    agregar_intento_fallido_historial(prefactura, motivo_fallo, determinante, placa_tractor)
+
+    # Registrar en CSV
     return viajes_log.registrar_viaje_fallido(
         prefactura=prefactura,
         motivo_fallo=motivo_fallo,
