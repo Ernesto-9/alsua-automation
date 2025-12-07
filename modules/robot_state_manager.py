@@ -211,9 +211,14 @@ def actualizar_cola(lista_viajes):
     _guardar_estado(estado)
 
 
-def verificar_y_limpiar_viaje_stuck():
+def verificar_y_limpiar_viaje_stuck(timeout_minutos=10):
     """
-    Verifica si viaje_actual está stuck (>30 min en procesamiento) y lo limpia automáticamente
+    Verifica si viaje_actual está stuck (>timeout_minutos en procesamiento) y lo limpia automáticamente
+
+    CAMBIO CRÍTICO: Reducido de 30 min a 10 min para detección más rápida de problemas
+
+    Args:
+        timeout_minutos: Tiempo máximo permitido para procesar un viaje (default: 10 min)
 
     Returns:
         tuple: (limpiado: bool, mensaje: str o None)
@@ -232,16 +237,18 @@ def verificar_y_limpiar_viaje_stuck():
         ahora = datetime.now()
         minutos_procesando = (ahora - inicio_viaje).total_seconds() / 60
 
-        if minutos_procesando > 30:
+        if minutos_procesando > timeout_minutos:
             prefactura = viaje_actual.get('prefactura', 'DESCONOCIDO')
             fase = viaje_actual.get('fase', 'DESCONOCIDA')
 
             limpiar_viaje_actual()
 
             mensaje = (
-                f"AUTO-RECUPERACIÓN: Viaje {prefactura} stuck por "
-                f"{int(minutos_procesando)} min en fase '{fase}' - limpiado automáticamente"
+                f"AUTO-RECUPERACIÓN: Viaje {prefactura} TIMEOUT después de "
+                f"{int(minutos_procesando)} min en fase '{fase}' - limpiado automáticamente "
+                f"(límite: {timeout_minutos} min)"
             )
+            print(f" {mensaje}")
             return True, mensaje
 
     except Exception as e:

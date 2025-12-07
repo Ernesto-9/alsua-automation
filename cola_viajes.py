@@ -154,11 +154,27 @@ class ColaViajes:
                     intentos = viaje.get("intentos", 0)
                     prefactura = viaje.get('datos_viaje', {}).get('prefactura', 'DESCONOCIDA')
 
+                    # FIX CRÍTICO: Respetar límite de intentos SIEMPRE, incluso para LOGIN_LIMIT/DRIVER_CORRUPTO
+                    # Esto previene loops infinitos donde el mismo viaje se reintenta cientos de veces
                     if intentos >= max_intentos:
                         ultimo_error_tipo = viaje.get('errores', [{}])[-1].get('tipo', 'DESCONOCIDO')
 
+                        # Para DRIVER_CORRUPTO/LOGIN_LIMIT: dar más intentos (15 en vez de 5)
+                        # pero NO intentos infinitos
+                        max_intentos_especial = 15
                         if ultimo_error_tipo in ['LOGIN_LIMIT', 'DRIVER_CORRUPTO']:
-                            pass
+                            if intentos >= max_intentos_especial:
+                                logger.error(f"Viaje {prefactura} superó límite extendido de {max_intentos_especial} intentos ({ultimo_error_tipo})")
+                                self.marcar_viaje_fallido(
+                                    viaje.get("id"),
+                                    "MAX_INTENTOS_EXCEDIDOS",
+                                    f"Superó el límite extendido de {max_intentos_especial} intentos. Error persistente: {ultimo_error_tipo}"
+                                )
+                                viajes_actualizados = True
+                                continue
+                            else:
+                                # Continuar intentando (aún no alcanza el límite extendido)
+                                pass
                         else:
                             logger.warning(f"Viaje {prefactura} superó límite de {max_intentos} intentos")
                             self.marcar_viaje_fallido(
@@ -175,6 +191,7 @@ class ColaViajes:
                     if self._guardar_cola(datos):
                         return viaje
                     else:
+                        logger.error(f"ERROR CRÍTICO: No se pudo guardar cola al marcar viaje {prefactura} como procesando")
                         return None
 
             if viajes_actualizados:
