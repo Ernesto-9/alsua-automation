@@ -798,6 +798,54 @@ def api_reprocesar_viajes():
         }), 500
 
 
+@app.route("/api/cola-reprocesamiento", methods=["GET"])
+def api_obtener_cola():
+    """Obtiene viajes en cola de reprocesamiento"""
+    try:
+        from cola_viajes import leer_cola
+        cola_data = leer_cola()
+        viajes_en_cola = cola_data.get('viajes', [])
+
+        # Filtrar solo viajes pendientes o en proceso
+        viajes_pendientes = [v for v in viajes_en_cola if v.get('estado') in ['PENDIENTE', 'EN_PROCESO']]
+
+        return jsonify({
+            'success': True,
+            'cola': viajes_pendientes,
+            'total': len(viajes_pendientes)
+        })
+    except Exception as e:
+        logger.error(f"Error obteniendo cola: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/api/cola-reprocesamiento/<prefactura>", methods=["DELETE"])
+def api_eliminar_de_cola(prefactura):
+    """Elimina un viaje de la cola"""
+    try:
+        from cola_viajes import leer_cola
+        import json
+
+        cola_data = leer_cola()
+        viajes = cola_data.get('viajes', [])
+
+        # Filtrar viaje a eliminar
+        viajes_filtrados = [v for v in viajes if v.get('prefactura') != prefactura]
+
+        if len(viajes_filtrados) == len(viajes):
+            return jsonify({'success': False, 'error': 'Viaje no encontrado en cola'}), 404
+
+        # Guardar cola actualizada
+        cola_data['viajes'] = viajes_filtrados
+        with open('cola_viajes.json', 'w', encoding='utf-8') as f:
+            json.dump(cola_data, f, indent=2, ensure_ascii=False)
+
+        return jsonify({'success': True, 'mensaje': 'Viaje eliminado de cola'})
+    except Exception as e:
+        logger.error(f"Error eliminando de cola: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 if __name__ == "__main__":
     print("\n" + "="*60)
     print("PANEL WEB ALSUA - INICIANDO")

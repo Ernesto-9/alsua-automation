@@ -517,6 +517,25 @@
                     </select>
                 </div>
                 <div class="filter-group">
+                    <label for="etapaFilter">Filtrar por Etapa</label>
+                    <select id="etapaFilter">
+                        <option value="">Todas las etapas</option>
+                        <option value="SALIDA">Salida</option>
+                        <option value="LLEGADA">Llegada</option>
+                        <option value="FACTURA">Facturación</option>
+                        <option value="DETERMINANTE">Determinante</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="fechaFilter">Filtrar por Fecha</label>
+                    <select id="fechaFilter">
+                        <option value="">Todas las fechas</option>
+                        <option value="hoy">Hoy</option>
+                        <option value="semana">Última semana</option>
+                        <option value="mes">Último mes</option>
+                    </select>
+                </div>
+                <div class="filter-group">
                     <label>&nbsp;</label>
                     <button class="btn btn-primary" onclick="aplicarFiltros()">Aplicar Filtros</button>
                 </div>
@@ -559,6 +578,33 @@
                     </thead>
                     <tbody id="viajesBody">
                         <tr><td colspan="10" class="empty-state">Cargando viajes fallidos...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Tabla Cola de Reprocesamiento -->
+        <div class="table-container" style="margin-top: 24px;">
+            <div class="table-header">
+                <div class="header-left">
+                    <h2>📤 Cola de Reprocesamiento</h2>
+                    <span class="badge badge-warning" id="colaCount">0 viajes en cola</span>
+                </div>
+            </div>
+            <div class="table-wrapper" style="max-height: 400px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Prefactura</th>
+                            <th>Determinante</th>
+                            <th>Fecha Viaje</th>
+                            <th>Placas</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="colaBody">
+                        <tr><td colspan="6" class="empty-state">No hay viajes en cola</td></tr>
                     </tbody>
                 </table>
             </div>

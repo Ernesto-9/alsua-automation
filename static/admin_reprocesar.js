@@ -8,6 +8,7 @@ let modoReprocesarTemp = { viajes: [], modo: 'desde_cero' };
 document.addEventListener('DOMContentLoaded', () => {
     cargarViajes();
     cargarTiposError();
+    cargarColaReprocesamiento();
 });
 
 async function cargarViajes() {
@@ -109,6 +110,10 @@ function aplicarFiltros() {
 
         return matchBusqueda && matchError;
     });
+
+    // Aplicar filtros de fecha y etapa
+    viajesFiltrados = aplicarFiltrosFecha(viajesFiltrados);
+    viajesFiltrados = aplicarFiltrosEtapa(viajesFiltrados);
 
     renderizarTabla();
     actualizarContadores();
@@ -437,6 +442,111 @@ function mostrarAlerta(tipo, mensaje) {
         alert.style.display = 'none';
     }, 5000);
 }
+
+// === FUNCIONES DE COLA DE REPROCESAMIENTO ===
+
+async function cargarColaReprocesamiento() {
+    try {
+        const response = await fetch('/api/cola-reprocesamiento');
+        const data = await response.json();
+
+        if (data.success) {
+            const tbody = document.getElementById('colaBody');
+            const countBadge = document.getElementById('colaCount');
+
+            countBadge.textContent = `${data.total} viajes en cola`;
+
+            if (data.cola.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No hay viajes en cola</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = data.cola.map(viaje => {
+                const estado = viaje.estado || 'PENDIENTE';
+                const estadoClass = estado === 'PENDIENTE' ? 'badge-warning' : 'badge-info';
+
+                return `
+                    <tr>
+                        <td><strong>${viaje.prefactura || 'N/A'}</strong></td>
+                        <td>${viaje.determinante || 'N/A'}</td>
+                        <td>${viaje.fecha_viaje || 'N/A'}</td>
+                        <td>${viaje.placa_tractor || ''} / ${viaje.placa_remolque || ''}</td>
+                        <td><span class="badge ${estadoClass}">${estado}</span></td>
+                        <td>
+                            <button class="btn btn-danger btn-sm" onclick="eliminarDeCola('${viaje.prefactura}')" title="Eliminar de cola">
+                                🗑️ Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    } catch (error) {
+        console.error('Error cargando cola:', error);
+    }
+}
+
+async function eliminarDeCola(prefactura) {
+    if (!confirm(`¿Eliminar viaje ${prefactura} de la cola?`)) return;
+
+    try {
+        const response = await fetch(`/api/cola-reprocesamiento/${prefactura}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            mostrarAlerta('Viaje eliminado de la cola', 'success');
+            cargarColaReprocesamiento();
+        } else {
+            mostrarAlerta('Error eliminando viaje: ' + data.error, 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        mostrarAlerta('Error eliminando viaje', 'error');
+    }
+}
+
+// Agregar filtrado por fecha y etapa
+function aplicarFiltrosFecha(viajes) {
+    const filtroFecha = document.getElementById('fechaFilter').value;
+    if (!filtroFecha) return viajes;
+
+    const ahora = new Date();
+    const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+
+    return viajes.filter(viaje => {
+        if (!viaje.timestamp_fallo) return true;
+        const fechaFallo = new Date(viaje.timestamp_fallo);
+
+        switch (filtroFecha) {
+            case 'hoy':
+                return fechaFallo >= hoy;
+            case 'semana':
+                const unaSemanaAtras = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
+                return fechaFallo >= unaSemanaAtras;
+            case 'mes':
+                const unMesAtras = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000);
+                return fechaFallo >= unMesAtras;
+            default:
+                return true;
+        }
+    });
+}
+
+function aplicarFiltrosEtapa(viajes) {
+    const filtroEtapa = document.getElementById('etapaFilter').value;
+    if (!filtroEtapa) return viajes;
+
+    return viajes.filter(viaje => {
+        const motivo = (viaje.motivo_fallo || '').toUpperCase();
+        return motivo.includes(filtroEtapa);
+    });
+}
+
+// Recargar cola periódicamente
+setInterval(cargarColaReprocesamiento, 30000); // Cada 30 segundos
 
 // Cerrar modales al hacer clic fuera
 window.onclick = function(event) {
