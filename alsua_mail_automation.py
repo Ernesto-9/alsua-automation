@@ -39,6 +39,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def verificar_determinante_existe(determinante):
+    """
+    Verifica si una determinante existe en clave_ruta_base.csv
+
+    Args:
+        determinante: Número de determinante a verificar
+
+    Returns:
+        bool: True si existe, False si no existe
+    """
+    csv_path = 'modules/clave_ruta_base.csv'
+
+    if not os.path.exists(csv_path):
+        logger.error(f"Archivo {csv_path} no existe")
+        return False
+
+    try:
+        with open(csv_path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                if row.get('determinante') == str(determinante):
+                    return True
+        return False
+    except Exception as e:
+        logger.error(f"Error verificando determinante: {e}")
+        return False
+
 class AlsuaMailAutomation:
     # Variable de clase para controlar la ejecución desde Flask
     continuar_ejecutando = True
@@ -457,6 +484,32 @@ class AlsuaMailAutomation:
             viaje_id = viaje_registro.get('id')
             datos_viaje = viaje_registro.get('datos_viaje', {})
             prefactura = datos_viaje.get('prefactura', 'DESCONOCIDA')
+
+            # VERIFICACIÓN DE DETERMINANTE: Revisar si existe antes de procesar
+            determinante = datos_viaje.get('clave_determinante')
+            if determinante and not verificar_determinante_existe(determinante):
+                logger.error(f"DETERMINANTE {determinante} NO EXISTE en clave_ruta_base.csv - Viaje {prefactura}")
+                debug_logger.error(f"[{prefactura}] Determinante {determinante} no encontrada en clave_ruta_base.csv")
+
+                # Registrar como fallido en viajes_log.csv
+                log_viaje_fallido(
+                    prefactura=prefactura,
+                    motivo_fallo=f"Determinante {determinante} no existe en clave_ruta_base.csv",
+                    determinante=determinante,
+                    fecha_viaje=datos_viaje.get('fecha_viaje', ''),
+                    placa_tractor=datos_viaje.get('placa_tractor', ''),
+                    placa_remolque=datos_viaje.get('placa_remolque', ''),
+                    monto_viaje=datos_viaje.get('monto_viaje', ''),
+                    cliente_codigo=datos_viaje.get('cliente_codigo', '')
+                )
+
+                # Marcar como fallido en cola
+                marcar_viaje_fallido_cola(viaje_id, 'determinante_no_existe', f"Determinante {determinante} no existe")
+
+                # Actualizar robot_state_manager
+                robot_state_manager.incrementar_fallidos(prefactura, f"Determinante {determinante} no existe")
+
+                return 'VIAJE_FALLIDO', 'determinante_no_existe'
 
             # DETECCIÓN DE LOOP INFINITO: Verificar si este viaje se está procesando repetidamente
             if self.detectar_loop_infinito(prefactura, max_intentos_ventana=10, ventana_minutos=5):
