@@ -225,6 +225,8 @@ cola_viajes.json
 estado_robots.json
 debug.log
 debug.log.*
+viajes_log.csv
+viajes_historial.json
 
 # Carpetas con archivos temporales
 archivos_descargados/
