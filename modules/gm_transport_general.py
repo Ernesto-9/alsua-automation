@@ -2,7 +2,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
 import time
 import csv
 import os
@@ -398,7 +398,42 @@ class GMTransportAutomation:
             
         exito, error = self.buscar_y_seleccionar_placa('remolque', placa_remolque)
         return exito, error
-    
+
+    def detectar_errores_modal_tractor_operador(self):
+        """Detecta errores en modal tractor/operador antes de aceptar"""
+        time.sleep(2)
+
+        try:
+            btn_ok = self.driver.find_element(By.ID, "BTN_OK")
+            if btn_ok.is_displayed() and btn_ok.is_enabled():
+                logger.warning("Error modal detectado: BTN_OK presente")
+                return True, "ERROR_MODAL_TRACTOR"
+        except NoSuchElementException:
+            pass
+
+        try:
+            modal_xpath = "//div[@id='divCamion' or contains(@class, 'ui-dialog')]//div[not(contains(@style, 'display: none'))]"
+            licencia_xpath = f"{modal_xpath}[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'licencia')]" \
+                            f"[contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'vencida') or " \
+                            f"contains(translate(., 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'vencido')]"
+
+            error_elements = self.driver.find_elements(By.XPATH, licencia_xpath)
+            if error_elements and any(elem.is_displayed() for elem in error_elements):
+                logger.warning("Licencia vencida detectada")
+                return True, "OPERADOR_LICENCIA_VENCIDA"
+        except Exception:
+            pass
+
+        try:
+            aceptar_btn = self.driver.find_element(By.ID, "BTN_ACEPTARTRAYECTO")
+            if not aceptar_btn.is_enabled():
+                logger.warning("Botón Aceptar deshabilitado")
+                return True, "MODAL_BOTON_DESHABILITADO"
+        except NoSuchElementException:
+            pass
+
+        return False, ""
+
     def seleccionar_tractor_y_operador(self):
         """Selecciona el tractor y verifica que tenga operador asignado"""
         placa_tractor = self.datos_viaje.get('placa_tractor')
@@ -501,7 +536,38 @@ class GMTransportAutomation:
                 
                 return False, "Sin operador asignado"
 
-            # Operador válido encontrado, cerrar modal
+            tiene_error, codigo_error = self.detectar_errores_modal_tractor_operador()
+
+            if tiene_error:
+                placa_tractor = self.datos_viaje.get('placa_tractor', 'DESCONOCIDA')
+                logger.error(f"{codigo_error} - Placa {placa_tractor}")
+
+                try:
+                    btn_ok = self.driver.find_element(By.ID, "BTN_OK")
+                    if btn_ok.is_displayed():
+                        self.driver.execute_script("arguments[0].click();", btn_ok)
+                        time.sleep(1)
+                except:
+                    pass
+
+                try:
+                    posibles_botones_cerrar = ["BTN_CANCELAR", "BTN_CERRAR", "BTN_CANCELARTRAYECTO"]
+                    for btn_id in posibles_botones_cerrar:
+                        try:
+                            cancelar_btn = self.driver.find_element(By.ID, btn_id)
+                            self.driver.execute_script("arguments[0].click();", cancelar_btn)
+                            time.sleep(1)
+                            break
+                        except:
+                            continue
+                    else:
+                        self.driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+                        time.sleep(1)
+                except Exception:
+                    pass
+
+                return False, codigo_error
+
             try:
                 aceptar_btn = self.wait.until(EC.element_to_be_clickable((By.ID, "BTN_ACEPTARTRAYECTO")))
                 self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", aceptar_btn)

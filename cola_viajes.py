@@ -159,10 +159,9 @@ class ColaViajes:
                     if intentos >= max_intentos:
                         ultimo_error_tipo = viaje.get('errores', [{}])[-1].get('tipo', 'DESCONOCIDO')
 
-                        # Para DRIVER_CORRUPTO/LOGIN_LIMIT: dar más intentos (15 en vez de 5)
-                        # pero NO intentos infinitos
+                        # Para errores recuperables: dar más intentos (15 en vez de 5)
                         max_intentos_especial = 15
-                        if ultimo_error_tipo in ['LOGIN_LIMIT', 'DRIVER_CORRUPTO']:
+                        if ultimo_error_tipo in ['LOGIN_LIMIT', 'DRIVER_CORRUPTO', 'OPERADOR_LICENCIA_VENCIDA']:
                             if intentos >= max_intentos_especial:
                                 logger.error(f"Viaje {prefactura} superó límite extendido de {max_intentos_especial} intentos ({ultimo_error_tipo})")
                                 self.marcar_viaje_fallido(
