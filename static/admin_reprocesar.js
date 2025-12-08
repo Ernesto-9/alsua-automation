@@ -97,14 +97,34 @@ function renderizarTabla() {
 
 function aplicarFiltros() {
     const busqueda = document.getElementById('searchInput').value.toLowerCase();
+    const campoBusqueda = document.getElementById('searchField').value;
     const errorFiltro = document.getElementById('errorFilter').value;
 
     viajesFiltrados = todosLosViajes.filter(viaje => {
-        const matchBusqueda = !busqueda ||
-            viaje.prefactura.toLowerCase().includes(busqueda) ||
-            viaje.placa_tractor.toLowerCase().includes(busqueda) ||
-            viaje.placa_remolque.toLowerCase().includes(busqueda) ||
-            viaje.determinante.toLowerCase().includes(busqueda);
+        let matchBusqueda = true;
+        if (busqueda) {
+            switch (campoBusqueda) {
+                case 'todo':
+                    matchBusqueda =
+                        viaje.prefactura.toLowerCase().includes(busqueda) ||
+                        viaje.placa_tractor.toLowerCase().includes(busqueda) ||
+                        viaje.placa_remolque.toLowerCase().includes(busqueda) ||
+                        viaje.determinante.toLowerCase().includes(busqueda);
+                    break;
+                case 'prefactura':
+                    matchBusqueda = viaje.prefactura.toLowerCase().includes(busqueda);
+                    break;
+                case 'placa_tractor':
+                    matchBusqueda = viaje.placa_tractor.toLowerCase().includes(busqueda);
+                    break;
+                case 'placa_remolque':
+                    matchBusqueda = viaje.placa_remolque.toLowerCase().includes(busqueda);
+                    break;
+                case 'determinante':
+                    matchBusqueda = viaje.determinante.toLowerCase().includes(busqueda);
+                    break;
+            }
+        }
 
         const matchError = !errorFiltro || viaje.motivo_fallo === errorFiltro;
 
@@ -510,28 +530,21 @@ async function eliminarDeCola(prefactura) {
 
 // Agregar filtrado por fecha y etapa
 function aplicarFiltrosFecha(viajes) {
-    const filtroFecha = document.getElementById('fechaFilter').value;
-    if (!filtroFecha) return viajes;
+    const fechaDesde = document.getElementById('fechaDesde').value;
+    const fechaHasta = document.getElementById('fechaHasta').value;
 
-    const ahora = new Date();
-    const hoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+    if (!fechaDesde && !fechaHasta) return viajes;
 
     return viajes.filter(viaje => {
         if (!viaje.timestamp_fallo) return true;
-        const fechaFallo = new Date(viaje.timestamp_fallo);
 
-        switch (filtroFecha) {
-            case 'hoy':
-                return fechaFallo >= hoy;
-            case 'semana':
-                const unaSemanaAtras = new Date(ahora.getTime() - 7 * 24 * 60 * 60 * 1000);
-                return fechaFallo >= unaSemanaAtras;
-            case 'mes':
-                const unMesAtras = new Date(ahora.getTime() - 30 * 24 * 60 * 60 * 1000);
-                return fechaFallo >= unMesAtras;
-            default:
-                return true;
-        }
+        const fechaFallo = new Date(viaje.timestamp_fallo);
+        const fechaFalloStr = fechaFallo.toISOString().split('T')[0];
+
+        if (fechaDesde && fechaFalloStr < fechaDesde) return false;
+        if (fechaHasta && fechaFalloStr > fechaHasta) return false;
+
+        return true;
     });
 }
 

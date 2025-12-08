@@ -132,7 +132,7 @@
 
         .filters-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr auto;
+            grid-template-columns: repeat(3, 1fr);
             gap: 16px;
             align-items: end;
         }
@@ -508,7 +508,16 @@
             <div class="filters-grid">
                 <div class="filter-group">
                     <label for="searchInput">Buscar</label>
-                    <input type="text" id="searchInput" placeholder="Prefactura, placa, determinante...">
+                    <div style="display: flex; gap: 8px;">
+                        <select id="searchField" style="flex: 0 0 140px; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px;">
+                            <option value="todo">Todo</option>
+                            <option value="prefactura">Prefactura</option>
+                            <option value="placa_tractor">Placa Tractor</option>
+                            <option value="placa_remolque">Placa Remolque</option>
+                            <option value="determinante">Determinante</option>
+                        </select>
+                        <input type="text" id="searchInput" placeholder="Escribe aquí..." style="flex: 1;">
+                    </div>
                 </div>
                 <div class="filter-group">
                     <label for="errorFilter">Filtrar por Error</label>
@@ -527,13 +536,12 @@
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label for="fechaFilter">Filtrar por Fecha</label>
-                    <select id="fechaFilter">
-                        <option value="">Todas las fechas</option>
-                        <option value="hoy">Hoy</option>
-                        <option value="semana">Última semana</option>
-                        <option value="mes">Último mes</option>
-                    </select>
+                    <label for="fechaDesde">Fecha Desde</label>
+                    <input type="date" id="fechaDesde">
+                </div>
+                <div class="filter-group">
+                    <label for="fechaHasta">Fecha Hasta</label>
+                    <input type="date" id="fechaHasta">
                 </div>
                 <div class="filter-group">
                     <label>&nbsp;</label>
