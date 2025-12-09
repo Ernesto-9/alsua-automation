@@ -29,17 +29,20 @@ async function cargarViajes() {
 }
 
 async function cargarTiposError() {
-    const erroresUnicos = new Set();
-    todosLosViajes.forEach(v => erroresUnicos.add(v.motivo_fallo));
+    const categorias = [
+        { value: 'DRIVER_CORRUPTO', label: 'Driver Corrupto' },
+        { value: 'LOGIN_LIMIT', label: 'Límite de Usuarios' },
+        { value: 'OPERADOR_LICENCIA_VENCIDA', label: 'Licencia Vencida' },
+        { value: 'determinante_no_existe', label: 'Determinante No Existe' },
+        { value: 'operador_ocupado', label: 'Operador Ocupado' }
+    ];
 
     const select = document.getElementById('errorFilter');
-    erroresUnicos.forEach(error => {
-        if (error) {
-            const option = document.createElement('option');
-            option.value = error;
-            option.textContent = error;
-            select.appendChild(option);
-        }
+    categorias.forEach(cat => {
+        const option = document.createElement('option');
+        option.value = cat.value;
+        option.textContent = cat.label;
+        select.appendChild(option);
     });
 }
 
@@ -109,7 +112,8 @@ function aplicarFiltros() {
                         viaje.prefactura.toLowerCase().includes(busqueda) ||
                         viaje.placa_tractor.toLowerCase().includes(busqueda) ||
                         viaje.placa_remolque.toLowerCase().includes(busqueda) ||
-                        viaje.determinante.toLowerCase().includes(busqueda);
+                        viaje.determinante.toLowerCase().includes(busqueda) ||
+                        viaje.motivo_fallo.toLowerCase().includes(busqueda);
                     break;
                 case 'prefactura':
                     matchBusqueda = viaje.prefactura.toLowerCase().includes(busqueda);
@@ -123,10 +127,14 @@ function aplicarFiltros() {
                 case 'determinante':
                     matchBusqueda = viaje.determinante.toLowerCase().includes(busqueda);
                     break;
+                case 'error':
+                    matchBusqueda = viaje.motivo_fallo.toLowerCase().includes(busqueda);
+                    break;
             }
         }
 
-        const matchError = !errorFiltro || viaje.motivo_fallo === errorFiltro;
+        const matchError = !errorFiltro ||
+            viaje.motivo_fallo.toLowerCase().includes(errorFiltro.toLowerCase());
 
         return matchBusqueda && matchError;
     });
