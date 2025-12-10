@@ -798,6 +798,177 @@ def api_reprocesar_viajes():
         }), 500
 
 
+@app.route("/api/agregar-viajes-excel", methods=["POST"])
+def agregar_viajes_excel():
+    """API para agregar viajes desde archivo Excel"""
+    from cola_viajes import agregar_viaje_a_cola
+    from viajes_log import verificar_viaje_existe
+    import pandas as pd
+    from datetime import datetime
+    import re
+
+    try:
+        if 'excel_file' not in request.files:
+            return jsonify({
+                'success': False,
+                'mensaje': 'No se proporcionó archivo Excel'
+            }), 400
+
+        file = request.files['excel_file']
+
+        if file.filename == '':
+            return jsonify({
+                'success': False,
+                'mensaje': 'Archivo vacío'
+            }), 400
+
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({
+                'success': False,
+                'mensaje': 'Formato no válido. Solo .xlsx o .xls'
+            }), 400
+
+        df = pd.read_excel(file)
+
+        columnas_requeridas = ['Numero Prefactura', 'Fecha Embarque', 'Determinante',
+                              'Placa Tracto', 'Placa Remolque', 'Total Facturar']
+
+        columnas_faltantes = [col for col in columnas_requeridas if col not in df.columns]
+        if columnas_faltantes:
+            return jsonify({
+                'success': False,
+                'mensaje': f'Columnas faltantes: {", ".join(columnas_faltantes)}'
+            }), 400
+
+        agregados = 0
+        ya_existian = 0
+        rechazados = 0
+        errores = []
+
+        for idx, row in df.iterrows():
+            try:
+                prefactura = str(row['Numero Prefactura']).strip()
+
+                if not prefactura or prefactura == 'nan':
+                    rechazados += 1
+                    errores.append({
+                        'fila': idx + 2,
+                        'prefactura': prefactura,
+                        'razon': 'Prefactura vacía'
+                    })
+                    continue
+
+                if verificar_viaje_existe(prefactura):
+                    ya_existian += 1
+                    continue
+
+                determinante = str(row['Determinante']).strip()
+                if not re.match(r'^\d{4}$', determinante):
+                    rechazados += 1
+                    errores.append({
+                        'fila': idx + 2,
+                        'prefactura': prefactura,
+                        'razon': f'Determinante inválido: {determinante}'
+                    })
+                    continue
+
+                fecha_embarque = row['Fecha Embarque']
+                if pd.isna(fecha_embarque):
+                    rechazados += 1
+                    errores.append({
+                        'fila': idx + 2,
+                        'prefactura': prefactura,
+                        'razon': 'Fecha vacía'
+                    })
+                    continue
+
+                if isinstance(fecha_embarque, str):
+                    fecha = fecha_embarque.split(' ')[0]
+                else:
+                    fecha = fecha_embarque.strftime('%d/%m/%Y')
+
+                placa_tractor = str(row['Placa Tracto']).strip()
+                placa_remolque = str(row['Placa Remolque']).strip()
+
+                if not placa_tractor or placa_tractor == 'nan' or not placa_remolque or placa_remolque == 'nan':
+                    rechazados += 1
+                    errores.append({
+                        'fila': idx + 2,
+                        'prefactura': prefactura,
+                        'razon': 'Placas vacías'
+                    })
+                    continue
+
+                importe_str = str(row['Total Facturar']).replace('$', '').replace(',', '').strip()
+                try:
+                    importe = float(importe_str)
+                    if importe <= 0:
+                        raise ValueError("Importe debe ser mayor a 0")
+                except:
+                    rechazados += 1
+                    errores.append({
+                        'fila': idx + 2,
+                        'prefactura': prefactura,
+                        'razon': f'Importe inválido: {importe_str}'
+                    })
+                    continue
+
+                datos_viaje = {
+                    'prefactura': prefactura,
+                    'fecha': fecha,
+                    'clave_determinante': determinante,
+                    'placa_tractor': placa_tractor,
+                    'placa_remolque': placa_remolque,
+                    'importe': importe,
+                    'cliente_codigo': '040512',
+                    'tipo_viaje': 'VACIO',
+                    'determinante_fuente': 'EXCEL_MANUAL'
+                }
+
+                if agregar_viaje_a_cola(datos_viaje):
+                    agregados += 1
+                else:
+                    ya_existian += 1
+
+            except Exception as e:
+                rechazados += 1
+                errores.append({
+                    'fila': idx + 2,
+                    'prefactura': str(row.get('Numero Prefactura', 'DESCONOCIDA')),
+                    'razon': str(e)
+                })
+
+        mensaje_partes = []
+        if agregados > 0:
+            mensaje_partes.append(f'{agregados} viaje(s) agregados')
+        if ya_existian > 0:
+            mensaje_partes.append(f'{ya_existian} ya existían')
+        if rechazados > 0:
+            mensaje_partes.append(f'{rechazados} rechazados')
+
+        mensaje = ', '.join(mensaje_partes) if mensaje_partes else 'No se procesó ningún viaje'
+
+        logger.info(f"Excel procesado: {mensaje}")
+
+        return jsonify({
+            'success': True,
+            'agregados': agregados,
+            'ya_existian': ya_existian,
+            'rechazados': rechazados,
+            'mensaje': mensaje,
+            'errores': errores[:10]
+        })
+
+    except Exception as e:
+        logger.error(f"Error procesando Excel: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error: {str(e)}'
+        }), 500
+
+
 @app.route("/api/cola-reprocesamiento", methods=["GET"])
 def api_obtener_cola():
     """Obtiene viajes en cola de reprocesamiento"""

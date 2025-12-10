@@ -380,7 +380,10 @@
             <button class="btn btn-clean" onclick="limpiarZombies()" id="btnLimpiar">🧹 Limpiar Zombies</button>
             <a href="/admin/claves" class="btn btn-admin">📋 Gestionar Claves</a>
             <a href="/admin/reprocesar" class="btn btn-admin">🔄 Reprocesar Viajes</a>
+            <button class="btn btn-admin" onclick="abrirModalExcel()" id="btnExcel">📊 Agregar Viajes Excel</button>
         </div>
+
+        <input type="file" id="excelFileInput" accept=".xlsx,.xls" style="display:none;" onchange="subirExcelViajes()">
 
         <div class="table-container">
             <h2>✅ Viajes Exitosos Recientes</h2>
@@ -527,6 +530,65 @@
                     btn.textContent = '🧹 Limpiar Zombies';
                     btn.disabled = false;
                 }, 2000);
+            }
+        }
+
+        function abrirModalExcel() {
+            document.getElementById('excelFileInput').click();
+        }
+
+        async function subirExcelViajes() {
+            const fileInput = document.getElementById('excelFileInput');
+            const file = fileInput.files[0];
+            const btn = document.getElementById('btnExcel');
+
+            if (!file) return;
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Procesando...';
+
+            try {
+                const formData = new FormData();
+                formData.append('excel_file', file);
+
+                const response = await fetch('/api/agregar-viajes-excel', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const mensaje = `✓ ${data.agregados} agregados`;
+                    btn.textContent = mensaje;
+
+                    if (data.ya_existian > 0 || data.rechazados > 0) {
+                        alert(`${data.mensaje}`);
+                    }
+
+                    setTimeout(() => {
+                        btn.textContent = '📊 Agregar Viajes Excel';
+                        btn.disabled = false;
+                        actualizarDashboard();
+                    }, 3000);
+                } else {
+                    btn.textContent = '✗ Error';
+                    alert('Error: ' + (data.mensaje || 'No se pudo procesar el archivo'));
+                    setTimeout(() => {
+                        btn.textContent = '📊 Agregar Viajes Excel';
+                        btn.disabled = false;
+                    }, 2000);
+                }
+            } catch (error) {
+                console.error('Error subiendo Excel:', error);
+                btn.textContent = '✗ Error';
+                alert('Error al procesar el archivo');
+                setTimeout(() => {
+                    btn.textContent = '📊 Agregar Viajes Excel';
+                    btn.disabled = false;
+                }, 2000);
+            } finally {
+                fileInput.value = '';
             }
         }
 
