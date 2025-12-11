@@ -7,7 +7,6 @@ let modoReprocesarTemp = { viajes: [], modo: 'desde_cero' };
 // Cargar viajes al iniciar
 document.addEventListener('DOMContentLoaded', () => {
     cargarViajes();
-    cargarTiposError();
     cargarColaReprocesamiento();
 });
 
@@ -28,23 +27,6 @@ async function cargarViajes() {
     }
 }
 
-async function cargarTiposError() {
-    const categorias = [
-        { value: 'DRIVER_CORRUPTO', label: 'Driver Corrupto' },
-        { value: 'LOGIN_LIMIT', label: 'Límite de Usuarios' },
-        { value: 'OPERADOR_LICENCIA_VENCIDA', label: 'Licencia Vencida' },
-        { value: 'determinante_no_existe', label: 'Determinante No Existe' },
-        { value: 'operador_ocupado', label: 'Operador Ocupado' }
-    ];
-
-    const select = document.getElementById('errorFilter');
-    categorias.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat.value;
-        option.textContent = cat.label;
-        select.appendChild(option);
-    });
-}
 
 function renderizarTabla() {
     const tbody = document.getElementById('viajesBody');
@@ -101,7 +83,6 @@ function renderizarTabla() {
 function aplicarFiltros() {
     const busqueda = document.getElementById('searchInput').value.toLowerCase();
     const campoBusqueda = document.getElementById('searchField').value;
-    const errorFiltro = document.getElementById('errorFilter').value;
 
     viajesFiltrados = todosLosViajes.filter(viaje => {
         let matchBusqueda = true;
@@ -133,10 +114,7 @@ function aplicarFiltros() {
             }
         }
 
-        const matchError = !errorFiltro ||
-            viaje.motivo_fallo.toLowerCase().includes(errorFiltro.toLowerCase());
-
-        return matchBusqueda && matchError;
+        return matchBusqueda;
     });
 
     // Aplicar filtros de fecha y etapa
