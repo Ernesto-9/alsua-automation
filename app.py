@@ -858,7 +858,8 @@ def agregar_viajes_excel():
                     })
                     continue
 
-                if verificar_viaje_existe(prefactura):
+                viaje_existente = verificar_viaje_existe(prefactura)
+                if viaje_existente and viaje_existente.get('estatus') == 'EXITOSO':
                     ya_existian += 1
                     continue
 
