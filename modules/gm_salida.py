@@ -444,11 +444,21 @@ class GMSalidaAutomation:
                 elemento_texto = (primer_elemento.text[:50] if primer_elemento.text else "sin texto") if primer_elemento else "N/A"
                 logger.debug(f" Elemento a seleccionar: tag={elemento_tag}, texto='{elemento_texto}', índice={indice_elemento}")
 
+                # Si el selector es WALMART, intentar hacer clic en la primera celda de la fila
+                if "WALMART" in selector_usado and elemento_tag == "td":
+                    try:
+                        fila_padre = primer_elemento.find_element(By.XPATH, "./ancestor::tr")
+                        primera_celda = fila_padre.find_element(By.XPATH, "./td[1]")
+                        logger.debug(f" Usando primera celda de fila WALMART: {primera_celda.text[:30] if primera_celda.text else 'sin texto'}")
+                        primer_elemento = primera_celda
+                    except Exception as e:
+                        logger.debug(f" No se pudo obtener primera celda, usando celda WALMART original: {e}")
+
                 try:
                     # Intentar hacer scroll al elemento primero
                     self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", primer_elemento)
                     time.sleep(0.5)
-                    
+
                     # DOBLE CLIC para asegurar selección
                     self.driver.execute_script("arguments[0].click();", primer_elemento)
                     time.sleep(1)
