@@ -375,7 +375,7 @@ class GMSalidaAutomation:
             logger.info(" Seleccionando viaje de la tabla...")
             
             # Esperar más tiempo tras aplicar filtros
-            time.sleep(8)  # Aumentado de 3 a 8 segundos
+            time.sleep(12)  # Aumentado a 12 segundos para mayor estabilidad
             
             # Intentar hasta 2 veces la selección
             for intento in range(2):
@@ -384,35 +384,66 @@ class GMSalidaAutomation:
                 # Buscar elementos de viajes con múltiples selectores
                 elementos_proviajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
                 filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
-                elementos_walmart = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
+                elementos_walmart = self.driver.find_elements(By.XPATH, "//table//tr//td[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
                 
-                # Decidir qué selector usar - PRIORIZAR WALMART
+                # Decidir qué selector usar - estrategia diferente por intento
                 elementos_a_usar = None
                 selector_usado = ""
-                
-                if elementos_walmart:
-                    # PRIORIDAD 1: Usar elementos con texto WALMART (los viajes reales)
-                    elementos_a_usar = elementos_walmart
-                    selector_usado = "WALMART text"
-                elif elementos_proviajes and len(elementos_proviajes) <= 20:
-                    # PRIORIDAD 2: Solo usar TABLE_PROVIAJES si hay pocos elementos (evitar headers)
-                    elementos_a_usar = elementos_proviajes
-                    selector_usado = "TABLE_PROVIAJES"
-                elif filas_tabla and len(filas_tabla) <= 10:
-                    # PRIORIDAD 3: Filas de tabla solo si hay muy pocas
-                    elementos_a_usar = filas_tabla
-                    selector_usado = "filas de tabla"
+                indice_elemento = 0
+
+                # INTENTO 1: Priorizar WALMART
+                # INTENTO 2: Usar segundo elemento WALMART o cambiar a otros selectores
+                if intento == 0:
+                    # Primera estrategia: WALMART con índice 0
+                    if elementos_walmart:
+                        elementos_a_usar = elementos_walmart
+                        selector_usado = "WALMART text"
+                        indice_elemento = 0
+                    elif elementos_proviajes and len(elementos_proviajes) <= 20:
+                        elementos_a_usar = elementos_proviajes
+                        selector_usado = "TABLE_PROVIAJES"
+                        indice_elemento = 0
+                    elif filas_tabla and len(filas_tabla) <= 10:
+                        elementos_a_usar = filas_tabla
+                        selector_usado = "filas de tabla"
+                        indice_elemento = 0
                 else:
+                    # Segunda estrategia: WALMART índice 1, o cambiar a otros selectores
+                    if elementos_walmart and len(elementos_walmart) > 1:
+                        elementos_a_usar = elementos_walmart
+                        selector_usado = "WALMART text (elemento 2)"
+                        indice_elemento = 1
+                    elif elementos_proviajes and len(elementos_proviajes) <= 20:
+                        elementos_a_usar = elementos_proviajes
+                        selector_usado = "TABLE_PROVIAJES (fallback)"
+                        indice_elemento = 0
+                    elif filas_tabla and len(filas_tabla) <= 10:
+                        elementos_a_usar = filas_tabla
+                        selector_usado = "filas de tabla (fallback)"
+                        indice_elemento = 0
+                    elif elementos_walmart:
+                        # Si solo hay 1 elemento WALMART, usarlo de nuevo
+                        elementos_a_usar = elementos_walmart
+                        selector_usado = "WALMART text (reintento)"
+                        indice_elemento = 0
+
+                if elementos_a_usar is None:
                     logger.error(" No se encontraron elementos válidos para seleccionar")
-                    if intento == 0:  # Solo reintenta una vez
+                    if intento == 0:
                         time.sleep(5)
                         continue
                     return False
-                
+
                 logger.info(f" Usando selector: {selector_usado}")
-                
-                # Hacer clic en el primer elemento
-                primer_elemento = elementos_a_usar[0]
+
+                # Usar el elemento según el índice calculado
+                primer_elemento = elementos_a_usar[indice_elemento]
+
+                # Log de debug para identificar el elemento seleccionado
+                elemento_tag = primer_elemento.tag_name if primer_elemento else "unknown"
+                elemento_texto = (primer_elemento.text[:50] if primer_elemento.text else "sin texto") if primer_elemento else "N/A"
+                logger.debug(f" Elemento a seleccionar: tag={elemento_tag}, texto='{elemento_texto}', índice={indice_elemento}")
+
                 try:
                     # Intentar hacer scroll al elemento primero
                     self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'auto', block: 'center'});", primer_elemento)
