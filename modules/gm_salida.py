@@ -384,7 +384,7 @@ class GMSalidaAutomation:
                 # Buscar elementos de viajes con múltiples selectores
                 elementos_proviajes = self.driver.find_elements(By.XPATH, "//div[contains(@id, 'TABLE_PROVIAJES')]")
                 filas_tabla = self.driver.find_elements(By.XPATH, "//table//tr[td]")
-                elementos_walmart = self.driver.find_elements(By.XPATH, "//table//tr//td[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
+                elementos_walmart = self.driver.find_elements(By.XPATH, "//*[contains(text(), 'WAL MART') or contains(text(), 'WALMART')]")
                 
                 # Decidir qué selector usar - estrategia diferente por intento
                 elementos_a_usar = None
