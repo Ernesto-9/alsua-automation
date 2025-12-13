@@ -88,12 +88,12 @@ def api_estado():
         },
         'estadisticas': {
             'viajes_exitosos': robot['estadisticas']['viajes_exitosos'],
-            'viajes_fallidos': 0,
+            'viajes_fallidos': robot['estadisticas']['viajes_fallidos'],
             'viajes_pendientes': len(cola.get('viajes', []))
         },
         'cola': cola,
         'viajes_exitosos': robot.get('viajes_exitosos_recientes', []),
-        'viajes_fallidos': []
+        'viajes_fallidos': robot.get('viajes_fallidos_recientes', [])
     })
 
 
