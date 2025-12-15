@@ -533,11 +533,15 @@ class AlsuaMailAutomation:
             # LOGGING DETALLADO: Verificación de duplicados
             debug_logger.info(f"[{prefactura}] Paso 2/7: Verificando duplicados en viajes_log.csv")
             try:
-                if viajes_log.verificar_viaje_existe(prefactura):
-                    logger.warning(f"DUPLICADO DETECTADO: {prefactura} ya fue procesado - saltando")
-                    debug_logger.warning(f"[{prefactura}] DUPLICADO encontrado en viajes_log.csv")
+                viaje_existente = viajes_log.verificar_viaje_existe(prefactura)
+                if viaje_existente and viaje_existente.get('estatus') == 'EXITOSO':
+                    logger.warning(f"DUPLICADO DETECTADO: {prefactura} ya fue procesado exitosamente - saltando")
+                    debug_logger.warning(f"[{prefactura}] DUPLICADO EXITOSO encontrado en viajes_log.csv")
                     robot_state_manager.limpiar_viaje_actual()
                     return 'EXITOSO', 'duplicado_detectado'
+                elif viaje_existente and viaje_existente.get('estatus') == 'FALLIDO':
+                    logger.info(f"REPROCESANDO: {prefactura} falló anteriormente - reintentando")
+                    debug_logger.info(f"[{prefactura}] Viaje fallido encontrado, reprocesando")
                 debug_logger.info(f"[{prefactura}] No es duplicado, continuando")
             except Exception as e:
                 logger.error(f"Error verificando duplicados: {e}")
