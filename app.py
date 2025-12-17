@@ -840,13 +840,16 @@ def agregar_viajes_excel():
                 'mensaje': f'Columnas faltantes: {", ".join(columnas_faltantes)}'
             }), 400
 
-        agregados = 0
-        ya_existian = 0
+        nuevos = 0
+        a_reprocesar = 0
+        exitosos_rechazados = 0
+        duplicados_cola = 0
         rechazados = 0
         errores = []
 
         for idx, row in df.iterrows():
             try:
+                es_reproceso = False
                 prefactura = str(row['Numero Prefactura']).strip()
 
                 if not prefactura or prefactura == 'nan':
@@ -860,8 +863,10 @@ def agregar_viajes_excel():
 
                 viaje_existente = verificar_viaje_existe(prefactura)
                 if viaje_existente and viaje_existente.get('estatus') == 'EXITOSO':
-                    ya_existian += 1
+                    exitosos_rechazados += 1
                     continue
+
+                es_reproceso = viaje_existente and viaje_existente.get('estatus') == 'FALLIDO'
 
                 determinante = str(row['Determinante']).strip()
                 if not re.match(r'^\d{4}$', determinante):
@@ -927,9 +932,12 @@ def agregar_viajes_excel():
                 }
 
                 if agregar_viaje_a_cola(datos_viaje):
-                    agregados += 1
+                    if es_reproceso:
+                        a_reprocesar += 1
+                    else:
+                        nuevos += 1
                 else:
-                    ya_existian += 1
+                    duplicados_cola += 1
 
             except Exception as e:
                 rechazados += 1
@@ -939,22 +947,29 @@ def agregar_viajes_excel():
                     'razon': str(e)
                 })
 
-        mensaje_partes = []
-        if agregados > 0:
-            mensaje_partes.append(f'{agregados} viaje(s) agregados')
-        if ya_existian > 0:
-            mensaje_partes.append(f'{ya_existian} ya existían')
+        total_excel = len(df)
+        agregados_cola = nuevos + a_reprocesar
+
+        mensaje = (
+            f"Viajes en excel: {total_excel}\n"
+            f"Viajes nuevos: {nuevos}\n"
+            f"Viajes a reintentar: {a_reprocesar}\n"
+            f"Viajes agregados a la cola: {agregados_cola}\n"
+            f"Viajes ignorados: {exitosos_rechazados}"
+        )
+
         if rechazados > 0:
-            mensaje_partes.append(f'{rechazados} rechazados')
+            mensaje += f"\nViajes con errores de validación: {rechazados}"
 
-        mensaje = ', '.join(mensaje_partes) if mensaje_partes else 'No se procesó ningún viaje'
-
-        logger.info(f"Excel procesado: {mensaje}")
+        logger.info(f"Excel procesado:\n{mensaje}")
 
         return jsonify({
             'success': True,
-            'agregados': agregados,
-            'ya_existian': ya_existian,
+            'total_excel': total_excel,
+            'nuevos': nuevos,
+            'a_reprocesar': a_reprocesar,
+            'agregados_cola': agregados_cola,
+            'exitosos_rechazados': exitosos_rechazados,
             'rechazados': rechazados,
             'mensaje': mensaje,
             'errores': errores[:10]
