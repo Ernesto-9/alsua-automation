@@ -559,12 +559,10 @@
                 const data = await response.json();
 
                 if (data.success) {
-                    const mensaje = `✓ ${data.agregados} agregados`;
+                    const mensaje = `✓ ${data.agregados_cola} agregados`;
                     btn.textContent = mensaje;
 
-                    if (data.ya_existian > 0 || data.rechazados > 0) {
-                        alert(`${data.mensaje}`);
-                    }
+                    alert(data.mensaje);
 
                     setTimeout(() => {
                         btn.textContent = '📊 Agregar Viajes Excel';

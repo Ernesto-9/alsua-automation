@@ -206,33 +206,54 @@ class ViajesLogManager:
     def verificar_viaje_existe(self, prefactura, determinante=None):
         """
         Verifica si un viaje ya fue procesado (anti-duplicados)
-        
+
+        LÓGICA DE PRIORIZACIÓN:
+        1. Si hay AL MENOS UN registro EXITOSO → devuelve ese
+        2. Si solo hay FALLIDOs → devuelve el más reciente (por timestamp)
+        3. Si no hay nada → devuelve None
+
         Args:
             prefactura: Número de prefactura
             determinante: Clave determinante (opcional para mayor precisión)
-            
+
         Returns:
             dict: Información del viaje si existe, None si no existe
         """
         try:
             if not os.path.exists(self.archivo_csv):
                 return None
-                
+
+            registros_encontrados = []
+
             with open(self.archivo_csv, 'r', encoding='utf-8') as f:
                 reader = csv.DictReader(f)
-                
+
                 for row in reader:
-                    # Buscar por prefactura
                     if row.get('prefactura') == str(prefactura):
-                        # Si se proporciona determinante, verificar que coincida también
                         if determinante and row.get('determinante') != str(determinante):
                             continue
-                            
-                        logger.info(f"Viaje encontrado en log: {prefactura}")
-                        return dict(row)
-            
-            return None
-            
+                        registros_encontrados.append(dict(row))
+
+            if not registros_encontrados:
+                return None
+
+            # PRIORIZACIÓN: Buscar primero cualquier registro EXITOSO
+            for registro in registros_encontrados:
+                if registro.get('estatus') == 'EXITOSO':
+                    logger.info(f"Viaje encontrado EXITOSO en log: {prefactura}")
+                    return registro
+
+            # Si solo hay FALLIDOs, devolver el más reciente por timestamp
+            registros_fallidos = [r for r in registros_encontrados if r.get('estatus') == 'FALLIDO']
+            if registros_fallidos:
+                registro_mas_reciente = max(registros_fallidos, key=lambda x: x.get('timestamp', ''))
+                logger.info(f"Viaje encontrado FALLIDO (más reciente) en log: {prefactura}")
+                return registro_mas_reciente
+
+            # Caso raro: hay registros pero ninguno es EXITOSO ni FALLIDO
+            logger.warning(f"Registros encontrados para {prefactura} sin estatus válido")
+            return registros_encontrados[0]
+
         except Exception as e:
             logger.error(f"Error verificando viaje en log: {e}")
             return None
