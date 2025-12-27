@@ -675,11 +675,9 @@ class GMSalidaAutomation:
                     logger.warning(" No se pudieron configurar los filtros - continuando de todas formas")
                     # Continuar de todas formas, los filtros no son críticos
             
-            # Ajustar fecha desde CON FUNCIÓN ROBUSTA
-            if not self.ajustar_fecha_desde(fecha_viaje):
-                logger.warning(" Error ajustando fecha - continuando")
-                # No es crítico, continuar
-            
+            # EDT_DESDE removido - campo opcional de búsqueda que fallaba constantemente
+            # El campo importante es EDT_SALIDA que se llena correctamente en el formulario del viaje
+
             # Seleccionar sucursal
             if not self.seleccionar_sucursal(clave_determinante):
                 logger.warning(" Error seleccionando sucursal - continuando")
