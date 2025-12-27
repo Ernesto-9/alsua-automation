@@ -109,6 +109,9 @@ class GMSalidaAutomation:
             self.cerrar_calendarios_abiertos()
             time.sleep(0.5)
 
+            # Lista para acumular motivos de fallo
+            motivos_fallo = []
+
             # MÉTODO MEJORADO: Usar JavaScript para evitar abrir calendarios
             for intento in range(3):
                 try:
@@ -133,7 +136,9 @@ class GMSalidaAutomation:
                     resultado = self.driver.execute_script(script)
 
                     if not resultado:
-                        logger.warning(f"Campo {campo_id} no encontrado en intento {intento + 1}")
+                        motivo = f"Intento {intento + 1}: Campo {campo_id} no encontrado en DOM"
+                        motivos_fallo.append(motivo)
+                        debug_logger.error(motivo)
                         time.sleep(1)
                         continue
 
@@ -148,19 +153,24 @@ class GMSalidaAutomation:
                         debug_logger.info(f" Fecha {campo_id} = {valor_actual}")
                         return True
                     else:
-                        logger.warning(f" Verificación falló. Esperado: {fecha_valor}, Actual: {valor_actual}")
+                        motivo = f"Intento {intento + 1}: Esperado '{fecha_valor}', Actual '{valor_actual}'"
+                        motivos_fallo.append(motivo)
+                        debug_logger.error(motivo)
                         time.sleep(1)
                         continue
 
                 except Exception as e:
-                    logger.error(f" Error en intento {intento + 1}: {e}")
-                    debug_logger.error(f"Error llenando fecha {campo_id} intento {intento + 1}: {e}")
+                    motivo = f"Intento {intento + 1}: Excepción {type(e).__name__}: {str(e)}"
+                    motivos_fallo.append(motivo)
+                    debug_logger.error(motivo)
                     time.sleep(1)
                     continue
 
             # Si llegamos aquí, fallaron todos los intentos
-            logger.error(f" ERROR CRÍTICO: No se pudo insertar fecha después de 3 intentos")
             debug_logger.error(f"FALLO CRÍTICO llenando fecha {campo_id} con valor {fecha_valor}")
+            debug_logger.error("Motivos de fallo:")
+            for motivo in motivos_fallo:
+                debug_logger.error(f"  - {motivo}")
             return False
 
         except Exception as e:
@@ -309,7 +319,15 @@ class GMSalidaAutomation:
         """Ajusta la fecha 'desde' al día anterior del viaje"""
         try:
             fecha_desde = self.calcular_fecha_anterior(fecha_viaje)
-            
+
+            # PAUSA PARA DEBUGGING
+            print("\n" + "="*80)
+            print(f"⏸️  PAUSA - Punto de debug EDT_DESDE")
+            print(f"   Fecha a insertar: {fecha_desde}")
+            print(f"   Presiona ENTER para continuar...")
+            print("="*80 + "\n")
+            input()
+
             # USAR FUNCIÓN ROBUSTA PARA FECHA DESDE
             exito = self.llenar_fecha_salida_robusto("EDT_DESDE", fecha_desde)
             
@@ -675,8 +693,10 @@ class GMSalidaAutomation:
                     logger.warning(" No se pudieron configurar los filtros - continuando de todas formas")
                     # Continuar de todas formas, los filtros no son críticos
             
-            # EDT_DESDE removido - campo opcional de búsqueda que fallaba constantemente
-            # El campo importante es EDT_SALIDA que se llena correctamente en el formulario del viaje
+            # Ajustar fecha desde CON FUNCIÓN ROBUSTA
+            if not self.ajustar_fecha_desde(fecha_viaje):
+                logger.warning(" Error ajustando fecha - continuando")
+                # No es crítico, continuar
 
             # Seleccionar sucursal
             if not self.seleccionar_sucursal(clave_determinante):
