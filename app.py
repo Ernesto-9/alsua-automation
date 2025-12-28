@@ -761,7 +761,7 @@ def api_reprocesar_viajes():
                 'prefactura': viaje.get('prefactura'),
                 'determinante': viaje.get('determinante'),
                 'clave_determinante': viaje.get('determinante'),  # Alias
-                'fecha_viaje': viaje.get('fecha_viaje'),
+                'fecha': viaje.get('fecha_viaje'),
                 'placa_tractor': viaje.get('placa_tractor'),
                 'placa_remolque': viaje.get('placa_remolque'),
                 'importe': viaje.get('importe'),
