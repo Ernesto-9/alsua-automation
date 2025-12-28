@@ -320,13 +320,8 @@ class GMSalidaAutomation:
         try:
             fecha_desde = self.calcular_fecha_anterior(fecha_viaje)
 
-            # PAUSA PARA DEBUGGING
-            print("\n" + "="*80)
-            print(f"⏸️  PAUSA - Punto de debug EDT_DESDE")
-            print(f"   Fecha a insertar: {fecha_desde}")
-            print(f"   Presiona ENTER para continuar...")
-            print("="*80 + "\n")
-            input()
+            # Espera 3 segundos para que la página se estabilice
+            time.sleep(3)
 
             # USAR FUNCIÓN ROBUSTA PARA FECHA DESDE
             exito = self.llenar_fecha_salida_robusto("EDT_DESDE", fecha_desde)
