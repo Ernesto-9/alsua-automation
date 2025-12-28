@@ -29,18 +29,38 @@ class ColaViajes:
     def _leer_cola(self):
         try:
             with open(self.archivo, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                datos = json.load(f)
+                num_viajes = len(datos.get("viajes", []))
+                logger.debug(f"Leída cola con {num_viajes} viajes desde: {self.archivo}")
+                return datos
         except Exception as e:
             logger.error(f"Error leyendo cola: {e}")
             return {"viajes": []}
     
     def _guardar_cola(self, datos):
         try:
+            num_viajes = len(datos.get("viajes", []))
+            logger.warning(f"⚠️ GUARDANDO COLA: {num_viajes} viajes en archivo: {self.archivo}")
+
             with open(self.archivo, 'w', encoding='utf-8') as f:
                 json.dump(datos, f, indent=2, ensure_ascii=False)
+
+            logger.warning(f"⚠️ ESCRITURA COMPLETADA - Verificando...")
+
+            # Verificar que se escribió correctamente
+            with open(self.archivo, 'r', encoding='utf-8') as f:
+                datos_verificacion = json.load(f)
+                viajes_escritos = len(datos_verificacion.get("viajes", []))
+                logger.warning(f"⚠️ VERIFICACIÓN: {viajes_escritos} viajes en archivo después de escribir")
+
+                if viajes_escritos != num_viajes:
+                    logger.error(f"ERROR: Se intentó guardar {num_viajes} pero solo hay {viajes_escritos}")
+
             return True
         except Exception as e:
             logger.error(f"Error guardando cola: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
     
     def resetear_viajes_atascados(self):
