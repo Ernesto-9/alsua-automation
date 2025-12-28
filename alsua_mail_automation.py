@@ -29,6 +29,7 @@ from viajes_log import registrar_viaje_fallido as log_viaje_fallido, viajes_log
 from modules import robot_state_manager
 from modules.debug_logger import debug_logger
 from modules.email_alertas import enviar_alerta_robot_trabado, enviar_alerta_loop_infinito
+from modules.mysql_simple import MySQLSimple
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,6 +89,9 @@ class AlsuaMailAutomation:
         self.ultimo_viaje_exitoso_timestamp = datetime.now()
         self.ultimo_viaje_exitoso_prefactura = None
         self.alerta_enviada = False
+
+        # Sistema de sincronización MySQL
+        self.mysql_sync = MySQLSimple()
 
         self._crear_carpeta_descarga()
         
@@ -615,7 +619,12 @@ class AlsuaMailAutomation:
                 elif resultado:
                     logger.info(f"Viaje completado exitosamente: {prefactura}")
                     logger.info("Datos completos (UUID, Viaje GM, placas) registrados automáticamente")
-                    logger.info("MySQL sincronizado automáticamente desde CSV")
+                    logger.info("Sincronizando a MySQL...")
+                    try:
+                        stats = self.mysql_sync.sincronizar_desde_csv()
+                        logger.info(f"MySQL sincronizado - Exitosos: {stats['exitosos']}, Fallidos: {stats['fallidos']}")
+                    except Exception as e:
+                        logger.error(f"Error sincronizando a MySQL: {e}")
 
                     # Actualizar estado: viaje exitoso
                     robot_state_manager.incrementar_exitosos(prefactura)
