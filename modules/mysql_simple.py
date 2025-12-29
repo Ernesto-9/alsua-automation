@@ -136,16 +136,22 @@ class MySQLSyncFromCSV:
             estatusr = "facturado" if (uuid and viajegm and numero_factura) else "pendiente"
                 
             cursor = self.connection.cursor()
-            
-            # INSERT directo a tabla prefacturarobot (incluyendo FACTURAGM y estatusr)
-            insert_query = """
-                INSERT INTO prefacturarobot 
-                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot, estatusr) 
+
+            # INSERT o UPDATE si ya existe (para viajes reprocesados)
+            upsert_query = """
+                INSERT INTO prefacturarobot
+                (NOPREFACTURA, VIAJEGM, FACTURAGM, UUID, USUARIO, erroresrobot, estatusr)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    VIAJEGM = VALUES(VIAJEGM),
+                    FACTURAGM = VALUES(FACTURAGM),
+                    UUID = VALUES(UUID),
+                    erroresrobot = '',
+                    estatusr = VALUES(estatusr)
             """
-            
+
             logger.info(f"Procesando viaje exitoso: {prefactura}")
-            cursor.execute(insert_query, (prefactura, viajegm, numero_factura, uuid, 'ROBOT', '', estatusr))
+            cursor.execute(upsert_query, (prefactura, viajegm, numero_factura, uuid, 'ROBOT', '', estatusr))
             self.connection.commit()
             
             # Verificar que se insertó realmente
