@@ -308,7 +308,7 @@ class MySQLSimple:
             logger.error(f"Error obteniendo estadísticas: {e}")
             return {'error': str(e)}
 
-mysql_sync = MySQLSyncFromCSV()
+mysql_sync = MySQLSimple()
 
 def sincronizar_csv_a_mysql():
     return mysql_sync.sincronizar_desde_csv()
