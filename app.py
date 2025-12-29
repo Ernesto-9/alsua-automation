@@ -440,7 +440,17 @@ def api_obtener_viajes_fallidos():
 
     try:
         # Leer viajes fallidos del CSV
-        viajes_fallidos = viajes_log.leer_viajes_por_estatus("FALLIDO")
+        todos_fallidos = viajes_log.leer_viajes_por_estatus("FALLIDO")
+
+        # Filtrar solo los que NO tienen registro exitoso posterior
+        viajes_fallidos = []
+        for viaje in todos_fallidos:
+            prefactura = viaje.get('prefactura')
+            # Verificar si existe registro exitoso
+            viaje_actual = viajes_log.verificar_viaje_existe(prefactura)
+            # Solo agregar si NO es exitoso (o no existe)
+            if not viaje_actual or viaje_actual.get('estatus') != 'EXITOSO':
+                viajes_fallidos.append(viaje)
 
         # Leer cola para marcar viajes que ya están en cola
         cola = leer_cola()
