@@ -26,7 +26,7 @@ MYSQL_CONFIG = {
     'collation': 'utf8mb4_unicode_ci'
 }
 
-class MySQLSyncFromCSV:
+class MySQLSimple:
     def __init__(self, archivo_csv="viajes_log.csv"):
         self.connection = None
         self.archivo_csv = os.path.abspath(archivo_csv)
