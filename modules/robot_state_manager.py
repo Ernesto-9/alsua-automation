@@ -56,9 +56,36 @@ def _leer_estado():
         with open(ARCHIVO_ESTADO, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
-        print(f" Error al leer estado: {e}")
-        # Retornar estructura vacía en caso de error
-        return _leer_estado()  # Recursión para crear nuevo archivo
+        print(f" Error al leer estado (archivo corrupto?): {e}")
+        print(f" Creando archivo de estado nuevo...")
+        try:
+            os.remove(ARCHIVO_ESTADO)
+        except:
+            pass
+        estado_inicial = {
+            "robots": {
+                "robot_1": {
+                    "nombre": "Robot Alsua VACIO",
+                    "estado": "detenido",
+                    "ultima_actividad": datetime.now().isoformat(),
+                    "viaje_actual": None,
+                    "estadisticas": {
+                        "viajes_exitosos": 0,
+                        "viajes_fallidos": 0,
+                        "ultimo_viaje_exitoso": None,
+                        "ultimo_viaje_fallido": None
+                    },
+                    "viajes_exitosos_recientes": [],
+                    "viajes_fallidos_recientes": []
+                }
+            },
+            "cola": {
+                "viajes": [],
+                "ultima_actualizacion": datetime.now().isoformat()
+            }
+        }
+        _guardar_estado(estado_inicial)
+        return estado_inicial
 
 
 def _guardar_estado(estado):
