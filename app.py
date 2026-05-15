@@ -878,7 +878,7 @@ def agregar_viajes_excel():
 
                 es_reproceso = viaje_existente and viaje_existente.get('estatus') == 'FALLIDO'
 
-                determinante = str(row['Determinante']).strip()
+                determinante = str(int(float(str(row['Determinante']).strip()))).strip()
                 if not re.match(r'^\d{4}$', determinante):
                     rechazados += 1
                     errores.append({
